@@ -64,16 +64,23 @@ final class RlsProtoConverters {
     @Override
     protected RlsProtoData.RouteLookupRequest doForward(RouteLookupRequest routeLookupRequest) {
       return RlsProtoData.RouteLookupRequest.create(
-          ImmutableMap.copyOf(routeLookupRequest.getKeyMapMap()));
+          ImmutableMap.copyOf(routeLookupRequest.getKeyMapMap()),
+          RlsProtoData.RouteLookupRequest.Reason.valueOf(routeLookupRequest.getReason().name()),
+          Strings.emptyToNull(routeLookupRequest.getStaleHeaderData())
+      );
     }
 
     @Override
     protected RouteLookupRequest doBackward(RlsProtoData.RouteLookupRequest routeLookupRequest) {
-      return
+      RouteLookupRequest.Builder builder =
           RouteLookupRequest.newBuilder()
               .setTargetType("grpc")
-              .putAllKeyMap(routeLookupRequest.keyMap())
-              .build();
+              .setReason(RouteLookupRequest.Reason.valueOf(routeLookupRequest.reason().name()))
+              .putAllKeyMap(routeLookupRequest.keyMap());
+      if (routeLookupRequest.staleHeaderData() != null) {
+        builder.setStaleHeaderData(routeLookupRequest.staleHeaderData());
+      }
+      return builder.build();
     }
   }
 
@@ -152,10 +159,15 @@ final class RlsProtoConverters {
         checkArgument(staleAge == null, "to specify staleAge, must have maxAge");
         maxAge = MAX_AGE_NANOS;
       }
-      if (staleAge == null) {
+      // If staleAge is not set, clamp maxAge to <= 5.
+      if (staleAge == null && maxAge > MAX_AGE_NANOS) {
+        maxAge = MAX_AGE_NANOS;
+      }
+      // Clamp staleAge to <= 5
+      if (staleAge == null || staleAge > MAX_AGE_NANOS) {
         staleAge = MAX_AGE_NANOS;
       }
-      maxAge = Math.min(maxAge, MAX_AGE_NANOS);
+      // Ignore staleAge if greater than maxAge.
       staleAge = Math.min(staleAge, maxAge);
       long cacheSize = orDefault(JsonUtil.getNumberAsLong(json, "cacheSizeBytes"), MAX_CACHE_SIZE);
       checkArgument(cacheSize > 0, "cacheSize must be positive");

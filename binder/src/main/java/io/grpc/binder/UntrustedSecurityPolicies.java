@@ -16,9 +16,9 @@
 
 package io.grpc.binder;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
-import javax.annotation.CheckReturnValue;
 
 /** Static factory methods for creating untrusted security policies. */
 @CheckReturnValue

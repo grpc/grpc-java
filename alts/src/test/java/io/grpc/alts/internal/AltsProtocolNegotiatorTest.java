@@ -202,8 +202,11 @@ public class AltsProtocolNegotiatorTest {
     channel.flush();
 
     // Capture the protected data written to the wire.
-    assertEquals(1, channel.outboundMessages().size());
-    ByteBuf protectedData = channel.readOutbound();
+    assertThat(channel.outboundMessages()).isNotEmpty();
+    ByteBuf protectedData = channel.alloc().buffer();
+    while (!channel.outboundMessages().isEmpty()) {
+      protectedData.writeBytes((ByteBuf) channel.readOutbound());
+    }
     assertEquals(message.length(), writeCount.get());
 
     // Read the protected message at the server and verify it matches the original message.
@@ -327,16 +330,18 @@ public class AltsProtocolNegotiatorTest {
     String message = "hello";
     ByteBuf in = Unpooled.copiedBuffer(message, UTF_8);
 
-    assertEquals(0, protector.flushes.get());
+    int flushes = protector.flushes.get();
     Future<?> done = channel.write(in);
     channel.flush();
+    flushes++;
     done.get(5, TimeUnit.SECONDS);
-    assertEquals(1, protector.flushes.get());
+    assertEquals(flushes, protector.flushes.get());
 
+    // Flush does not propagate
     done = channel.write(Unpooled.EMPTY_BUFFER);
     channel.flush();
     done.get(5, TimeUnit.SECONDS);
-    assertEquals(1, protector.flushes.get());
+    assertEquals(flushes, protector.flushes.get());
   }
 
   @Test

@@ -218,12 +218,13 @@ abstract class VirtualHost {
       abstract static class ClusterWeight {
         abstract String name();
 
-        abstract int weight();
+        abstract long weight();
 
         abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
         static ClusterWeight create(
-            String name, int weight, Map<String, FilterConfig> filterConfigOverrides) {
+            String name, long weight, Map<String, FilterConfig> filterConfigOverrides) {
+          checkArgument(weight >= 0, "weight must not be negative");
           return new AutoValue_VirtualHost_Route_RouteAction_ClusterWeight(
               name, weight, ImmutableMap.copyOf(filterConfigOverrides));
         }

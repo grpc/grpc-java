@@ -38,6 +38,9 @@ import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
@@ -58,12 +61,15 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
+import io.netty.util.AsciiString;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -103,6 +109,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   private ObjectPool<? extends EventLoopGroup> eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
   private boolean autoFlowControl = DEFAULT_AUTO_FLOW_CONTROL;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
+  private final Set<AsciiString> neverIndexedMetadataKeys = new HashSet<>();
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private int softLimitHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
@@ -207,10 +214,20 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   NettyChannelBuilder(
       String target, ChannelCredentials channelCreds, CallCredentials callCreds,
       ProtocolNegotiator.ClientFactory negotiator) {
+    this(target, channelCreds, callCreds, negotiator, null, null);
+  }
+
+  NettyChannelBuilder(
+      String target, ChannelCredentials channelCreds, CallCredentials callCreds,
+      ProtocolNegotiator.ClientFactory negotiator,
+      NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
     managedChannelImplBuilder = new ManagedChannelImplBuilder(
         target, channelCreds, callCreds,
         new NettyChannelTransportFactoryBuilder(),
-        new NettyChannelDefaultPortProvider());
+        new NettyChannelDefaultPortProvider(),
+        nameResolverRegistry,
+        nameResolverProvider);
     this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
     this.freezeProtocolNegotiatorFactory = true;
   }
@@ -423,6 +440,43 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   }
 
   /**
+   * Configures an outbound metadata key to use HPACK's never-indexed literal representation.
+   *
+   * <p>All values associated with the key's normalized name will be sent as literals and will not
+   * be added to the peer's HPACK dynamic table. This method is additive and may be called multiple
+   * times. Configuring the same normalized key name more than once has no additional effect. By
+   * default, no metadata keys are configured as never indexed.
+   *
+   * @since 1.84.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12999")
+  @CanIgnoreReturnValue
+  public NettyChannelBuilder neverIndexMetadataKey(Metadata.Key<?> key) {
+    neverIndexedMetadataKeys.add(AsciiString.of(checkNotNull(key, "key").name()));
+    return this;
+  }
+
+  /**
+   * Configures outbound metadata keys to use HPACK's never-indexed literal representation.
+   *
+   * <p>This method is equivalent to calling {@link #neverIndexMetadataKey} for each key in {@code
+   * keys}. Duplicate normalized key names are ignored.
+   *
+   * @since 1.84.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12999")
+  @CanIgnoreReturnValue
+  public NettyChannelBuilder neverIndexMetadataKeys(
+      Collection<? extends Metadata.Key<?>> keys) {
+    Set<AsciiString> normalizedKeys = new HashSet<>();
+    for (Metadata.Key<?> key : checkNotNull(keys, "keys")) {
+      normalizedKeys.add(AsciiString.of(checkNotNull(key, "key").name()));
+    }
+    neverIndexedMetadataKeys.addAll(normalizedKeys);
+    return this;
+  }
+
+  /**
    * Sets the maximum size of header list allowed to be received. This is cumulative size of the
    * headers with some overhead, as defined for
    * <a href="http://httpwg.org/specs/rfc7540.html#rfc.section.6.5.2">
@@ -614,6 +668,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
         eventLoopGroupPool,
         autoFlowControl,
         flowControlWindow,
+        neverIndexedMetadataKeys,
         maxInboundMessageSize,
         maxHeaderListSize,
         softLimitHeaderListSize,
@@ -652,7 +707,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
       case PLAINTEXT_UPGRADE:
         return ProtocolNegotiators.plaintextUpgrade();
       case TLS:
-        return ProtocolNegotiators.tls(sslContext, executorPool, Optional.absent());
+        return ProtocolNegotiators.tls(sslContext, executorPool, Optional.absent(), null, null);
       default:
         throw new IllegalArgumentException("Unsupported negotiationType: " + negotiationType);
     }
@@ -708,6 +763,8 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
     return this;
   }
 
+
+
   static Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
   }
@@ -755,6 +812,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
     private final EventLoopGroup group;
     private final boolean autoFlowControl;
     private final int flowControlWindow;
+    private final Set<AsciiString> neverIndexedMetadataKeys;
     private final int maxMessageSize;
     private final int maxHeaderListSize;
     private final int softLimitHeaderListSize;
@@ -776,6 +834,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
         ObjectPool<? extends EventLoopGroup> groupPool,
         boolean autoFlowControl,
         int flowControlWindow,
+        Set<AsciiString> neverIndexedMetadataKeys,
         int maxMessageSize,
         int maxHeaderListSize,
         int softLimitHeaderListSize,
@@ -793,6 +852,8 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
       this.group = groupPool.getObject();
       this.autoFlowControl = autoFlowControl;
       this.flowControlWindow = flowControlWindow;
+      this.neverIndexedMetadataKeys = Collections.unmodifiableSet(
+          new HashSet<>(checkNotNull(neverIndexedMetadataKeys, "neverIndexedMetadataKeys")));
       this.maxMessageSize = maxMessageSize;
       this.maxHeaderListSize = maxHeaderListSize;
       this.softLimitHeaderListSize = softLimitHeaderListSize;
@@ -818,6 +879,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
         serverAddress = proxiedAddr.getTargetAddress();
         localNegotiator = ProtocolNegotiators.httpProxy(
             proxiedAddr.getProxyAddress(),
+            proxiedAddr.getHeaders(),
             proxiedAddr.getUsername(),
             proxiedAddr.getPassword(),
             protocolNegotiator);
@@ -841,6 +903,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
               localNegotiator,
               autoFlowControl,
               flowControlWindow,
+              neverIndexedMetadataKeys,
               maxMessageSize,
               maxHeaderListSize,
               softLimitHeaderListSize,
@@ -855,6 +918,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
               localSocketPicker,
               channelLogger,
               useGetForSafeMethods,
+              options.getMetricRecorder(),
               Ticker.systemTicker());
       return transport;
     }
@@ -879,6 +943,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
               groupPool,
               autoFlowControl,
               flowControlWindow,
+              neverIndexedMetadataKeys,
               maxMessageSize,
               maxHeaderListSize,
               softLimitHeaderListSize,

@@ -29,6 +29,7 @@ import android.os.RemoteException;
 import androidx.lifecycle.LifecycleService;
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Supplier;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Server;
 import java.io.IOException;
 import java.util.HashMap;
@@ -38,7 +39,6 @@ import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A test helper class for creating android services to host gRPC servers.

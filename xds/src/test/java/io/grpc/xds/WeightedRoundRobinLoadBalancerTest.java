@@ -19,9 +19,10 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.eq;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -32,9 +33,11 @@ import static org.mockito.Mockito.when;
 
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.github.xds.service.orca.v3.OrcaLoadReportRequest;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.testing.EqualsTester;
 import com.google.protobuf.Duration;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -58,6 +61,7 @@ import io.grpc.LongCounterMetricInstrument;
 import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
 import io.grpc.MetricSink;
+import io.grpc.NameResolver;
 import io.grpc.NoopMetricSink;
 import io.grpc.ServerCall;
 import io.grpc.ServerServiceDefinition;
@@ -82,6 +86,7 @@ import io.grpc.xds.WeightedRoundRobinLoadBalancer.StaticStrideScheduler;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedChildLbState;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinPicker;
+import io.grpc.xds.orca.OrcaOobUtilAccessor;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
@@ -161,10 +166,15 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   private String channelTarget = "channel-target";
   private String locality = "locality";
+  private String backendService = "the-backend-service";
 
   public WeightedRoundRobinLoadBalancerTest() {
     testHelperInstance = new TestHelper();
     helper = mock(Helper.class, delegatesTo(testHelperInstance));
+  }
+
+  private static WeightedRoundRobinPicker getWrrPicker(SubchannelPicker picker) {
+    return (WeightedRoundRobinPicker) OrcaOobUtilAccessor.getDelegate(picker);
   }
 
   @Before
@@ -208,9 +218,42 @@ public class WeightedRoundRobinLoadBalancerTest {
         .forTransientFailure(Status.UNAVAILABLE));
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    final WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getValue();
-    weightedPicker.pickSubchannel(mockArgs);
+    final SubchannelPicker picker = pickerCaptor.getValue();
+    picker.pickSubchannel(mockArgs);
+  }
+
+  @Test
+  public void config_equalsTester() {
+    WeightedRoundRobinLoadBalancerConfig defaults =
+        WeightedRoundRobinLoadBalancerConfig.newBuilder().build();
+    new EqualsTester()
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder().build(),
+            WeightedRoundRobinLoadBalancerConfig.newBuilder().build(),
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setBlackoutPeriodNanos(defaults.blackoutPeriodNanos).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setBlackoutPeriodNanos(5).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setWeightExpirationPeriodNanos(5).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setEnableOobLoadReport(true).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setOobReportingPeriodNanos(5).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setWeightUpdatePeriodNanos(5).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setErrorUtilizationPenalty(0.5F).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setErrorUtilizationPenalty(Float.NaN).build())
+        .testEquals();
   }
 
   @Test
@@ -236,9 +279,9 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(0);
+        getWrrPicker(pickerCaptor.getAllValues().get(0));
     assertThat(weightedPicker.getChildren().size()).isEqualTo(1);
-    weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+    weightedPicker = getWrrPicker(pickerCaptor.getAllValues().get(1));
     assertThat(weightedPicker.getChildren().size()).isEqualTo(2);
     String weightedPickerStr = weightedPicker.toString();
     assertThat(weightedPickerStr).contains("enableOobLoadReport=false");
@@ -247,10 +290,12 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
@@ -299,13 +344,15 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
@@ -323,8 +370,8 @@ public class WeightedRoundRobinLoadBalancerTest {
             .setAttributes(affinity).build()));
     verify(helper, times(3)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor2.capture());
-    weightedPicker = (WeightedRoundRobinPicker) pickerCaptor2.getAllValues().get(2);
-    pickResult = weightedPicker.pickSubchannel(mockArgs);
+    SubchannelPicker rawPicker = pickerCaptor2.getAllValues().get(2);
+    pickResult = rawPicker.pickSubchannel(mockArgs);
     assertThat(getAddresses(pickResult)).isEqualTo(servers.get(0));
     assertThat(pickResult.getStreamTracerFactory()).isNull();
     OrcaLoadReportRequest golden = OrcaLoadReportRequest.newBuilder().setReportInterval(
@@ -357,13 +404,16 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(3)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(2);
+        getWrrPicker(pickerCaptor.getAllValues().get(2));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
     WeightedChildLbState weightedChild3 = (WeightedChildLbState) getChild(weightedPicker, 2);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(r1);
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(r2);
-    weightedChild3.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(r3);
+    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(r1);
+    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(r2);
+    weightedChild3.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(r3);
 
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
@@ -557,13 +607,15 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     int expectedCount = isEnabledHappyEyeballs() ? 2 : 1;
@@ -617,16 +669,18 @@ public class WeightedRoundRobinLoadBalancerTest {
         eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(0);
+        getWrrPicker(pickerCaptor.getAllValues().get(0));
     assertThat(weightedPicker.getChildren().size()).isEqualTo(1);
-    weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+    weightedPicker = getWrrPicker(pickerCaptor.getAllValues().get(1));
     assertThat(weightedPicker.getChildren().size()).isEqualTo(2);
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
@@ -640,10 +694,12 @@ public class WeightedRoundRobinLoadBalancerTest {
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
     assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
@@ -672,13 +728,15 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
@@ -723,7 +781,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
         eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     Map<EquivalentAddressGroup, Integer> qpsByChannel = ImmutableMap.of(servers.get(0), 2,
@@ -778,13 +836,15 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(3)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(2);
+        getWrrPicker(pickerCaptor.getAllValues().get(2));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
@@ -819,13 +879,15 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     CyclicBarrier barrier = new CyclicBarrier(2);
@@ -1060,7 +1122,7 @@ public class WeightedRoundRobinLoadBalancerTest {
           .isLessThan(0.002);
     }
   }
-  
+
   @Test
   public void testWraparound() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
@@ -1119,7 +1181,9 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void metrics() {
     // Give WRR some valid addresses to work with.
     Attributes attributesWithLocality = Attributes.newBuilder()
-        .set(WeightedTargetLoadBalancer.CHILD_NAME, locality).build();
+        .set(WeightedTargetLoadBalancer.CHILD_NAME, locality)
+        .set(NameResolver.ATTR_BACKEND_SERVICE, backendService)
+        .build();
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(attributesWithLocality).build()));
@@ -1159,22 +1223,25 @@ public class WeightedRoundRobinLoadBalancerTest {
     // Send one child LB state an ORCA update with some valid utilization/qps data so that weights
     // can be calculated, but it's still essentially round_robin
     Iterator<ChildLbState> childLbStates = wrr.getChildLbStates().iterator();
-    ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
-        weightedConfig.errorUtilizationPenalty).onLoadReport(
-        InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
-            new HashMap<>(), new HashMap<>()));
+    ((WeightedChildLbState) childLbStates.next()).new OrcaReportListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization)
+            .onLoadReport(InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0,
+                new HashMap<>(), new HashMap<>(), new HashMap<>()));
 
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
 
     // Now send a second child LB state an ORCA update, so there's real weights
-    ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
-        weightedConfig.errorUtilizationPenalty).onLoadReport(
-        InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
-            new HashMap<>(), new HashMap<>()));
-    ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
-        weightedConfig.errorUtilizationPenalty).onLoadReport(
-        InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
-            new HashMap<>(), new HashMap<>()));
+    ((WeightedChildLbState) childLbStates.next()).new OrcaReportListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization)
+            .onLoadReport(InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0,
+                new HashMap<>(), new HashMap<>(), new HashMap<>()));
+    ((WeightedChildLbState) childLbStates.next()).new OrcaReportListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization)
+            .onLoadReport(InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0,
+                new HashMap<>(), new HashMap<>(), new HashMap<>()));
 
     // Let's reset the mock MetricsRecorder so that it's easier to verify what happened after the
     // weights were updated
@@ -1264,12 +1331,264 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(recorder.getError()).isNull();
 
     // Make sure at least one metric works. The other tests will make sure other metrics and the
-    // edge cases are working.
-    verify(metrics).addLongCounter(
+    // edge cases are working. Since this is racy, we just care it happened at least once.
+    verify(metrics, atLeast(1)).addLongCounter(
         argThat((instr) -> instr.getName().equals("grpc.lb.wrr.rr_fallback")),
         eq(1L),
         eq(Arrays.asList("directaddress:///wrr-metrics")),
-        eq(Arrays.asList("")));
+        eq(Arrays.asList("", "")));
+  }
+
+
+  @Test
+  public void customMetric_priority_overAppUtil() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
+        .setMetricNamesForComputingUtilization(ImmutableList.of("named_metrics.cost")).build();
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+
+    syncContext.execute(
+        () -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(servers)
+            .setLoadBalancingPolicyConfig(weightedConfig).setAttributes(affinity).build()));
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel = it.next();
+    getSubchannelStateListener(readySubchannel)
+        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
+    WeightedChildLbState weightedChild =
+        (WeightedChildLbState) wrr.getChildLbStates().iterator().next();
+    WeightedChildLbState.OrcaReportListener listener = weightedChild.getOrCreateOrcaListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization);
+
+    Map<String, Double> namedMetrics = new HashMap<>();
+    namedMetrics.put("cost", 0.5);
+    // App util = 0.8
+    MetricReport report = InternalCallMetricRecorder.createMetricReport(0.1, 0.8, 0.1, 1, 0,
+        new HashMap<>(), new HashMap<>(), namedMetrics);
+    listener.onLoadReport(report);
+    // Custom metrics now take priority over app_util
+    // qps=1, util=0.5 -> weight=2.0
+    fakeClock.forwardTime(1100, TimeUnit.MILLISECONDS);
+    verify(mockMetricRecorder).recordDoubleHistogram(
+        argThat(instr -> instr.getName().equals("grpc.lb.wrr.endpoint_weights")), eq(2.0), any(),
+        any());
+  }
+
+  @Test
+  public void customMetric_invalid_fallbackToAppUtil() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
+        .setMetricNamesForComputingUtilization(ImmutableList.of("named_metrics.cost")).build();
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+
+    syncContext.execute(
+        () -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(servers)
+            .setLoadBalancingPolicyConfig(weightedConfig).setAttributes(affinity).build()));
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel = it.next();
+    getSubchannelStateListener(readySubchannel)
+        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
+    WeightedChildLbState weightedChild =
+        (WeightedChildLbState) wrr.getChildLbStates().iterator().next();
+    WeightedChildLbState.OrcaReportListener listener = weightedChild.getOrCreateOrcaListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization);
+
+    // custom metric is NaN, App util = 0.8
+    Map<String, Double> namedMetrics = new HashMap<>();
+    namedMetrics.put("cost", Double.NaN);
+    MetricReport report = InternalCallMetricRecorder.createMetricReport(0.1, 0.8, 0.1, 1, 0,
+        new HashMap<>(), new HashMap<>(), namedMetrics);
+    listener.onLoadReport(report);
+
+    // Should fallback to App Util (0.8)
+    // qps=1, util=0.8 -> weight=1.25
+    fakeClock.forwardTime(1100, TimeUnit.MILLISECONDS);
+    verify(mockMetricRecorder).recordDoubleHistogram(
+        argThat(instr -> instr.getName().equals("grpc.lb.wrr.endpoint_weights")), eq(1.25), any(),
+        any());
+  }
+
+  @Test
+  public void customMetric_mapLookup_used() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
+        .setMetricNamesForComputingUtilization(ImmutableList.of("named_metrics.cost")).build();
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+
+    syncContext.execute(
+        () -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(servers)
+            .setLoadBalancingPolicyConfig(weightedConfig).setAttributes(affinity).build()));
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel = it.next();
+    getSubchannelStateListener(readySubchannel)
+        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
+    WeightedChildLbState weightedChild =
+        (WeightedChildLbState) wrr.getChildLbStates().iterator().next();
+    WeightedChildLbState.OrcaReportListener listener = weightedChild.getOrCreateOrcaListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization);
+
+    Map<String, Double> namedMetrics = new HashMap<>();
+    namedMetrics.put("cost", 0.5);
+    MetricReport report = InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0,
+        new HashMap<>(), new HashMap<>(), namedMetrics);
+    listener.onLoadReport(report);
+    // qps=1, util=0.5 -> weight=2.0
+    fakeClock.forwardTime(1100, TimeUnit.MILLISECONDS);
+    verify(mockMetricRecorder).recordDoubleHistogram(
+        argThat(instr -> instr.getName().equals("grpc.lb.wrr.endpoint_weights")), eq(2.0), any(),
+        any());
+  }
+
+  @Test
+  public void customMetric_shouldFilterOutAndFallbackToCpu() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
+        .setMetricNamesForComputingUtilization(ImmutableList.of("named_metrics.cost")).build();
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+
+    syncContext.execute(
+        () -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(servers)
+            .setLoadBalancingPolicyConfig(weightedConfig).setAttributes(affinity).build()));
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel = it.next();
+    getSubchannelStateListener(readySubchannel)
+        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
+    WeightedChildLbState weightedChild =
+        (WeightedChildLbState) wrr.getChildLbStates().iterator().next();
+    WeightedChildLbState.OrcaReportListener listener = weightedChild.getOrCreateOrcaListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization);
+
+    // custom metric is NaN, but CPU is 0.1
+    Map<String, Double> namedMetrics = new HashMap<>();
+    namedMetrics.put("cost", Double.NaN);
+    MetricReport report = InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0,
+        new HashMap<>(), new HashMap<>(), namedMetrics);
+    listener.onLoadReport(report);
+
+    // Should fallback to CPU (0.1)
+    // fallback to cpu: qps=1, util=0.1 -> weight=10.0
+    fakeClock.forwardTime(1100, TimeUnit.MILLISECONDS);
+    verify(mockMetricRecorder).recordDoubleHistogram(
+        argThat(instr -> instr.getName().equals("grpc.lb.wrr.endpoint_weights")), eq(10.0), any(),
+        any());
+  }
+
+  @Test
+  public void customMetric_multipleMetrics_maxUsed() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
+        .setMetricNamesForComputingUtilization(
+            ImmutableList.of("named_metrics.cost", "named_metrics.score"))
+        .build();
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+
+    syncContext.execute(
+        () -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(servers)
+            .setLoadBalancingPolicyConfig(weightedConfig).setAttributes(affinity).build()));
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel = it.next();
+    getSubchannelStateListener(readySubchannel)
+        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
+    WeightedChildLbState weightedChild =
+        (WeightedChildLbState) wrr.getChildLbStates().iterator().next();
+    WeightedChildLbState.OrcaReportListener listener = weightedChild.getOrCreateOrcaListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization);
+
+    Map<String, Double> namedMetrics = new HashMap<>();
+    namedMetrics.put("cost", 0.5);
+    namedMetrics.put("score", 0.8);
+    MetricReport report = InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0,
+        new HashMap<>(), new HashMap<>(), namedMetrics);
+    listener.onLoadReport(report);
+    // qps=1, util=0.8 (max of 0.5 and 0.8) -> weight=1.25
+    fakeClock.forwardTime(1100, TimeUnit.MILLISECONDS);
+    verify(mockMetricRecorder).recordDoubleHistogram(
+        argThat(instr -> instr.getName().equals("grpc.lb.wrr.endpoint_weights")), eq(1.25), any(),
+        any());
+  }
+
+  @Test
+  public void customMetric_allInvalid_fallbackToCpu() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
+        .setMetricNamesForComputingUtilization(
+            ImmutableList.of("named_metrics.cost", "named_metrics.score", "named_metrics.other"))
+        .build();
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+
+    syncContext.execute(
+        () -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(servers)
+            .setLoadBalancingPolicyConfig(weightedConfig).setAttributes(affinity).build()));
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel = it.next();
+    getSubchannelStateListener(readySubchannel)
+        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
+    WeightedChildLbState weightedChild =
+        (WeightedChildLbState) wrr.getChildLbStates().iterator().next();
+    WeightedChildLbState.OrcaReportListener listener = weightedChild.getOrCreateOrcaListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization);
+
+    Map<String, Double> namedMetrics = new HashMap<>();
+    namedMetrics.put("cost", Double.NaN);
+    namedMetrics.put("score", 0.0);
+    namedMetrics.put("other", -1.0);
+    MetricReport report = InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0,
+        new HashMap<>(), new HashMap<>(), namedMetrics);
+    listener.onLoadReport(report);
+    // qps=1, util=0.1 (fallback to cpu) -> weight=10.0
+    fakeClock.forwardTime(1100, TimeUnit.MILLISECONDS);
+    verify(mockMetricRecorder).recordDoubleHistogram(
+        argThat(instr -> instr.getName().equals("grpc.lb.wrr.endpoint_weights")), eq(10.0), any(),
+        any());
+  }
+
+  @Test
+  public void customMetric_mixInvalidAndValid_validUsed() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
+        .setMetricNamesForComputingUtilization(ImmutableList.of("named_metrics.cost",
+            "named_metrics.score", "named_metrics.other1", "named_metrics.other2"))
+        .build();
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+
+    syncContext.execute(
+        () -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(servers)
+            .setLoadBalancingPolicyConfig(weightedConfig).setAttributes(affinity).build()));
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel = it.next();
+    getSubchannelStateListener(readySubchannel)
+        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
+    WeightedChildLbState weightedChild =
+        (WeightedChildLbState) wrr.getChildLbStates().iterator().next();
+    WeightedChildLbState.OrcaReportListener listener = weightedChild.getOrCreateOrcaListener(
+        weightedConfig.errorUtilizationPenalty,
+        weightedConfig.parsedMetricNamesForComputingUtilization);
+
+    Map<String, Double> namedMetrics = new HashMap<>();
+    namedMetrics.put("cost", Double.NaN);
+    namedMetrics.put("score", 0.5);
+    namedMetrics.put("other1", 0.0);
+    namedMetrics.put("other2", -123.0);
+    MetricReport report = InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0,
+        new HashMap<>(), new HashMap<>(), namedMetrics);
+    listener.onLoadReport(report);
+    // qps=1, util=0.5 -> weight=2.0
+    fakeClock.forwardTime(1100, TimeUnit.MILLISECONDS);
+    verify(mockMetricRecorder).recordDoubleHistogram(
+        argThat(instr -> instr.getName().equals("grpc.lb.wrr.endpoint_weights")), eq(2.0), any(),
+        any());
   }
 
   // Verifies that the MetricRecorder has been called to record a long counter value of 1 for the
@@ -1281,7 +1600,10 @@ public class WeightedRoundRobinLoadBalancerTest {
           public boolean matches(LongCounterMetricInstrument longCounterInstrument) {
             return longCounterInstrument.getName().equals(name);
           }
-        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList(locality)));
+        }),
+        eq(value),
+        eq(Lists.newArrayList(channelTarget)),
+        eq(Lists.newArrayList(locality, backendService)));
   }
 
   // Verifies that the MetricRecorder has been called to record a given double histogram value the
@@ -1293,7 +1615,10 @@ public class WeightedRoundRobinLoadBalancerTest {
           public boolean matches(DoubleHistogramMetricInstrument doubleHistogramInstrument) {
             return doubleHistogramInstrument.getName().equals(name);
           }
-        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList(locality)));
+        }),
+        eq(value),
+        eq(Lists.newArrayList(channelTarget)),
+        eq(Lists.newArrayList(locality, backendService)));
   }
 
   private int getNumFilteredPendingTasks() {

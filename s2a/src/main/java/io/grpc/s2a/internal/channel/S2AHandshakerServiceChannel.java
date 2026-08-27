@@ -24,9 +24,6 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
-import java.time.Duration;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -50,9 +47,6 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class S2AHandshakerServiceChannel {
-  private static final Duration CHANNEL_SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
-  private static final Logger logger =
-          Logger.getLogger(S2AHandshakerServiceChannel.class.getName());
 
   /**
    * Returns a {@link SharedResourceHolder.Resource} instance for managing channels to an S2A server
@@ -101,13 +95,6 @@ public final class S2AHandshakerServiceChannel {
       checkNotNull(instanceChannel);
       ManagedChannel channel = (ManagedChannel) instanceChannel;
       channel.shutdownNow();
-      try {
-        channel.awaitTermination(CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        logger.log(Level.WARNING, "Channel to S2A was not shutdown.");
-      }
-
     }
 
     @Override

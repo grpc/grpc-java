@@ -16,11 +16,10 @@
 
 package io.grpc.internal;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.Status;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A {@link ClientTransport} that has life-cycle management.
@@ -32,8 +31,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * implementations may transfer the streams to somewhere else. Either way they must conform to the
  * contract defined by {@link #shutdown}, {@link Listener#transportShutdown} and
  * {@link Listener#transportTerminated}.
+ *
+ * <p>This interface is thread-safe.
  */
-@ThreadSafe
 public interface ManagedClientTransport extends ClientTransport {
 
   /**
@@ -77,8 +77,9 @@ public interface ManagedClientTransport extends ClientTransport {
      * <p>This is called exactly once, and must be called prior to {@link #transportTerminated}.
      *
      * @param s the reason for the shutdown.
+     * @param e the disconnect error.
      */
-    void transportShutdown(Status s);
+    void transportShutdown(Status s, DisconnectError e);
 
     /**
      * The transport completed shutting down. All resources have been released. All streams have

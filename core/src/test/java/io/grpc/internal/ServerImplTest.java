@@ -26,6 +26,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -52,6 +53,7 @@ import io.grpc.BinaryLog;
 import io.grpc.Channel;
 import io.grpc.Compressor;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
@@ -63,6 +65,7 @@ import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallExecutorSupplier;
@@ -104,7 +107,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -127,6 +129,10 @@ public class ServerImplTest {
           .setRequestMarshaller(STRING_MARSHALLER)
           .setResponseMarshaller(INTEGER_MARSHALLER)
           .build();
+  private static final MethodDescriptor<String, Integer> GENERATED_METHOD =
+      METHOD.toBuilder()
+          .setSampledToLocalTracing(true)
+          .build();
   private static final Context.Key<String> SERVER_ONLY = Context.key("serverOnly");
   private static final Context.Key<String> SERVER_TRACER_ADDED_KEY = Context.key("tracer-added");
   private static final Context.CancellableContext SERVER_CONTEXT =
@@ -140,8 +146,60 @@ public class ServerImplTest {
       };
   private static final String AUTHORITY = "some_authority";
 
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
+  private static final class MethodNameCapturingTracer extends ServerStreamTracer
+      implements StatsTraceContext.ServerCallMethodListener {
+    @Nullable private ServerCallInfo<?, ?> serverCallInfo;
+    @Nullable private String recordedMethodName;
+    @Nullable private String resolvedMethodName;
+    private boolean streamClosed;
+
+    @Override
+    public synchronized void serverCallMethodResolved(MethodDescriptor<?, ?> method) {
+      resolvedMethodName =
+          recordMethodName(method.isSampledToLocalTracing(), method.getFullMethodName());
+    }
+
+    @Override
+    public synchronized void streamClosed(Status status) {
+      streamClosed = true;
+      if (serverCallInfo != null) {
+        recordedMethodName =
+            recordMethodName(
+                serverCallInfo.getMethodDescriptor().isSampledToLocalTracing(),
+                serverCallInfo.getMethodDescriptor().getFullMethodName());
+      } else if (resolvedMethodName != null) {
+        recordedMethodName = resolvedMethodName;
+      } else {
+        recordedMethodName = "other";
+      }
+    }
+
+    @Override
+    public synchronized void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
+      serverCallInfo = callInfo;
+      if (streamClosed) {
+        recordedMethodName =
+            recordMethodName(
+                callInfo.getMethodDescriptor().isSampledToLocalTracing(),
+                callInfo.getMethodDescriptor().getFullMethodName());
+      }
+    }
+
+    @Nullable
+    synchronized ServerCallInfo<?, ?> getServerCallInfo() {
+      return serverCallInfo;
+    }
+
+    @Nullable
+    synchronized String getRecordedMethodName() {
+      return recordedMethodName;
+    }
+
+    private static String recordMethodName(boolean generatedMethod, String fullMethodName) {
+      return generatedMethod ? fullMethodName : "other";
+    }
+  }
+
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @BeforeClass
@@ -207,7 +265,8 @@ public class ServerImplTest {
         new ClientTransportServersBuilder() {
           @Override
           public InternalServer buildClientTransportServers(
-              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+              MetricRecorder metricRecorder) {
             throw new UnsupportedOperationException();
           }
         });
@@ -459,6 +518,172 @@ public class ServerImplTest {
     verify(streamTracerFactory).newServerStreamTracer(eq("Waiter/nonexist"), same(requestHeaders));
     assertNull(streamTracer.getServerCallInfo());
     assertEquals(Status.Code.UNIMPLEMENTED, statusCaptor.getValue().getCode());
+  }
+
+  @Test
+  public void primaryRegistryGeneratedMethod_streamClosedBeforeStart_preservesMethodName()
+      throws Exception {
+    MethodNameCapturingTracer methodNameTracer = new MethodNameCapturingTracer();
+    streamTracerFactories =
+        Collections.singletonList(
+            new ServerStreamTracer.Factory() {
+              @Override
+              public ServerStreamTracer newServerStreamTracer(
+                  String fullMethodName, Metadata headers) {
+                return methodNameTracer;
+              }
+            });
+    builder.addService(
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", GENERATED_METHOD))
+            .addMethod(
+                GENERATED_METHOD,
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                      ServerCall<String, Integer> call, Metadata headers) {
+                    return callListener;
+                  }
+                })
+            .build());
+
+    createAndStartServer();
+    ServerTransportListener transportListener
+        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(
+            streamTracerFactories, GENERATED_METHOD.getFullMethodName(), requestHeaders);
+    when(stream.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, GENERATED_METHOD.getFullMethodName(), requestHeaders);
+    verify(stream).setListener(isA(ServerStreamListener.class));
+    verify(stream, atLeast(1)).statsTraceContext();
+
+    statsTraceCtx.streamClosed(Status.CANCELLED);
+    assertNull(methodNameTracer.getServerCallInfo());
+    assertEquals(
+        GENERATED_METHOD.getFullMethodName(),
+        methodNameTracer.getRecordedMethodName());
+
+    assertEquals(1, executor.runDueTasks());
+
+    assertNotNull(methodNameTracer.getServerCallInfo());
+    assertSame(GENERATED_METHOD, methodNameTracer.getServerCallInfo().getMethodDescriptor());
+    assertEquals(
+        GENERATED_METHOD.getFullMethodName(),
+        methodNameTracer.getRecordedMethodName());
+    verify(fallbackRegistry, never()).lookupMethod(anyString(), any());
+  }
+
+  @Test
+  public void primaryRegistryNonGeneratedMethod_streamClosedBeforeStart_recordsOther()
+      throws Exception {
+    MethodNameCapturingTracer methodNameTracer = new MethodNameCapturingTracer();
+    streamTracerFactories =
+        Collections.singletonList(
+            new ServerStreamTracer.Factory() {
+              @Override
+              public ServerStreamTracer newServerStreamTracer(
+                  String fullMethodName, Metadata headers) {
+                return methodNameTracer;
+              }
+            });
+    builder.addService(
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", METHOD))
+            .addMethod(
+                METHOD,
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                      ServerCall<String, Integer> call, Metadata headers) {
+                    return callListener;
+                  }
+                })
+            .build());
+
+    createAndStartServer();
+    ServerTransportListener transportListener
+        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(
+            streamTracerFactories, METHOD.getFullMethodName(), requestHeaders);
+    when(stream.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, METHOD.getFullMethodName(), requestHeaders);
+    verify(stream).setListener(isA(ServerStreamListener.class));
+    verify(stream, atLeast(1)).statsTraceContext();
+
+    statsTraceCtx.streamClosed(Status.CANCELLED);
+    assertNull(methodNameTracer.getServerCallInfo());
+    assertEquals("other", methodNameTracer.getRecordedMethodName());
+
+    assertEquals(1, executor.runDueTasks());
+
+    assertNotNull(methodNameTracer.getServerCallInfo());
+    assertSame(METHOD, methodNameTracer.getServerCallInfo().getMethodDescriptor());
+    assertEquals("other", methodNameTracer.getRecordedMethodName());
+    verify(fallbackRegistry, never()).lookupMethod(anyString(), any());
+  }
+
+  @Test
+  public void fallbackRegistryGeneratedMethod_streamClosedBeforeStart_resolvesOnAsyncLookup()
+      throws Exception {
+    MethodNameCapturingTracer methodNameTracer = new MethodNameCapturingTracer();
+    streamTracerFactories =
+        Collections.singletonList(
+            new ServerStreamTracer.Factory() {
+              @Override
+              public ServerStreamTracer newServerStreamTracer(
+                  String fullMethodName, Metadata headers) {
+                return methodNameTracer;
+              }
+            });
+    mutableFallbackRegistry.addService(
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", GENERATED_METHOD))
+            .addMethod(
+                GENERATED_METHOD,
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                      ServerCall<String, Integer> call, Metadata headers) {
+                    return callListener;
+                  }
+                })
+            .build());
+
+    createAndStartServer();
+    ServerTransportListener transportListener
+        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(
+            streamTracerFactories, GENERATED_METHOD.getFullMethodName(), requestHeaders);
+    when(stream.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, GENERATED_METHOD.getFullMethodName(), requestHeaders);
+    verify(stream).setListener(isA(ServerStreamListener.class));
+    verify(stream, atLeast(1)).statsTraceContext();
+
+    statsTraceCtx.streamClosed(Status.CANCELLED);
+    assertNull(methodNameTracer.getServerCallInfo());
+    assertEquals("other", methodNameTracer.getRecordedMethodName());
+    verify(fallbackRegistry, never()).lookupMethod(anyString(), any());
+
+    assertEquals(1, executor.runDueTasks());
+
+    assertNotNull(methodNameTracer.getServerCallInfo());
+    assertSame(GENERATED_METHOD, methodNameTracer.getServerCallInfo().getMethodDescriptor());
+    assertEquals(
+        GENERATED_METHOD.getFullMethodName(),
+        methodNameTracer.getRecordedMethodName());
+    verify(fallbackRegistry).lookupMethod(GENERATED_METHOD.getFullMethodName(), AUTHORITY);
   }
 
 
@@ -1148,11 +1373,21 @@ public class ServerImplTest {
   @Test
   public void testContextExpiredBeforeStreamCreate_StreamCancelNotCalledBeforeSetListener()
       throws Exception {
+    builder.ticker = new Deadline.Ticker() {
+      private long time;
+
+      @Override
+      public long nanoTime() {
+        time += 1000;
+        return time;
+      }
+    };
+
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
     AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
-    testStreamClose_setup(callReference, context, contextCancelled, 0L);
+    testStreamClose_setup(callReference, context, contextCancelled, 1L);
 
     // This assert that stream.setListener(jumpListener) is called before stream.cancel(), which
     // prevents extremely short deadlines causing NPEs.
@@ -1228,7 +1463,7 @@ public class ServerImplTest {
     assertFalse(context.get().isCancelled());
 
     assertEquals(1, timer.forwardNanos(1));
-    
+
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
     assertThat(context.get().cancellationCause()).isNotNull();
@@ -1260,9 +1495,8 @@ public class ServerImplTest {
   public void getPortBeforeStartedFails() {
     transportServer = new SimpleServer();
     createServer();
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("started");
-    server.getPort();
+    IllegalStateException e = assertThrows(IllegalStateException.class, () -> server.getPort());
+    assertThat(e).hasMessageThat().isEqualTo("Not started");
   }
 
   @Test
@@ -1271,9 +1505,8 @@ public class ServerImplTest {
     createAndStartServer();
     server.shutdown();
     server.awaitTermination();
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("terminated");
-    server.getPort();
+    IllegalStateException e = assertThrows(IllegalStateException.class, () -> server.getPort());
+    assertThat(e).hasMessageThat().isEqualTo("Already terminated");
   }
 
   @Test

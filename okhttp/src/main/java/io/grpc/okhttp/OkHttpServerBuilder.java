@@ -17,6 +17,8 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.grpc.internal.CertificateUtils.createTrustManager;
+import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
 
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
@@ -26,6 +28,7 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Internal;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
@@ -110,7 +113,15 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     return new OkHttpServerBuilder(address, result.factory);
   }
 
-  final ServerImplBuilder serverImplBuilder = new ServerImplBuilder(this::buildTransportServers);
+  final ServerImplBuilder serverImplBuilder = new ServerImplBuilder(
+      new ServerImplBuilder.ClientTransportServersBuilder() {
+        @Override
+        public InternalServer buildClientTransportServers(
+            List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+            MetricRecorder metricRecorder) {
+          return buildTransportServers(streamTracerFactories);
+        }
+      });
   final SocketAddress listenAddress;
   final HandshakerSocketFactory handshakerSocketFactory;
   TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
@@ -127,7 +138,7 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
   long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
   boolean permitKeepAliveWithoutCalls;
-  long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
+  long permitKeepAliveTimeInNanos = DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
   long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
   long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   int maxConcurrentCallsPerConnection = MAX_CONCURRENT_STREAMS;
@@ -425,7 +436,7 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
         tm = tlsCreds.getTrustManagers().toArray(new TrustManager[0]);
       } else if (tlsCreds.getRootCertificates() != null) {
         try {
-          tm = OkHttpChannelBuilder.createTrustManager(tlsCreds.getRootCertificates());
+          tm = createTrustManager(tlsCreds.getRootCertificates());
         } catch (GeneralSecurityException gse) {
           log.log(Level.FINE, "Exception loading root certificates from credential", gse);
           return HandshakerSocketFactoryResult.error(

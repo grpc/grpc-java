@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -33,6 +34,7 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.PasswordAuthentication;
@@ -40,6 +42,7 @@ import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Collections;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -73,52 +76,13 @@ public class ProxyDetectorImplTest {
         return proxySelector;
       }
     };
-    proxyDetector = new ProxyDetectorImpl(proxySelectorSupplier, authenticator, null);
+    proxyDetector = new ProxyDetectorImpl(proxySelectorSupplier, authenticator);
     unresolvedProxy = InetSocketAddress.createUnresolved("10.0.0.1", proxyPort);
     proxySocketAddress = HttpConnectProxiedSocketAddress.newBuilder()
         .setTargetAddress(destination)
         .setProxyAddress(
           new InetSocketAddress(InetAddress.getByName(unresolvedProxy.getHostName()), proxyPort))
         .build();
-  }
-
-  @Test
-  public void override_hostPort() throws Exception {
-    final String overrideHost = "10.99.99.99";
-    final int overridePort = 1234;
-    final String overrideHostWithPort = overrideHost + ":" + overridePort;
-    ProxyDetectorImpl proxyDetector = new ProxyDetectorImpl(
-        proxySelectorSupplier,
-        authenticator,
-        overrideHostWithPort);
-    ProxiedSocketAddress detected = proxyDetector.proxyFor(destination);
-    assertNotNull(detected);
-    assertEquals(
-        HttpConnectProxiedSocketAddress.newBuilder()
-            .setTargetAddress(destination)
-            .setProxyAddress(
-                new InetSocketAddress(InetAddress.getByName(overrideHost), overridePort))
-            .build(),
-        detected);
-  }
-
-  @Test
-  public void override_hostOnly() throws Exception {
-    final String overrideHostWithoutPort = "10.99.99.99";
-    final int defaultPort = 80;
-    ProxyDetectorImpl proxyDetector = new ProxyDetectorImpl(
-        proxySelectorSupplier,
-        authenticator,
-        overrideHostWithoutPort);
-    ProxiedSocketAddress detected = proxyDetector.proxyFor(destination);
-    assertNotNull(detected);
-    assertEquals(
-        HttpConnectProxiedSocketAddress.newBuilder()
-            .setTargetAddress(destination)
-            .setProxyAddress(
-                new InetSocketAddress(InetAddress.getByName(overrideHostWithoutPort), defaultPort))
-            .build(),
-        detected);
   }
 
   @Test
@@ -227,8 +191,27 @@ public class ProxyDetectorImplTest {
             return null;
           }
         },
-        authenticator,
-        null);
+        authenticator);
     assertNull(proxyDetector.proxyFor(destination));
+  }
+
+  @Test
+  public void throwsWhenProxySelectorReturnsEmptyList() throws Exception {
+    when(proxySelector.select(any(URI.class))).thenReturn(Collections.<Proxy>emptyList());
+
+    IOException e =
+        assertThrows(IOException.class, () -> proxyDetector.proxyFor(destination));
+    assertTrue(e.getMessage(), e.getMessage().contains("empty list"));
+    assertTrue(e.getMessage(), e.getMessage().contains(proxySelector.getClass().getName()));
+  }
+
+  @Test
+  public void throwsWhenProxySelectorReturnsNullList() throws Exception {
+    when(proxySelector.select(any(URI.class))).thenReturn(null);
+
+    IOException e =
+        assertThrows(IOException.class, () -> proxyDetector.proxyFor(destination));
+    assertTrue(e.getMessage(), e.getMessage().contains("null"));
+    assertTrue(e.getMessage(), e.getMessage().contains(proxySelector.getClass().getName()));
   }
 }

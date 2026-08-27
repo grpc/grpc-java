@@ -455,7 +455,7 @@ public class HpackTest {
       hpackReader.readHeaders();
       fail();
     } catch (IOException e) {
-      assertEquals("Header index too large -2147483521", e.getMessage());
+      assertEquals("Varint overflowed", e.getMessage());
     }
   }
 
@@ -497,7 +497,7 @@ public class HpackTest {
       hpackReader.readHeaders();
       fail();
     } catch (IOException e) {
-      assertEquals("Invalid dynamic table size update -2147483648", e.getMessage());
+      assertEquals("Varint overflowed", e.getMessage());
     }
   }
 
@@ -856,11 +856,53 @@ public class HpackTest {
     assertBytes(0xe0 | 31, 154, 10);
   }
 
-  @Test public void max31BitValue() throws IOException {
-    hpackWriter.writeInt(0x7fffffff, 31, 0);
-    assertBytes(31, 224, 255, 255, 255, 7);
-    assertEquals(0x7fffffff,
-        newReader(byteStream(224, 255, 255, 255, 7)).readInt(31, 31));
+  @Test public void max29BitValue() throws IOException {
+    hpackWriter.writeInt(0x100000fe, 0xff, 0xff);
+    assertBytes(0xff, 0xff, 0xff, 0xff, 0x7f);
+    assertEquals(0x100000fe,
+        newReader(byteStream(0xff, 0xff, 0xff, 0x7f)).readInt(0xff, 0xff));
+  }
+
+  @Test public void beyondMax29BitValue() throws IOException {
+    try {
+      hpackWriter.writeInt(0x100000ff, 0xff, 0xff);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint would overflow reader", e.getMessage());
+    }
+    try {
+      newReader(byteStream(0xff, 0xff, 0xff, 0xff, 0x80)).readInt(0xff, 0xff);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint overflowed", e.getMessage());
+    }
+  }
+
+  @Test public void beyondMax29BitValue_smallPrefix() throws IOException {
+    try {
+      hpackWriter.writeInt(0x10000001, 1, 1);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint would overflow reader", e.getMessage());
+    }
+    try {
+      newReader(byteStream(0xff, 0xff, 0xff, 0xff, 0x80)).readInt(1, 1);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint overflowed", e.getMessage());
+    }
+  }
+
+  @Test public void readerAbortsLongVarintsWithZeros() throws IOException {
+    try {
+      // The reader should fail before getting to the end, because it will overflow as soon as there
+      // is a 1 bit, and the only reason to use this many continuations is to eventually have a 1
+      // bit.
+      newReader(byteStream(0x80, 0x80, 0x80, 0x80, 0x80)).readInt(31, 31);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint overflowed", e.getMessage());
+    }
   }
 
   @Test public void prefixMask() throws IOException {

@@ -19,12 +19,16 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
+import io.grpc.CompositeCallCredentials;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -34,35 +38,70 @@ import java.util.concurrent.TimeUnit;
 
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
-  static final GrpcXdsTransportFactory DEFAULT_XDS_TRANSPORT_FACTORY =
-      new GrpcXdsTransportFactory();
+  private final CallCredentials callCredentials;
+  private final ChannelConfigurator channelConfigurator;
+
+  GrpcXdsTransportFactory(CallCredentials callCredentials,
+                          ChannelConfigurator channelConfigurator) {
+    this.callCredentials = callCredentials;
+    this.channelConfigurator = channelConfigurator;
+  }
 
   @Override
   public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-    return new GrpcXdsTransport(serverInfo);
+    return new GrpcXdsTransport(serverInfo, callCredentials, channelConfigurator);
   }
 
   @VisibleForTesting
   public XdsTransport createForTest(ManagedChannel channel) {
-    return new GrpcXdsTransport(channel);
+    return new GrpcXdsTransport(channel, callCredentials);
   }
 
   @VisibleForTesting
   static class GrpcXdsTransport implements XdsTransport {
 
     private final ManagedChannel channel;
+    private final CallCredentials callCredentials;
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) {
-      String target = serverInfo.target();
-      ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
-      this.channel = Grpc.newChannelBuilder(target, channelCredentials)
-          .keepAliveTime(5, TimeUnit.MINUTES)
-          .build();
+      this(serverInfo, null, null);
     }
 
     @VisibleForTesting
     public GrpcXdsTransport(ManagedChannel channel) {
+      this(channel, null);
+    }
+
+    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials) {
+      this(serverInfo, callCredentials, null);
+    }
+
+    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo,
+                            CallCredentials callCredentials,
+                            ChannelConfigurator channelConfigurator) {
+      String target = serverInfo.target();
+      ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
+      ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, channelCredentials)
+          .keepAliveTime(5, TimeUnit.MINUTES);
+      if (channelConfigurator != null) {
+        channelConfigurator.configureChannelBuilder(channelBuilder);
+        channelBuilder.childChannelConfigurator(channelConfigurator);
+      }
+      this.channel = channelBuilder.build();
+      if (callCredentials != null && serverInfo.callCredentials() != null) {
+        this.callCredentials = new CompositeCallCredentials(
+            callCredentials, serverInfo.callCredentials());
+      } else if (serverInfo.callCredentials() != null) {
+        this.callCredentials = serverInfo.callCredentials();
+      } else {
+        this.callCredentials = callCredentials;
+      }
+    }
+
+    @VisibleForTesting
+    public GrpcXdsTransport(ManagedChannel channel, CallCredentials callCredentials) {
       this.channel = checkNotNull(channel, "channel");
+      this.callCredentials = callCredentials;
     }
 
     @Override
@@ -72,7 +111,8 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
         MethodDescriptor.Marshaller<RespT> respMarshaller) {
       Context prevContext = Context.ROOT.attach();
       try {
-        return new XdsStreamingCall<>(fullMethodName, reqMarshaller, respMarshaller);
+        return new XdsStreamingCall<>(
+            fullMethodName, reqMarshaller, respMarshaller, callCredentials);
       } finally {
         Context.ROOT.detach(prevContext);
       }
@@ -89,16 +129,22 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
       private final ClientCall<ReqT, RespT> call;
 
-      public XdsStreamingCall(String methodName, MethodDescriptor.Marshaller<ReqT> reqMarshaller,
-                              MethodDescriptor.Marshaller<RespT> respMarshaller) {
-        this.call = channel.newCall(
-            MethodDescriptor.<ReqT, RespT>newBuilder()
-                .setFullMethodName(methodName)
-                .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
-                .setRequestMarshaller(reqMarshaller)
-                .setResponseMarshaller(respMarshaller)
-                .build(),
-            CallOptions.DEFAULT); // TODO(zivy): support waitForReady
+      public XdsStreamingCall(
+          String methodName,
+          MethodDescriptor.Marshaller<ReqT> reqMarshaller,
+          MethodDescriptor.Marshaller<RespT> respMarshaller,
+          CallCredentials callCredentials) {
+        this.call =
+            channel.newCall(
+                MethodDescriptor.<ReqT, RespT>newBuilder()
+                    .setFullMethodName(methodName)
+                    .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
+                    .setRequestMarshaller(reqMarshaller)
+                    .setResponseMarshaller(respMarshaller)
+                    .setSampledToLocalTracing(true)
+                    .build(),
+                CallOptions.DEFAULT.withCallCredentials(
+                    callCredentials)); // TODO(zivy): support waitForReady
       }
 
       @Override

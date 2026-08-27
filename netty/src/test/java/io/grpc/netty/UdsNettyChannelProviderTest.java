@@ -35,7 +35,6 @@ import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerDomainSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.io.IOException;
@@ -109,6 +108,16 @@ public class UdsNettyChannelProviderTest {
   }
 
   @Test
+  public void newChannelBuilder_withRegistry_success() {
+    Assume.assumeTrue(Utils.isEpollAvailable());
+    NewChannelBuilderResult result = provider.newChannelBuilder("unix:sock.sock",
+        TlsChannelCredentials.create(),
+        io.grpc.NameResolverRegistry.getDefaultRegistry(),
+        new io.grpc.internal.DnsNameResolverProvider());
+    assertThat(result.getChannelBuilder()).isInstanceOf(NettyChannelBuilder.class);
+  }
+
+  @Test
   public void managedChannelRegistry_newChannelBuilder() {
     Assume.assumeTrue(Utils.isEpollAvailable());
     ManagedChannelBuilder<?> managedChannelBuilder
@@ -141,8 +150,12 @@ public class UdsNettyChannelProviderTest {
   }
 
   private void createUdsServer(String name) throws IOException {
-    elg = new EpollEventLoopGroup();
-    boss = new EpollEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup epollElg = new io.netty.channel.epoll.EpollEventLoopGroup();
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup epollBoss = new io.netty.channel.epoll.EpollEventLoopGroup(1);
+    elg = epollElg;
+    boss = epollBoss;
     cleanupRule.register(
         NettyServerBuilder.forAddress(new DomainSocketAddress(name))
             .bossEventLoopGroup(boss)

@@ -21,8 +21,12 @@ import static com.google.common.truth.Truth.assertThat;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
+import io.grpc.ChannelConfigurator;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
+import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -36,8 +40,8 @@ import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsResourceType;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -45,7 +49,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 
 /**
@@ -58,6 +65,17 @@ public class XdsServerTestHelper {
       "projects/42/networks/default/nodes/5c85b298-6f5b-4722-b74a-f7d1f0ccf5ad";
   private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
       EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
+  static final Map<String, ?> RAW_BOOTSTRAP = ImmutableMap.of(
+      "node", ImmutableMap.of(
+          "id", NODE_ID),
+      "server_listener_resource_name_template", "grpc/server?udpa.resource.listening_address=%s",
+      "xds_servers", ImmutableList.of(
+          ImmutableMap.of(
+              "server_uri", SERVER_URI,
+              "channel_creds", ImmutableList.of(
+                  ImmutableMap.of(
+                      "type", "insecure")))
+      ));
   static final Bootstrapper.BootstrapInfo BOOTSTRAP_INFO =
       Bootstrapper.BootstrapInfo.builder()
           .servers(Arrays.asList(
@@ -70,7 +88,7 @@ public class XdsServerTestHelper {
   static void generateListenerUpdate(FakeXdsClient xdsClient,
                                      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
                                      TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
+    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "0.0.0.0:0",
         ImmutableList.of(), tlsContext, null, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);
@@ -81,7 +99,8 @@ public class XdsServerTestHelper {
       EnvoyServerProtoData.DownstreamTlsContext tlsContext,
       EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
       TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", sourcePorts,
+    EnvoyServerProtoData.Listener listener = buildTestListener(
+        "listener1", "0.0.0.0:7000", sourcePorts,
         tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);
@@ -126,7 +145,7 @@ public class XdsServerTestHelper {
         tlsContextForDefaultFilterChain, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         EnvoyServerProtoData.Listener.create(
-            name, address, ImmutableList.of(filterChain1), defaultFilterChain);
+            name, address, ImmutableList.of(filterChain1), defaultFilterChain, Protocol.TCP);
     return listener;
   }
 
@@ -134,15 +153,10 @@ public class XdsServerTestHelper {
         implements XdsClientPoolFactory {
 
     private XdsClient xdsClient;
-    Map<String, ?> savedBootstrap;
+    BootstrapInfo savedBootstrapInfo;
 
     FakeXdsClientPoolFactory(XdsClient xdsClient) {
       this.xdsClient = xdsClient;
-    }
-
-    @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      this.savedBootstrap = bootstrap;
     }
 
     @Override
@@ -152,8 +166,9 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
-        throws XdsInitializationException {
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
+      this.savedBootstrapInfo = bootstrapInfo;
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
@@ -169,17 +184,30 @@ public class XdsServerTestHelper {
     }
 
     @Override
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
+        ChannelConfigurator channelConfigurator) {
+      return getOrCreate(target, bootstrapInfo, metricRecorder);
+    }
+
+    @Override
     public List<String> getTargets() {
       return Collections.singletonList("fake-target");
     }
   }
 
+  // Implementation details:
+  // 1. Use `synchronized` in methods where XdsClientImpl uses its own `syncContext`.
+  // 2. Use `serverExecutor` via `execute()` in methods where XdsClientImpl uses watcher's executor.
   static final class FakeXdsClient extends XdsClient {
-    boolean shutdown;
-    SettableFuture<String> ldsResource = SettableFuture.create();
-    ResourceWatcher<LdsUpdate> ldsWatcher;
-    CountDownLatch rdsCount = new CountDownLatch(1);
+    public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
+
+    private boolean shutdown;
+    @Nullable SettableFuture<String> ldsResource = SettableFuture.create();
+    @Nullable ResourceWatcher<LdsUpdate> ldsWatcher;
+    private CountDownLatch rdsCount = new CountDownLatch(1);
     final Map<String, ResourceWatcher<RdsUpdate>> rdsWatchers = new HashMap<>();
+    @Nullable private volatile Executor serverExecutor;
 
     @Override
     public TlsContextManager getSecurityConfig() {
@@ -193,14 +221,20 @@ public class XdsServerTestHelper {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                            String resourceName,
-                                                            ResourceWatcher<T> watcher,
-                                                            Executor syncContext) {
+    public synchronized <T extends ResourceUpdate> void watchXdsResource(
+        XdsResourceType<T> resourceType,
+        String resourceName,
+        ResourceWatcher<T> watcher,
+        Executor executor) {
+      if (serverExecutor != null) {
+        assertThat(executor).isEqualTo(serverExecutor);
+      }
+
       switch (resourceType.typeName()) {
         case "LDS":
           assertThat(ldsWatcher).isNull();
           ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
+          serverExecutor = executor;
           ldsResource.set(resourceName);
           break;
         case "RDS":
@@ -213,14 +247,14 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-        String resourceName,
-        ResourceWatcher<T> watcher) {
+    public synchronized <T extends ResourceUpdate>  void cancelXdsResourceWatch(
+        XdsResourceType<T> type, String resourceName, ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case "LDS":
           assertThat(ldsWatcher).isNotNull();
           ldsResource = null;
           ldsWatcher = null;
+          serverExecutor = null;
           break;
         case "RDS":
           rdsWatchers.remove(resourceName);
@@ -230,27 +264,92 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    public void shutdown() {
+    public synchronized void shutdown() {
       shutdown = true;
     }
 
     @Override
-    public boolean isShutDown() {
+    public synchronized boolean isShutDown() {
       return shutdown;
     }
 
-    void deliverLdsUpdate(List<FilterChain> filterChains,
-                          FilterChain defaultFilterChain) {
-      ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
-              "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
+    public void awaitRds(Duration timeout) throws InterruptedException, TimeoutException {
+      if (!rdsCount.await(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
+        throw new TimeoutException("Timeout " + timeout + " waiting for RDSs");
+      }
+    }
+
+    public void setExpectedRdsCount(int count) {
+      rdsCount = new CountDownLatch(count);
+    }
+
+    private void execute(Runnable action) {
+      // This method ensures that all watcher updates:
+      // - Happen after the server started watching LDS.
+      // - Are executed within the sync context of the server.
+      //
+      // Note that this doesn't guarantee that any of the RDS watchers are created.
+      // Tests should use setExpectedRdsCount(int) and awaitRds() for that.
+      awaitLdsResource(DEFAULT_TIMEOUT);
+      serverExecutor.execute(action);
+    }
+
+    private String awaitLdsResource(Duration timeout) {
+      if (ldsResource == null) {
+        throw new IllegalStateException("xDS resource update after watcher cancel");
+      }
+      try {
+        return ldsResource.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      } catch (ExecutionException | TimeoutException e) {
+        throw new RuntimeException("Can't resolve LDS resource name in " + timeout, e);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException(e);
+      }
+    }
+
+    void deliverLdsUpdateWithApiListener(long httpMaxStreamDurationNano,
+        List<VirtualHost> virtualHosts) {
+      execute(() -> {
+        LdsUpdate update = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(update));
+      });
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {
-      ldsWatcher.onChanged(ldsUpdate);
+      execute(() -> ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate)));
     }
 
-    void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
-      rdsWatchers.get(rdsName).onChanged(new RdsUpdate(virtualHosts));
+    void deliverLdsUpdate(
+        List<FilterChain> filterChains,
+        @Nullable FilterChain defaultFilterChain) {
+      deliverLdsUpdate(LdsUpdate.forTcpListener(Listener.create("listener", "0.0.0.0:1",
+          ImmutableList.copyOf(filterChains), defaultFilterChain, Protocol.TCP)));
+    }
+
+    void deliverLdsUpdate(FilterChain filterChain, @Nullable FilterChain defaultFilterChain) {
+      deliverLdsUpdate(ImmutableList.of(filterChain), defaultFilterChain);
+    }
+
+    void deliverLdsResourceNotFound() {
+      String resourceName = awaitLdsResource(DEFAULT_TIMEOUT);
+      Status status = Status.NOT_FOUND.withDescription("Resource not found: " + resourceName);
+      execute(() -> ldsWatcher.onResourceChanged(StatusOr.fromStatus(status)));
+    }
+
+    void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
+      RdsUpdate update = new RdsUpdate(virtualHosts);
+      execute(() -> rdsWatchers.get(resourceName).onResourceChanged(StatusOr.fromValue(update)));
+    }
+
+    void deliverRdsUpdate(String resourceName, VirtualHost virtualHost) {
+      deliverRdsUpdate(resourceName, ImmutableList.of(virtualHost));
+    }
+
+    void deliverRdsResourceNotFound(String resourceName) {
+      Status status = Status.NOT_FOUND.withDescription("Resource not found: " + resourceName);
+      execute(() -> rdsWatchers.get(resourceName).onResourceChanged(StatusOr.fromStatus(status)));
     }
   }
 }

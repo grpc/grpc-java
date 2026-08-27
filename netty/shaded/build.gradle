@@ -153,7 +153,11 @@ class NettyResourceTransformer implements Transformer {
 
     @Override
     boolean canTransformResource(FileTreeElement fileTreeElement) {
-        fileTreeElement.name.startsWith("META-INF/native-image/io.netty")
+        // io.netty.versions.properties can't actually be shaded successfully,
+        // as io.netty.util.Version still looks for the unshaded name. But we
+        // keep the file for manual inspection.
+        fileTreeElement.name.startsWith("META-INF/native-image/io.netty") ||
+            fileTreeElement.name.startsWith("META-INF/io.netty.versions.properties")
     }
 
     @Override

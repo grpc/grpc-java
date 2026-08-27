@@ -59,6 +59,7 @@ import com.google.common.truth.Truth;
 import io.grpc.Attributes;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -78,6 +79,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Error;
@@ -128,6 +130,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private final ServerTransportListener transportListener =
       mock(ServerTransportListener.class, delegatesTo(new ServerTransportListenerImpl()));
   private final TestServerStreamTracer streamTracer = new TestServerStreamTracer();
+  private final MetricRecorder metricRecorder = mock(MetricRecorder.class);
   private NettyServerStream stream;
   private KeepAliveManager spyKeepAliveManager;
   final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
@@ -202,6 +205,18 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
     channel().releaseOutbound();
+  }
+
+  @Test
+  public void tcpMetrics_recorded() throws Exception {
+    manualSetUp();
+    handler().channelActive(ctx());
+    // Verify that channelActive triggered TcpMetrics
+    verify(metricRecorder, atLeastOnce()).addLongCounter(
+        eq(io.grpc.InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT),
+        eq(1L),
+        any(),
+        any());
   }
 
   @Test
@@ -440,6 +455,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
+  public void connectionRemoteMaxActiveStreamsShouldBeEnforcedLocallyOnStartup() throws Exception {
+    maxConcurrentStreams = 314;
+    manualSetUp();
+
+    assertEquals(maxConcurrentStreams, connection().remote().maxActiveStreams());
+  }
+
+  @Test
   public void shouldAdvertiseMaxHeaderListSize() throws Exception {
     maxHeaderListSize = 123;
     manualSetUp();
@@ -542,7 +565,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Method 'FAKE' is not supported")
         .status("" + 405)
-        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8")
+        .set(HttpHeaderNames.ALLOW, HTTP_METHOD);
 
     verifyWrite()
         .writeHeaders(
@@ -1304,6 +1328,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   private void rapidReset(int burstSize) throws Exception {
+    when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
+        .thenAnswer((args) -> new TestServerStreamTracer());
     Http2Headers headers = new DefaultHttp2Headers()
         .method(HTTP_METHOD)
         .set(CONTENT_TYPE_HEADER, new AsciiString("application/grpc", UTF_8))
@@ -1315,6 +1341,48 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
       for (int i = 0; i < burstSize; i++) {
         channelRead(headersFrame(streamId, headers));
         channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
+        streamId += 2;
+        fakeClock().forwardNanos(rpcTimeNanos);
+      }
+      while (channel().readOutbound() != null) {}
+      fakeClock().forwardNanos(maxRstPeriodNanos - rpcTimeNanos * burstSize + 1);
+    }
+  }
+
+  @Test
+  public void maxRstCountSent_withinLimit_succeeds() throws Exception {
+    maxRstCount = 10;
+    maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
+    manualSetUp();
+    madeYouReset(maxRstCount);
+
+    assertTrue(channel().isOpen());
+  }
+
+  @Test
+  public void maxRstCountSent_exceedsLimit_fails() throws Exception {
+    maxRstCount = 10;
+    maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
+    manualSetUp();
+    assertThrows(ClosedChannelException.class, () -> madeYouReset(maxRstCount + 1));
+
+    assertFalse(channel().isOpen());
+  }
+
+  private void madeYouReset(int burstSize) throws Exception {
+    when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
+        .thenAnswer((args) -> new TestServerStreamTracer());
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, new AsciiString("application/grpc", UTF_8))
+        .set(TE_HEADER, TE_TRAILERS)
+        .path(new AsciiString("/foo/bar"));
+    int streamId = 1;
+    long rpcTimeNanos = maxRstPeriodNanos / 2 / burstSize;
+    for (int period = 0; period < 3; period++) {
+      for (int i = 0; i < burstSize; i++) {
+        channelRead(headersFrame(streamId, headers));
+        channelRead(windowUpdate(streamId, 0));
         streamId += 2;
         fakeClock().forwardNanos(rpcTimeNanos);
       }
@@ -1370,7 +1438,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxRstCount,
         maxRstPeriodNanos,
         Attributes.EMPTY,
-        fakeClock().getTicker());
+        fakeClock().getTicker(),
+        metricRecorder);
   }
 
   @Override

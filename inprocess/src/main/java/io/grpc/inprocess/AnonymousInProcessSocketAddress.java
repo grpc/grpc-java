@@ -18,11 +18,13 @@ package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.ExperimentalApi;
 import java.io.IOException;
+import java.io.NotSerializableException;
+import java.io.ObjectOutputStream;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Custom SocketAddress class for {@link InProcessTransport}, for 
@@ -34,7 +36,12 @@ public final class AnonymousInProcessSocketAddress extends SocketAddress {
 
   @Nullable
   @GuardedBy("this")
+  @SuppressWarnings("serial")
   private InProcessServer server;
+
+  private void writeObject(ObjectOutputStream out) throws IOException {
+    throw new NotSerializableException("AnonymousInProcessSocketAddress is not serializable");
+  }
 
   /** Creates a new AnonymousInProcessSocketAddress. */
   public AnonymousInProcessSocketAddress() { }

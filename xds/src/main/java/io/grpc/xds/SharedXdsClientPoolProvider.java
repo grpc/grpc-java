@@ -17,10 +17,12 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
+import io.grpc.CallCredentials;
+import io.grpc.ChannelConfigurator;
 import io.grpc.MetricRecorder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -36,11 +38,9 @@ import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -55,27 +55,26 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private static final ExponentialBackoffPolicy.Provider BACKOFF_POLICY_PROVIDER =
       new ExponentialBackoffPolicy.Provider();
 
+  @Nullable
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
-  private final AtomicReference<Map<String, ?>> bootstrapOverride = new AtomicReference<>();
+  /*
+     The first one wins.
+     Anything with the same target string uses the client created for the first one.
+  */
   private final Map<String, ObjectPool<XdsClient>> targetToXdsClientMap = new ConcurrentHashMap<>();
 
   SharedXdsClientPoolProvider() {
-    this(new GrpcBootstrapperImpl());
+    this(null);
   }
 
   @VisibleForTesting
-  SharedXdsClientPoolProvider(Bootstrapper bootstrapper) {
-    this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
+  SharedXdsClientPoolProvider(@Nullable Bootstrapper bootstrapper) {
+    this.bootstrapper = bootstrapper;
   }
 
   static SharedXdsClientPoolProvider getDefaultProvider() {
     return SharedXdsClientPoolProviderHolder.instance;
-  }
-
-  @Override
-  public void setBootstrapOverride(Map<String, ?> bootstrap) {
-    bootstrapOverride.set(bootstrap);
   }
 
   @Override
@@ -84,25 +83,47 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     return targetToXdsClientMap.get(target);
   }
 
-  @Override
-  public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
+  @Deprecated
+  public ObjectPool<XdsClient> getOrCreate(
+      String target, MetricRecorder metricRecorder, CallCredentials transportCallCredentials)
       throws XdsInitializationException {
+    BootstrapInfo bootstrapInfo;
+    if (bootstrapper != null) {
+      bootstrapInfo = bootstrapper.bootstrap();
+    } else {
+      bootstrapInfo = GrpcBootstrapperImpl.defaultBootstrap();
+    }
+    return getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials, null);
+  }
+
+  @Override
+  public ObjectPool<XdsClient> getOrCreate(
+      String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
+    return getOrCreate(target, bootstrapInfo, metricRecorder, null, null);
+  }
+
+  @Override
+  public ObjectPool<XdsClient> getOrCreate(
+      String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
+      ChannelConfigurator channelConfigurator) {
+    return getOrCreate(target, bootstrapInfo, metricRecorder, null, channelConfigurator);
+  }
+
+  public ObjectPool<XdsClient> getOrCreate(
+      String target,
+      BootstrapInfo bootstrapInfo,
+      MetricRecorder metricRecorder,
+      CallCredentials transportCallCredentials,
+      ChannelConfigurator channelConfigurator) {
     ObjectPool<XdsClient> ref = targetToXdsClientMap.get(target);
     if (ref == null) {
       synchronized (lock) {
         ref = targetToXdsClientMap.get(target);
         if (ref == null) {
-          BootstrapInfo bootstrapInfo;
-          Map<String, ?> rawBootstrap = bootstrapOverride.get();
-          if (rawBootstrap != null) {
-            bootstrapInfo = bootstrapper.bootstrap(rawBootstrap);
-          } else {
-            bootstrapInfo = bootstrapper.bootstrap();
-          }
-          if (bootstrapInfo.servers().isEmpty()) {
-            throw new XdsInitializationException("No xDS server provided");
-          }
-          ref = new RefCountedXdsClientObjectPool(bootstrapInfo, target, metricRecorder);
+          ref =
+              new RefCountedXdsClientObjectPool(
+                  bootstrapInfo, target, metricRecorder, transportCallCredentials,
+                  channelConfigurator);
           targetToXdsClientMap.put(target, ref);
         }
       }
@@ -126,6 +147,8 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private final BootstrapInfo bootstrapInfo;
     private final String target; // The target associated with the xDS client.
     private final MetricRecorder metricRecorder;
+    private final CallCredentials transportCallCredentials;
+    private final ChannelConfigurator channelConfigurator;
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
@@ -137,11 +160,23 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private XdsClientMetricReporterImpl metricReporter;
 
     @VisibleForTesting
-    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, String target,
-        MetricRecorder metricRecorder) {
-      this.bootstrapInfo = checkNotNull(bootstrapInfo);
+    RefCountedXdsClientObjectPool(
+        BootstrapInfo bootstrapInfo, String target, MetricRecorder metricRecorder) {
+      this(bootstrapInfo, target, metricRecorder, null, null);
+    }
+
+    @VisibleForTesting
+    RefCountedXdsClientObjectPool(
+        BootstrapInfo bootstrapInfo,
+        String target,
+        MetricRecorder metricRecorder,
+        CallCredentials transportCallCredentials,
+        ChannelConfigurator channelConfigurator) {
+      this.bootstrapInfo = checkNotNull(bootstrapInfo, "bootstrapInfo");
       this.target = target;
-      this.metricRecorder = metricRecorder;
+      this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
+      this.transportCallCredentials = transportCallCredentials;
+      this.channelConfigurator = channelConfigurator;
     }
 
     @Override
@@ -153,16 +188,19 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           }
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           metricReporter = new XdsClientMetricReporterImpl(metricRecorder, target);
-          xdsClient = new XdsClientImpl(
-              DEFAULT_XDS_TRANSPORT_FACTORY,
-              bootstrapInfo,
-              scheduler,
-              BACKOFF_POLICY_PROVIDER,
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              TimeProvider.SYSTEM_TIME_PROVIDER,
-              MessagePrinter.INSTANCE,
-              new TlsContextManagerImpl(bootstrapInfo),
-              metricReporter);
+          GrpcXdsTransportFactory xdsTransportFactory =
+              new GrpcXdsTransportFactory(transportCallCredentials, channelConfigurator);
+          xdsClient =
+              new XdsClientImpl(
+                  xdsTransportFactory,
+                  bootstrapInfo,
+                  scheduler,
+                  BACKOFF_POLICY_PROVIDER,
+                  GrpcUtil.STOPWATCH_SUPPLIER,
+                  TimeProvider.SYSTEM_TIME_PROVIDER,
+                  MessagePrinter.INSTANCE,
+                  new TlsContextManagerImpl(bootstrapInfo),
+                  metricReporter);
           metricReporter.setXdsClient(xdsClient);
         }
         refCount++;
@@ -181,6 +219,10 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           metricReporter = null;
           targetToXdsClientMap.remove(target);
           scheduler = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, scheduler);
+        } else if (refCount < 0) {
+          assert false; // We want our tests to fail
+          log.log(Level.SEVERE, "Negative reference count. File a bug", new Exception());
+          refCount = 0;
         }
         return null;
       }

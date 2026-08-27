@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.util.concurrent.SettableFuture;
@@ -34,6 +35,7 @@ import io.grpc.CompositeChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.CertificateUtils;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.FakeClock;
@@ -56,7 +58,6 @@ import javax.net.ssl.TrustManager;
 import javax.security.auth.x500.X500Principal;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -66,8 +67,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class OkHttpChannelBuilderTest {
 
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   @Test
@@ -99,10 +98,9 @@ public class OkHttpChannelBuilderTest {
   @Test
   public void failOverrideInvalidAuthority() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("good", 1234);
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority:");
-    builder.overrideAuthority("[invalidauthority");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.overrideAuthority("[invalidauthority"));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [invalidauthority");
   }
 
   @Test
@@ -118,17 +116,16 @@ public class OkHttpChannelBuilderTest {
         .disableCheckAuthority()
         .enableCheckAuthority();
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority:");
-    builder.overrideAuthority("[invalidauthority");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.overrideAuthority("[invalidauthority"));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [invalidauthority");
   }
 
   @Test
   public void failInvalidAuthority() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid host or port");
-
-    OkHttpChannelBuilder.forAddress("invalid_authority", 1234);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> OkHttpChannelBuilder.forAddress("invalid_authority", 1234));
+    assertThat(e.getMessage()).isEqualTo("Invalid host or port: invalid_authority 1234");
   }
 
   @Test
@@ -212,7 +209,7 @@ public class OkHttpChannelBuilderTest {
 
     TrustManager[] trustManagers;
     try (InputStream ca = TlsTesting.loadCert("ca.pem")) {
-      trustManagers = OkHttpChannelBuilder.createTrustManager(ca);
+      trustManagers = CertificateUtils.createTrustManager(ca);
     }
 
     SSLContext serverContext = SSLContext.getInstance("TLS");
@@ -257,7 +254,7 @@ public class OkHttpChannelBuilderTest {
          InputStream ca = TlsTesting.loadCert("ca.pem")) {
       serverContext.init(
           OkHttpChannelBuilder.createKeyManager(server1Chain, server1Key),
-          OkHttpChannelBuilder.createTrustManager(ca),
+          CertificateUtils.createTrustManager(ca),
           null);
     }
     final SSLServerSocket serverListenSocket =
@@ -395,10 +392,10 @@ public class OkHttpChannelBuilderTest {
 
   @Test
   public void failForUsingClearTextSpecDirectly() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("plaintext ConnectionSpec is not accepted");
-
-    OkHttpChannelBuilder.forAddress("host", 1234).connectionSpec(ConnectionSpec.CLEARTEXT);
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("host", 1234);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.connectionSpec(ConnectionSpec.CLEARTEXT));
+    assertThat(e).hasMessageThat().isEqualTo("plaintext ConnectionSpec is not accepted");
   }
 
   @Test

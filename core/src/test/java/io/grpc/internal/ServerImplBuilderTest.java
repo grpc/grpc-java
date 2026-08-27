@@ -18,11 +18,13 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
+import io.grpc.MetricSink;
+import io.grpc.NoopMetricSink;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -74,7 +76,8 @@ public class ServerImplBuilderTest {
         new ClientTransportServersBuilder() {
           @Override
           public InternalServer buildClientTransportServers(
-              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+              MetricRecorder metricRecorder) {
             throw new UnsupportedOperationException();
           }
         });
@@ -130,6 +133,13 @@ public class ServerImplBuilderTest {
   }
 
   @Test
+  public void addMetricSink_addsToSinks() {
+    MetricSink noopMetricSink = new NoopMetricSink();
+    builder.addMetricSink(noopMetricSink);
+    assertThat(builder.metricSinks).containsExactly(noopMetricSink);
+  }
+
+  @Test
   public void getTracerFactories_callsGet() throws Exception {
     Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsGet.class.getName());
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
@@ -140,17 +150,14 @@ public class ServerImplBuilderTest {
     public void run() {
       ServerImplBuilder builder =
           new ServerImplBuilder(
-              streamTracerFactories -> {
+              (streamTracerFactories, metricRecorder) -> {
                 throw new UnsupportedOperationException();
               });
       assertThat(builder.getTracerFactories()).hasSize(2);
       assertThat(builder.interceptors).hasSize(0);
-      try {
-        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
-        fail("exception expected");
-      } catch (IllegalStateException e) {
-        assertThat(e).hasMessageThat().contains("Configurators are already set");
-      }
+      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+      assertThat(InternalConfiguratorRegistry.getConfigurators()).isEmpty();
+      assertThat(InternalConfiguratorRegistry.getConfiguratorsCallCountBeforeSet()).isEqualTo(1);
     }
   }
 
@@ -173,7 +180,7 @@ public class ServerImplBuilderTest {
           }));
       ServerImplBuilder builder =
           new ServerImplBuilder(
-              streamTracerFactories -> {
+              (streamTracerFactories, metricRecorder) -> {
                 throw new UnsupportedOperationException();
               });
       assertThat(builder.getTracerFactories()).containsExactly(DUMMY_USER_TRACER);
@@ -196,7 +203,7 @@ public class ServerImplBuilderTest {
       InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
       ServerImplBuilder builder =
           new ServerImplBuilder(
-              streamTracerFactories -> {
+              (streamTracerFactories, metricRecorder) -> {
                 throw new UnsupportedOperationException();
               });
       assertThat(builder.getTracerFactories()).isEmpty();

@@ -613,18 +613,15 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     protected Message buildUpstreamTlsContext(String instanceName, String certName) {
       CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
       if (instanceName != null && certName != null) {
-        CommonTlsContext.CertificateProviderInstance providerInstance =
-            CommonTlsContext.CertificateProviderInstance.newBuilder()
-                .setInstanceName(instanceName)
-                .setCertificateName(certName)
-                .build();
         CommonTlsContext.CombinedCertificateValidationContext combined =
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(providerInstance)
+                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                  .setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
+                    .setInstanceName(instanceName)
+                    .setCertificateName(certName)))
                 .build();
         commonTlsContextBuilder.setCombinedValidationContext(combined);
       }
@@ -751,7 +748,6 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
           .build();
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     protected FilterChain buildFilterChain(
         List<String> alpn, Message tlsContext, String transportSocketName,

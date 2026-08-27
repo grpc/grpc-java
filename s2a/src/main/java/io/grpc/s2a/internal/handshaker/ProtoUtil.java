@@ -18,6 +18,7 @@ package io.grpc.s2a.internal.handshaker;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
+import com.google.s2a.proto.v2.TLSVersion;
 
 /** Converts proto messages to Netty strings. */
 final class ProtoUtil {

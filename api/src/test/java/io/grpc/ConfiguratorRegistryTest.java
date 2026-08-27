@@ -85,14 +85,12 @@ public class ConfiguratorRegistryTest {
     @Override
     public void run() {
       assertThat(ConfiguratorRegistry.getDefaultRegistry().getConfigurators()).isEmpty();
-
-      try {
-        ConfiguratorRegistry.getDefaultRegistry()
-            .setConfigurators(Arrays.asList(new NoopConfigurator()));
-        fail("should have failed for invoking set call after get is already called");
-      } catch (IllegalStateException e) {
-        assertThat(e).hasMessageThat().isEqualTo("Configurators are already set");
-      }
+      NoopConfigurator noopConfigurator = new NoopConfigurator();
+      ConfiguratorRegistry.getDefaultRegistry()
+              .setConfigurators(Arrays.asList(noopConfigurator));
+      assertThat(ConfiguratorRegistry.getDefaultRegistry().getConfigurators())
+              .containsExactly(noopConfigurator);
+      assertThat(InternalConfiguratorRegistry.getConfiguratorsCallCountBeforeSet()).isEqualTo(1);
     }
   }
 

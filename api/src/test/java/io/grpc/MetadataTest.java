@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
@@ -24,6 +25,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -37,9 +39,7 @@ import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Locale;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -48,9 +48,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class MetadataTest {
-
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private static final Metadata.BinaryMarshaller<Fish> FISH_MARSHALLER =
       new Metadata.BinaryMarshaller<Fish>() {
@@ -65,7 +62,7 @@ public class MetadataTest {
         }
       };
 
-  private static class FishStreamMarsaller implements Metadata.BinaryStreamMarshaller<Fish> {
+  private static class FishStreamMarshaller implements Metadata.BinaryStreamMarshaller<Fish> {
     @Override
     public InputStream toStream(Fish fish) {
       return new ByteArrayInputStream(FISH_MARSHALLER.toBytes(fish));
@@ -82,7 +79,7 @@ public class MetadataTest {
   }
 
   private static final Metadata.BinaryStreamMarshaller<Fish> FISH_STREAM_MARSHALLER =
-      new FishStreamMarsaller();
+      new FishStreamMarshaller();
 
   /** A pattern commonly used to avoid unnecessary serialization of immutable objects. */
   private static final class FakeFishStream extends InputStream {
@@ -121,10 +118,9 @@ public class MetadataTest {
 
   @Test
   public void noPseudoHeaders() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid character");
-
-    Metadata.Key.of(":test-bin", FISH_MARSHALLER);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> Metadata.Key.of(":test-bin", FISH_MARSHALLER));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid character ':' in key name ':test-bin'");
   }
 
   @Test
@@ -186,8 +182,7 @@ public class MetadataTest {
     Iterator<Fish> i = metadata.getAll(KEY).iterator();
     assertEquals(lance, i.next());
 
-    thrown.expect(UnsupportedOperationException.class);
-    i.remove();
+    assertThrows(UnsupportedOperationException.class, i::remove);
   }
 
   @Test
@@ -271,17 +266,15 @@ public class MetadataTest {
 
   @Test
   public void shortBinaryKeyName() {
-    thrown.expect(IllegalArgumentException.class);
-
-    Metadata.Key.of("-bin", FISH_MARSHALLER);
+    assertThrows(IllegalArgumentException.class, () -> Metadata.Key.of("-bin", FISH_MARSHALLER));
   }
 
   @Test
   public void invalidSuffixBinaryKeyName() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Binary header is named");
-
-    Metadata.Key.of("nonbinary", FISH_MARSHALLER);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> Metadata.Key.of("nonbinary", FISH_MARSHALLER));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Binary header is named nonbinary. It must end with -bin");
   }
 
   @Test
@@ -415,7 +408,7 @@ public class MetadataTest {
     h.put(KEY_STREAMED, salmon);
 
     // Get using a different marshaller instance.
-    Fish fish = h.get(copyKey(KEY_STREAMED, new FishStreamMarsaller()));
+    Fish fish = h.get(copyKey(KEY_STREAMED, new FishStreamMarshaller()));
     assertEquals(salmon, fish);
   }
 

@@ -24,6 +24,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -45,6 +46,7 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
@@ -54,6 +56,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
@@ -87,7 +90,6 @@ import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultEventLoop;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalAddress;
@@ -112,15 +114,20 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -142,7 +149,6 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.DisableOnDebug;
-import org.junit.rules.ExpectedException;
 import org.junit.rules.TestRule;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
@@ -170,8 +176,6 @@ public class ProtocolNegotiatorsTest {
 
   private static final int TIMEOUT_SECONDS = 60;
   @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(TIMEOUT_SECONDS));
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final EventLoopGroup group = new DefaultEventLoop();
   private Channel chan;
@@ -222,13 +226,52 @@ public class ProtocolNegotiatorsTest {
   }
 
   @Test
-  public void fromClient_tls() {
+  public void fromClient_tls_trustManager()
+      throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
+    KeyStore certStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    certStore.load(null);
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    try (InputStream ca = TlsTesting.loadCert("ca.pem")) {
+      for (X509Certificate cert : CertificateUtils.getX509Certificates(ca)) {
+        certStore.setCertificateEntry(cert.getSubjectX500Principal().getName("RFC2253"), cert);
+      }
+    }
+    trustManagerFactory.init(certStore);
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(TlsChannelCredentials.newBuilder()
+            .trustManager(trustManagerFactory.getTrustManagers()).build());
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.TlsProtocolNegotiatorClientFactory.class);
+    assertThat(((ClientTlsProtocolNegotiator) result.negotiator.newNegotiator())
+        .hasX509ExtendedTrustManager()).isTrue();
+  }
+
+  @Test
+  public void fromClient_tls_CaCertsInputStream() throws IOException {
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(TlsChannelCredentials.newBuilder()
+            .trustManager(TlsTesting.loadCert("ca.pem")).build());
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.TlsProtocolNegotiatorClientFactory.class);
+    assertThat(((ClientTlsProtocolNegotiator) result.negotiator.newNegotiator())
+        .hasX509ExtendedTrustManager()).isTrue();
+  }
+
+  @Test
+  public void fromClient_tls_systemDefault() {
     ProtocolNegotiators.FromChannelCredentialsResult result =
         ProtocolNegotiators.from(TlsChannelCredentials.create());
     assertThat(result.error).isNull();
     assertThat(result.callCredentials).isNull();
     assertThat(result.negotiator)
         .isInstanceOf(ProtocolNegotiators.TlsProtocolNegotiatorClientFactory.class);
+    assertThat(((ClientTlsProtocolNegotiator) result.negotiator.newNegotiator())
+        .hasX509ExtendedTrustManager()).isTrue();
   }
 
   @Test
@@ -346,7 +389,9 @@ public class ProtocolNegotiatorsTest {
         .buildTransportFactory();
     InternalServer server = NettyServerBuilder
         .forPort(0, serverCreds)
-        .buildTransportServers(Collections.<ServerStreamTracer.Factory>emptyList());
+        .buildTransportServers(
+            Collections.<ServerStreamTracer.Factory>emptyList(),
+            new MetricRecorder() {});
     server.start(serverListener);
 
     ManagedClientTransport.Listener clientTransportListener =
@@ -367,7 +412,7 @@ public class ProtocolNegotiatorsTest {
     } else {
       ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
       verify(clientTransportListener, timeout(TIMEOUT_SECONDS * 1000))
-          .transportShutdown(captor.capture());
+          .transportShutdown(captor.capture(), any(DisconnectError.class));
       result = captor.getValue();
     }
 
@@ -671,11 +716,10 @@ public class ProtocolNegotiatorsTest {
   }
 
   @Test
-  public void tlsHandler_failsOnNullEngine() throws Exception {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("ssl");
-
-    Object unused = ProtocolNegotiators.serverTls(null);
+  public void tlsHandler_failsOnNullEngine() {
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> ProtocolNegotiators.serverTls(null));
+    assertThat(e).hasMessageThat().isEqualTo("sslContext");
   }
 
 
@@ -874,10 +918,12 @@ public class ProtocolNegotiatorsTest {
         return "h2";
       }
     };
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", elg, noopLogger, Optional.absent());
+        "authority", elg, noopLogger, Optional.absent(),
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -899,7 +945,8 @@ public class ProtocolNegotiatorsTest {
         return "managed_mtls";
       }
     };
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
 
     InputStream clientCert = TlsTesting.loadCert("client.pem");
     InputStream key = TlsTesting.loadCert("client.key");
@@ -915,7 +962,8 @@ public class ProtocolNegotiatorsTest {
         .applicationProtocolConfig(apn).build();
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", elg, noopLogger, Optional.absent());
+        "authority", elg, noopLogger, Optional.absent(),
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -936,10 +984,12 @@ public class ProtocolNegotiatorsTest {
         return "badproto";
       }
     };
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", elg, noopLogger, Optional.absent());
+        "authority", elg, noopLogger, Optional.absent(),
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -967,7 +1017,8 @@ public class ProtocolNegotiatorsTest {
   @Test
   public void clientTlsHandler_closeDuringNegotiation() throws Exception {
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", null, noopLogger, Optional.absent());
+        "authority", null, noopLogger, Optional.absent(),
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(new WriteBufferingAndExceptionHandler(handler));
     ChannelFuture pendingWrite = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
 
@@ -977,6 +1028,12 @@ public class ProtocolNegotiatorsTest {
     assertThat(pendingWrite.cause()).isInstanceOf(StatusRuntimeException.class);
     assertThat(Status.fromThrowable(pendingWrite.cause()).getCode())
         .isEqualTo(Status.Code.UNAVAILABLE);
+  }
+
+  private ClientTlsProtocolNegotiator getClientTlsProtocolNegotiator() throws SSLException {
+    return new ClientTlsProtocolNegotiator(GrpcSslContexts.forClient().trustManager(
+        TlsTesting.loadCert("ca.pem")).build(),
+        null, Optional.absent(), null, "");
   }
 
   @Test
@@ -1005,9 +1062,8 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tls_failsOnNullSslContext() {
-    thrown.expect(NullPointerException.class);
-
-    Object unused = ProtocolNegotiators.tls(null);
+    assertThrows(NullPointerException.class,
+        () -> ProtocolNegotiators.tls(null, null));
   }
 
   @Test
@@ -1037,29 +1093,30 @@ public class ProtocolNegotiatorsTest {
   }
 
   @Test
-  public void httpProxy_nullAddressNpe() throws Exception {
-    thrown.expect(NullPointerException.class);
-    Object unused =
-        ProtocolNegotiators.httpProxy(null, "user", "pass", ProtocolNegotiators.plaintext());
+  public void httpProxy_nullAddressNpe() {
+    assertThrows(NullPointerException.class,
+        () -> ProtocolNegotiators.httpProxy(null, null, "user", "pass", 
+            ProtocolNegotiators.plaintext()));
   }
 
   @Test
-  public void httpProxy_nullNegotiatorNpe() throws Exception {
-    thrown.expect(NullPointerException.class);
-    Object unused = ProtocolNegotiators.httpProxy(
-        InetSocketAddress.createUnresolved("localhost", 80), "user", "pass", null);
+  public void httpProxy_nullNegotiatorNpe() {
+    assertThrows(NullPointerException.class,
+        () -> ProtocolNegotiators.httpProxy(
+            InetSocketAddress.createUnresolved("localhost", 80), null, "user", "pass", null));
   }
 
   @Test
   public void httpProxy_nullUserPassNoException() throws Exception {
     assertNotNull(ProtocolNegotiators.httpProxy(
-        InetSocketAddress.createUnresolved("localhost", 80), null, null,
+        InetSocketAddress.createUnresolved("localhost", 80), null, null, null,
         ProtocolNegotiators.plaintext()));
   }
 
   @Test
   public void httpProxy_completes() throws Exception {
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
     // ProxyHandler is incompatible with EmbeddedChannel because when channelRegistered() is called
     // the channel is already active.
     LocalAddress proxy = new LocalAddress("httpProxy_completes");
@@ -1071,7 +1128,7 @@ public class ProtocolNegotiatorsTest {
         .bind(proxy).sync().channel();
 
     ProtocolNegotiator nego =
-        ProtocolNegotiators.httpProxy(proxy, null, null, ProtocolNegotiators.plaintext());
+        ProtocolNegotiators.httpProxy(proxy, null, null, null, ProtocolNegotiators.plaintext());
     // normally NettyClientTransport will add WBAEH which kick start the ProtocolNegotiation,
     // mocking the behavior using KickStartHandler.
     ChannelHandler handler =
@@ -1122,7 +1179,8 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void httpProxy_500() throws Exception {
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
     // ProxyHandler is incompatible with EmbeddedChannel because when channelRegistered() is called
     // the channel is already active.
     LocalAddress proxy = new LocalAddress("httpProxy_500");
@@ -1134,7 +1192,7 @@ public class ProtocolNegotiatorsTest {
         .bind(proxy).sync().channel();
 
     ProtocolNegotiator nego =
-        ProtocolNegotiators.httpProxy(proxy, null, null, ProtocolNegotiators.plaintext());
+        ProtocolNegotiators.httpProxy(proxy, null, null, null, ProtocolNegotiators.plaintext());
     // normally NettyClientTransport will add WBAEH which kick start the ProtocolNegotiation,
     // mocking the behavior using KickStartHandler.
     ChannelHandler handler =
@@ -1165,17 +1223,89 @@ public class ProtocolNegotiatorsTest {
     assertFalse(negotiationFuture.isDone());
     String response = "HTTP/1.1 500 OMG\r\nContent-Length: 4\r\n\r\noops";
     serverContext.writeAndFlush(bb(response, serverContext.channel())).sync();
-    thrown.expect(ProxyConnectException.class);
     try {
-      negotiationFuture.sync();
+      assertThrows(ProxyConnectException.class, negotiationFuture::sync);
     } finally {
       channel.close();
     }
   }
 
   @Test
+  public void httpProxy_customHeaders() throws Exception {
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
+    // ProxyHandler is incompatible with EmbeddedChannel because when channelRegistered() is called
+    // the channel is already active.
+    LocalAddress proxy = new LocalAddress("httpProxy_customHeaders");
+    SocketAddress host = InetSocketAddress.createUnresolved("example.com", 443);
+
+    ChannelInboundHandler mockHandler = mock(ChannelInboundHandler.class);
+    Channel serverChannel = new ServerBootstrap().group(elg).channel(LocalServerChannel.class)
+        .childHandler(mockHandler)
+        .bind(proxy).sync().channel();
+
+    Map<String, String> headers = new java.util.HashMap<>();
+    headers.put("X-Custom-Header", "custom-value");
+    headers.put("Proxy-Authorization", "Bearer token123");
+
+    ProtocolNegotiator nego = ProtocolNegotiators.httpProxy(
+        proxy, headers, null, null, ProtocolNegotiators.plaintext());
+    // normally NettyClientTransport will add WBAEH which kick start the ProtocolNegotiation,
+    // mocking the behavior using KickStartHandler.
+    ChannelHandler handler =
+        new KickStartHandler(nego.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler()));
+    Channel channel = new Bootstrap().group(elg).channel(LocalChannel.class).handler(handler)
+        .register().sync().channel();
+    pipeline = channel.pipeline();
+    // Wait for initialization to complete
+    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
+    channel.connect(host).sync();
+    serverChannel.close();
+    ArgumentCaptor<ChannelHandlerContext> contextCaptor =
+        ArgumentCaptor.forClass(ChannelHandlerContext.class);
+    Mockito.verify(mockHandler).channelActive(contextCaptor.capture());
+    ChannelHandlerContext serverContext = contextCaptor.getValue();
+
+    final String golden = "testData";
+    ChannelFuture negotiationFuture = channel.writeAndFlush(bb(golden, channel));
+
+    // Wait for sending initial request to complete
+    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
+    ArgumentCaptor<Object> objectCaptor = ArgumentCaptor.forClass(Object.class);
+    Mockito.verify(mockHandler)
+        .channelRead(ArgumentMatchers.<ChannelHandlerContext>any(), objectCaptor.capture());
+    ByteBuf b = (ByteBuf) objectCaptor.getValue();
+    String request = b.toString(UTF_8);
+    b.release();
+
+    // Verify custom headers are present in the CONNECT request
+    assertTrue("No trailing newline: " + request, request.endsWith("\r\n\r\n"));
+    assertTrue("No CONNECT: " + request, request.startsWith("CONNECT example.com:443 "));
+    assertTrue("No custom header: " + request, 
+        request.contains("X-Custom-Header: custom-value"));
+    assertTrue("No proxy authorization: " + request,
+        request.contains("Proxy-Authorization: Bearer token123"));
+
+    assertFalse(negotiationFuture.isDone());
+    serverContext.writeAndFlush(bb("HTTP/1.1 200 OK\r\n\r\n", serverContext.channel())).sync();
+    negotiationFuture.sync();
+
+    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
+    objectCaptor = ArgumentCaptor.forClass(Object.class);
+    Mockito.verify(mockHandler, times(2))
+        .channelRead(ArgumentMatchers.<ChannelHandlerContext>any(), objectCaptor.capture());
+    b = (ByteBuf) objectCaptor.getAllValues().get(1);
+    String preface = b.toString(UTF_8);
+    b.release();
+    assertEquals(golden, preface);
+
+    channel.close();
+  }
+
+  @Test
   public void waitUntilActiveHandler_firesNegotiation() throws Exception {
-    EventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
     SocketAddress addr = new LocalAddress("addr");
     final AtomicReference<Object> event = new AtomicReference<>();
     ChannelHandler next = new ChannelInboundHandlerAdapter() {
@@ -1230,7 +1360,7 @@ public class ProtocolNegotiatorsTest {
     }
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
     ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext,
-        null, Optional.absent());
+        null, Optional.absent(), null, null);
     WriteBufferingAndExceptionHandler clientWbaeh =
         new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
 

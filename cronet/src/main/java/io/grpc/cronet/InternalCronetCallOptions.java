@@ -36,6 +36,18 @@ public final class InternalCronetCallOptions {
     return CronetClientStream.withAnnotation(callOptions, annotation);
   }
 
+  public static CallOptions withReadBufferSize(CallOptions callOptions, int size) {
+    return callOptions.withOption(CronetClientStream.CRONET_READ_BUFFER_SIZE_KEY, size);
+  }
+
+  /**
+   * Returns Cronet read buffer size for gRPC included in the given {@code callOptions}. Read
+   * buffer can be customized via {@link #withReadBufferSize(CallOptions, int)}.
+   */
+  public static int getReadBufferSize(CallOptions callOptions) {
+    return callOptions.getOption(CronetClientStream.CRONET_READ_BUFFER_SIZE_KEY);
+  }
+
   /**
    * Returns Cronet annotations for gRPC included in the given {@code callOptions}. Annotations
    * are attached via {@link #withAnnotation(CallOptions, Object)}.

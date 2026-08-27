@@ -80,7 +80,7 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
       return true;
     }
     int remaining = bytes.remaining();
-    // Call handshaker service to proceess the bytes.
+    // Call handshaker service to process the bytes.
     if (outputFrame == null) {
       checkState(!isClient, "Client handshaker should not process any frame at the beginning.");
       outputFrame = handshaker.startServerHandshake(bytes);

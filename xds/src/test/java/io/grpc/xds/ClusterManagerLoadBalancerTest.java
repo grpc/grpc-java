@@ -118,7 +118,7 @@ public class ClusterManagerLoadBalancerTest {
   }
 
   @Test
-  public void handleResolvedAddressesUpdatesChannelPicker() {
+  public void acceptResolvedAddressesUpdatesChannelPicker() {
     deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
 
     verify(helper, atLeastOnce()).updateBalancingState(

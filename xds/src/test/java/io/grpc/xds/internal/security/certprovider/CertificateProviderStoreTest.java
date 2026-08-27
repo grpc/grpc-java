@@ -123,7 +123,6 @@ public class CertificateProviderStoreTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void onePluginSameConfig_sameInstance() {
     registerPlugin("plugin1");
     CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
@@ -167,7 +166,6 @@ public class CertificateProviderStoreTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void onePluginSameConfig_secondWatcherAfterFirstNotify() {
     registerPlugin("plugin1");
     CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
@@ -275,7 +273,6 @@ public class CertificateProviderStoreTest {
         mockWatcher1, handle1, certProviderProvider1, mockWatcher2, handle2, certProviderProvider2);
   }
 
-  @SuppressWarnings("deprecation")
   private static void checkDifferentInstances(
       CertificateProvider.Watcher mockWatcher1,
       CertificateProviderStore.Handle handle1,

@@ -19,6 +19,7 @@ package io.grpc.cronet;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
@@ -33,6 +34,7 @@ import io.grpc.cronet.CronetChannelBuilder.StreamBuilderFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import java.net.InetSocketAddress;
@@ -42,7 +44,6 @@ import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A cronet-based {@link ConnectionClientTransport} implementation.
@@ -229,7 +230,7 @@ class CronetClientTransport implements ConnectionClientTransport {
       startedGoAway = true;
     }
 
-    listener.transportShutdown(status);
+    listener.transportShutdown(status, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
 
     synchronized (lock) {
       goAway = true;

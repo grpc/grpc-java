@@ -7,9 +7,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * A service used to obtain stats for verifying LB behavior.
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: grpc/testing/test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class LoadBalancerStatsServiceGrpc {
 
@@ -90,6 +87,21 @@ public final class LoadBalancerStatsServiceGrpc {
         }
       };
     return LoadBalancerStatsServiceStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static LoadBalancerStatsServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStatsServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStatsServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public LoadBalancerStatsServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadBalancerStatsServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return LoadBalancerStatsServiceBlockingV2Stub.newStub(factory, channel);
   }
 
   /**
@@ -208,6 +220,46 @@ public final class LoadBalancerStatsServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service LoadBalancerStatsService.
+   * <pre>
+   * A service used to obtain stats for verifying LB behavior.
+   * </pre>
+   */
+  public static final class LoadBalancerStatsServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<LoadBalancerStatsServiceBlockingV2Stub> {
+    private LoadBalancerStatsServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected LoadBalancerStatsServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new LoadBalancerStatsServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Gets the backend distribution for RPCs sent by a test client.
+     * </pre>
+     */
+    public io.grpc.testing.integration.Messages.LoadBalancerStatsResponse getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
+          getChannel(), getGetClientStatsMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Gets the accumulated stats for RPCs sent by a test client.
+     * </pre>
+     */
+    public io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
+          getChannel(), getGetClientAccumulatedStatsMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do limited synchronous rpc calls to service LoadBalancerStatsService.
    * <pre>
    * A service used to obtain stats for verifying LB behavior.
    * </pre>

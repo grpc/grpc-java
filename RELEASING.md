@@ -160,7 +160,7 @@ Tagging the Release
    repository can then be `released`, which will begin the process of pushing
    the new artifacts to Maven Central (the staging repository will be destroyed
    in the process). You can see the complete process for releasing to Maven
-   Central on the [OSSRH site](https://central.sonatype.org/pages/releasing-the-deployment.html).
+   Central on the [OSSRH site](https://central.sonatype.org/publish/publish-portal-ossrh-staging-api/#deploying).
 
 10. We have containers for each release to detect compatibility regressions with
     old releases. Generate one for the new release by following the [GCR image
@@ -250,3 +250,7 @@ gRPC for things that will need a migration effort.
 When happy with the dependency upgrades, update the versions in `MODULE.bazel`,
 `repositories.bzl`, and the various `pom.xml` and `build.gradle` files in
 `examples/`.
+
+Upgrade the `uses:` for actions in `.github/workflows` to newer versions. Make
+sure to see what changed in each new major version, but it is most often just
+requiring a newer Node.js version.

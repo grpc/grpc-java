@@ -1,14 +1,12 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.9.5'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
 
 repositories {
-    maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/maven2/" }
     mavenCentral()
     mavenLocal()
 }
@@ -23,15 +21,16 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.70.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.25.5'
+def grpcVersion = '1.85.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.25.9'
 def protocVersion = protobufVersion
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    // Even though client-side won't call grpc-services directly, it needs the
+    // dependency to enable the health-aware round_robin implementation
     implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 
     // examples/advanced need this for JsonFormat
     implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
@@ -54,15 +53,14 @@ protobuf {
     }
 }
 
-// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
-sourceSets {
-    main {
-        java {
-            srcDirs 'build/generated/source/proto/main/grpc'
-            srcDirs 'build/generated/source/proto/main/java'
-        }
-    }
-}
+// gRPC uses java.util.ServiceLoader, which reads class names from
+// META-INF/services in jars. If you package your application as a "fat" jar
+// that includes dependencies, you need to make sure the packaging tool
+// concatenates duplicate files in META-INF/services.
+//
+// For the Shadow Gradle Plugin, use call mergeServiceFiles() within the
+// shadowJar task.
+// https://gradleup.com/shadow/configuration/merging/#merging-service-descriptor-files
 
 startScripts.enabled = false
 
@@ -109,6 +107,7 @@ createStartScripts('io.grpc.examples.keepalive.KeepAliveClient')
 createStartScripts('io.grpc.examples.keepalive.KeepAliveServer')
 createStartScripts('io.grpc.examples.loadbalance.LoadBalanceClient')
 createStartScripts('io.grpc.examples.loadbalance.LoadBalanceServer')
+createStartScripts('io.grpc.examples.manualflowcontrol.BidiBlockingClient')
 createStartScripts('io.grpc.examples.manualflowcontrol.ManualFlowControlClient')
 createStartScripts('io.grpc.examples.manualflowcontrol.ManualFlowControlServer')
 createStartScripts('io.grpc.examples.multiplex.MultiplexingServer')

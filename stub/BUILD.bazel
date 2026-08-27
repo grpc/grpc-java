@@ -1,3 +1,4 @@
+load("@rules_java//java:defs.bzl", "java_library")
 load("@rules_jvm_external//:defs.bzl", "artifact")
 
 java_library(
@@ -14,13 +15,4 @@ java_library(
         artifact("com.google.guava:guava"),
         artifact("org.codehaus.mojo:animal-sniffer-annotations"),
     ],
-)
-
-# javax.annotation.Generated is not included in the default root modules in 9,
-# see: http://openjdk.java.net/jeps/320.
-java_library(
-    name = "javax_annotation",
-    neverlink = 1,  # @Generated is source-retention
-    visibility = ["//visibility:public"],
-    exports = [artifact("org.apache.tomcat:annotations-api")],
 )

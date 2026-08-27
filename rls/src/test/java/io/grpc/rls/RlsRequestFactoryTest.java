@@ -26,7 +26,6 @@ import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
-import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -82,8 +81,9 @@ public class RlsRequestFactoryTest {
     metadata.put(Metadata.Key.of("X-Google-Id", Metadata.ASCII_STRING_MARSHALLER), "123");
     metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
 
-    RouteLookupRequest request = factory.create("com.google.service1", "Create", metadata);
-    assertThat(request.keyMap()).containsExactly(
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        factory.create("com.google.service1", "Create", metadata);
+    assertThat(routeLookupRequestKey.keyMap()).containsExactly(
         "user", "test",
         "id", "123",
         "server-1", "bigtable.googleapis.com",
@@ -97,9 +97,10 @@ public class RlsRequestFactoryTest {
     metadata.put(Metadata.Key.of("Password", Metadata.ASCII_STRING_MARSHALLER), "hunter2");
     metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
 
-    RouteLookupRequest request = factory.create("com.google.service1" , "Update", metadata);
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        factory.create("com.google.service1" , "Update", metadata);
 
-    assertThat(request.keyMap()).containsExactly(
+    assertThat(routeLookupRequestKey.keyMap()).containsExactly(
         "user", "test",
         "password", "hunter2",
         "service-2", "com.google.service1",
@@ -113,9 +114,10 @@ public class RlsRequestFactoryTest {
     metadata.put(Metadata.Key.of("X-Google-Id", Metadata.ASCII_STRING_MARSHALLER), "123");
     metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
 
-    RouteLookupRequest request = factory.create("com.google.service1", "Update", metadata);
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        factory.create("com.google.service1", "Update", metadata);
 
-    assertThat(request.keyMap()).containsExactly(
+    assertThat(routeLookupRequestKey.keyMap()).containsExactly(
         "user", "test",
         "service-2", "com.google.service1",
         "const-key-2", "const-value-2");
@@ -128,8 +130,9 @@ public class RlsRequestFactoryTest {
     metadata.put(Metadata.Key.of("X-Google-Id", Metadata.ASCII_STRING_MARSHALLER), "123");
     metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
 
-    RouteLookupRequest request = factory.create("abc.def.service999", "Update", metadata);
-    assertThat(request.keyMap()).isEmpty();
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        factory.create("abc.def.service999", "Update", metadata);
+    assertThat(routeLookupRequestKey.keyMap()).isEmpty();
   }
 
   @Test
@@ -139,9 +142,10 @@ public class RlsRequestFactoryTest {
     metadata.put(Metadata.Key.of("X-Google-Id", Metadata.ASCII_STRING_MARSHALLER), "123");
     metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
 
-    RouteLookupRequest request = factory.create("com.google.service3", "Update", metadata);
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        factory.create("com.google.service3", "Update", metadata);
 
-    assertThat(request.keyMap()).containsExactly(
+    assertThat(routeLookupRequestKey.keyMap()).containsExactly(
         "user", "test", "const-key-4", "const-value-4");
   }
 }

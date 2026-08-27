@@ -24,6 +24,7 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.RingHashOptions;
@@ -81,12 +82,19 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
       Map<String, ?> rawLoadBalancingPolicyConfig) {
     Long minRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "minRingSize");
     Long maxRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "maxRingSize");
+    String requestHashHeader = "";
+    if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY", false)) {
+      requestHashHeader = JsonUtil.getString(rawLoadBalancingPolicyConfig, "requestHashHeader");
+    }
     long maxRingSizeCap = RingHashOptions.getRingSizeCap();
     if (minRingSize == null) {
       minRingSize = DEFAULT_MIN_RING_SIZE;
     }
     if (maxRingSize == null) {
       maxRingSize = DEFAULT_MAX_RING_SIZE;
+    }
+    if (requestHashHeader == null) {
+      requestHashHeader = "";
     }
     if (minRingSize > maxRingSizeCap) {
       minRingSize = maxRingSizeCap;
@@ -96,8 +104,9 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
     }
     if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize) {
       return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
-          "Invalid 'mingRingSize'/'maxRingSize'"));
+          "Invalid 'minRingSize'/'maxRingSize'"));
     }
-    return ConfigOrError.fromConfig(new RingHashConfig(minRingSize, maxRingSize));
+    return ConfigOrError.fromConfig(
+        new RingHashConfig(minRingSize, maxRingSize, requestHashHeader));
   }
 }

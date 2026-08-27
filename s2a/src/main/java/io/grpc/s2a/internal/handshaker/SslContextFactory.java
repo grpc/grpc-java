@@ -20,6 +20,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.s2a.proto.v2.AuthenticationMechanism;
+import com.google.s2a.proto.v2.ConnectionSide;
+import com.google.s2a.proto.v2.GetTlsConfigurationReq;
+import com.google.s2a.proto.v2.GetTlsConfigurationResp;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.netty.handler.ssl.OpenSslContextOption;
@@ -86,6 +92,9 @@ final class SslContextFactory {
         S2ATrustManager.createForClient(stub, targetName, localIdentity));
     sslContextBuilder.option(
         OpenSslContextOption.PRIVATE_KEY_METHOD, S2APrivateKeyMethod.create(stub, localIdentity));
+    sslContextBuilder.option(
+        OpenSslContextOption.GROUPS,
+        new String[] {"X25519MLKEM768", "x25519", "secp256r1", "secp384r1", "secp521r1"});
 
     SslContext sslContext = sslContextBuilder.build();
     SSLSessionContext sslSessionContext = sslContext.sessionContext();
@@ -105,7 +114,8 @@ final class SslContextFactory {
       reqBuilder.setLocalIdentity(localIdentity.get().getIdentity());
     }
     Optional<AuthenticationMechanism> authMechanism =
-        GetAuthenticationMechanisms.getAuthMechanism(localIdentity);
+        GetAuthenticationMechanisms.getAuthMechanism(localIdentity,
+        GetAuthenticationMechanisms.TOKEN_MANAGER);
     if (authMechanism.isPresent()) {
       reqBuilder.addAuthenticationMechanisms(authMechanism.get());
     }
@@ -143,8 +153,8 @@ final class SslContextFactory {
         ProtoUtil.buildTlsProtocolVersionSet(
             clientTlsConfiguration.getMinTlsVersion(), clientTlsConfiguration.getMaxTlsVersion());
     if (tlsVersions.isEmpty()) {
-      throw new S2AConnectionException("Set of TLS versions received from S2A server is"
-        + " empty or not supported.");
+      throw new S2AConnectionException(
+          "Set of TLS versions received from S2A server is empty or not supported.");
     }
     sslContextBuilder.protocols(tlsVersions);
   }

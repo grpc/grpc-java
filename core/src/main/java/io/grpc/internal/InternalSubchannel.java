@@ -42,12 +42,16 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
+import io.grpc.NameResolver;
+import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -77,6 +81,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final InternalChannelz channelz;
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
+  private final MetricRecorder metricRecorder;
   private final ChannelLogger channelLogger;
   private final boolean reconnectDisabled;
 
@@ -160,6 +165,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private Status shutdownReason;
 
   private volatile Attributes connectedAddressAttributes;
+  private final SubchannelMetrics subchannelMetrics;
+  private final String target;
 
   InternalSubchannel(LoadBalancer.CreateSubchannelArgs args, String authority, String userAgent,
                      BackoffPolicy.Provider backoffPolicyProvider,
@@ -168,7 +175,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
                      Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext,
                      Callback callback, InternalChannelz channelz, CallTracer callsTracer,
                      ChannelTracer channelTracer, InternalLogId logId,
-                     ChannelLogger channelLogger, List<ClientTransportFilter> transportFilters) {
+                     ChannelLogger channelLogger, List<ClientTransportFilter> transportFilters,
+                     String target,
+                     MetricRecorder metricRecorder) {
     List<EquivalentAddressGroup> addressGroups = args.getAddresses();
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
@@ -184,6 +193,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.scheduledExecutor = scheduledExecutor;
     this.connectingTimer = stopwatchSupplier.get();
     this.syncContext = syncContext;
+    this.metricRecorder = metricRecorder;
     this.callback = callback;
     this.channelz = channelz;
     this.callsTracer = callsTracer;
@@ -192,6 +202,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
     this.transportFilters = transportFilters;
     this.reconnectDisabled = args.getOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY);
+    this.target = target;
+    this.subchannelMetrics = new SubchannelMetrics(metricRecorder);
   }
 
   ChannelLogger getChannelLogger() {
@@ -256,6 +268,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           .setAuthority(eagChannelAuthority != null ? eagChannelAuthority : authority)
           .setEagAttributes(currentEagAttributes)
           .setUserAgent(userAgent)
+          .setMetricRecorder(metricRecorder)
           .setHttpConnectProxiedSocketAddress(proxiedAddr);
     TransportLogger transportLogger = new TransportLogger();
     // In case the transport logs in the constructor, use the subchannel logId
@@ -317,7 +330,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   }
 
   /**
-   * Immediately attempt to reconnect if the current state is TRANSIENT_FAILURE. Otherwise this
+   * Immediately attempt to reconnect if the current state is TRANSIENT_FAILURE. Otherwise, this
    * method has no effect.
    */
   void resetConnectBackoff() {
@@ -346,7 +359,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
     if (state.getState() != newState.getState()) {
       Preconditions.checkState(state.getState() != SHUTDOWN,
-          "Cannot transition out of SHUTDOWN to " + newState);
+          "Cannot transition out of SHUTDOWN to %s", newState.getState());
       if (reconnectDisabled && newState.getState() == TRANSIENT_FAILURE) {
         state = ConnectivityStateInfo.forNonError(IDLE);
       } else {
@@ -593,6 +606,13 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             pendingTransport = null;
             connectedAddressAttributes = addressIndex.getCurrentEagAttributes();
             gotoNonErrorState(READY);
+            subchannelMetrics.recordConnectionAttemptSucceeded(/* target= */ target,
+                /* backendService= */ getBackendServiceOrDefault(
+                    addressIndex.getCurrentEagAttributes()),
+                /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                    EquivalentAddressGroup.ATTR_LOCALITY_NAME),
+                /* securityLevel= */ extractSecurityLevel(addressIndex.getCurrentEagAttributes()
+                    .get(GrpcAttributes.ATTR_SECURITY_LEVEL)));
           }
         }
       });
@@ -604,7 +624,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     }
 
     @Override
-    public void transportShutdown(final Status s) {
+    public void transportShutdown(final Status s, final DisconnectError disconnectError) {
       channelLogger.log(
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
@@ -618,11 +638,24 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             activeTransport = null;
             addressIndex.reset();
             gotoNonErrorState(IDLE);
+            subchannelMetrics.recordDisconnection(/* target= */ target,
+                /* backendService= */ getBackendServiceOrDefault(
+                    addressIndex.getCurrentEagAttributes()),
+                /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                    EquivalentAddressGroup.ATTR_LOCALITY_NAME),
+                /* disconnectError= */ disconnectError.toErrorString(),
+                /* securityLevel= */ extractSecurityLevel(addressIndex.getCurrentEagAttributes()
+                    .get(GrpcAttributes.ATTR_SECURITY_LEVEL)));
           } else if (pendingTransport == transport) {
+            subchannelMetrics.recordConnectionAttemptFailed(/* target= */ target,
+                /* backendService= */ getBackendServiceOrDefault(
+                    addressIndex.getCurrentEagAttributes()),
+                /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                    EquivalentAddressGroup.ATTR_LOCALITY_NAME));
             Preconditions.checkState(state.getState() == CONNECTING,
                 "Expected state is CONNECTING, actual state is %s", state.getState());
             addressIndex.increment();
-            // Continue reconnect if there are still addresses to try.
+            // Continue to reconnect if there are still addresses to try.
             if (!addressIndex.isValid()) {
               pendingTransport = null;
               addressIndex.reset();
@@ -657,6 +690,35 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           }
         }
       });
+    }
+
+    private String extractSecurityLevel(SecurityLevel securityLevel) {
+      if (securityLevel == null) {
+        return "none";
+      }
+      switch (securityLevel) {
+        case NONE:
+          return "none";
+        case INTEGRITY:
+          return "integrity_only";
+        case PRIVACY_AND_INTEGRITY:
+          return "privacy_and_integrity";
+        default:
+          throw new IllegalArgumentException("Unknown SecurityLevel: " + securityLevel);
+      }
+    }
+
+    private String getAttributeOrDefault(Attributes attributes, Attributes.Key<String> key) {
+      String value = attributes.get(key);
+      return value == null ? "" : value;
+    }
+
+    private String getBackendServiceOrDefault(Attributes attributes) {
+      String value = attributes.get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE);
+      if (value == null) {
+        value = attributes.get(NameResolver.ATTR_BACKEND_SERVICE);
+      }
+      return value == null ? "" : value;
     }
   }
 

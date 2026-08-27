@@ -4,9 +4,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 
 /**
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: test/echo/proto/echo.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class EchoTestServiceGrpc {
 
@@ -89,6 +86,21 @@ public final class EchoTestServiceGrpc {
         }
       };
     return EchoTestServiceStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static EchoTestServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<EchoTestServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<EchoTestServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public EchoTestServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new EchoTestServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return EchoTestServiceBlockingV2Stub.newStub(factory, channel);
   }
 
   /**
@@ -186,6 +198,37 @@ public final class EchoTestServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service EchoTestService.
+   */
+  public static final class EchoTestServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingV2Stub> {
+    private EchoTestServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected EchoTestServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new EchoTestServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.istio.test.Echo.EchoResponse echo(io.istio.test.Echo.EchoRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
+          getChannel(), getEchoMethod(), getCallOptions(), request);
+    }
+
+    /**
+     */
+    public io.istio.test.Echo.ForwardEchoResponse forwardEcho(io.istio.test.Echo.ForwardEchoRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
+          getChannel(), getForwardEchoMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do limited synchronous rpc calls to service EchoTestService.
    */
   public static final class EchoTestServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {

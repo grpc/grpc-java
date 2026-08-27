@@ -22,12 +22,22 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
+import com.google.s2a.proto.v2.Ciphersuite;
+import com.google.s2a.proto.v2.ConnectionSide;
+import com.google.s2a.proto.v2.GetTlsConfigurationReq;
+import com.google.s2a.proto.v2.GetTlsConfigurationResp;
+import com.google.s2a.proto.v2.S2AServiceGrpc;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
+import com.google.s2a.proto.v2.TLSVersion;
+import com.google.s2a.proto.v2.ValidatePeerCertificateChainReq;
+import com.google.s2a.proto.v2.ValidatePeerCertificateChainReq.VerificationMode;
+import com.google.s2a.proto.v2.ValidatePeerCertificateChainResp;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import io.grpc.s2a.internal.handshaker.ValidatePeerCertificateChainReq.VerificationMode;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,6 +45,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Logger;
 import org.junit.After;
 import org.junit.Before;
@@ -67,7 +78,10 @@ public final class FakeS2AServerTest {
 
   @Test
   public void callS2AServerOnce_getTlsConfiguration_returnsValidResult()
-      throws InterruptedException, IOException, java.util.concurrent.ExecutionException {
+      throws InterruptedException,
+          IOException,
+          java.util.concurrent.ExecutionException,
+          TimeoutException {
     ExecutorService executor = Executors.newSingleThreadExecutor();
     logger.info("Client connecting to: " + serverAddress);
     ManagedChannel channel =
@@ -111,6 +125,7 @@ public final class FakeS2AServerTest {
       // Mark the end of requests.
       requestObserver.onCompleted();
       // Wait for receiving to happen.
+      respFuture.get(5, SECONDS);
     } finally {
       channel.shutdown();
       channel.awaitTermination(1, SECONDS);
@@ -155,7 +170,7 @@ public final class FakeS2AServerTest {
 
   @Test
   public void callS2AServerOnce_validatePeerCertifiate_returnsValidResult()
-      throws InterruptedException, java.util.concurrent.ExecutionException {
+      throws InterruptedException, java.util.concurrent.ExecutionException, TimeoutException {
     ExecutorService executor = Executors.newSingleThreadExecutor();
     logger.info("Client connecting to: " + serverAddress);
     ManagedChannel channel =
@@ -202,6 +217,7 @@ public final class FakeS2AServerTest {
       // Mark the end of requests.
       requestObserver.onCompleted();
       // Wait for receiving to happen.
+      respFuture.get(5, SECONDS);
     } finally {
       channel.shutdown();
       channel.awaitTermination(1, SECONDS);

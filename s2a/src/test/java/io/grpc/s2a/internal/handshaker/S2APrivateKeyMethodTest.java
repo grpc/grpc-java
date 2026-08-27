@@ -25,6 +25,11 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.truth.Expect;
 import com.google.protobuf.ByteString;
+import com.google.s2a.proto.v2.OffloadPrivateKeyOperationReq;
+import com.google.s2a.proto.v2.OffloadPrivateKeyOperationResp;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
+import com.google.s2a.proto.v2.SignatureAlgorithm;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.netty.handler.ssl.OpenSslPrivateKeyMethod;

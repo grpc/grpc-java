@@ -27,6 +27,7 @@ import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
@@ -46,7 +47,6 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.ServerChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.DecoderException;
@@ -68,7 +68,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 
@@ -122,10 +121,10 @@ class Utils {
       EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE = epollDomainSocketChannelType();
       DEFAULT_SERVER_CHANNEL_FACTORY = new ReflectiveChannelFactory<>(epollServerChannelType());
       EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = epollEventLoopGroupConstructor();
-      DEFAULT_BOSS_EVENT_LOOP_GROUP
-        = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", EventLoopGroupType.EPOLL);
-      DEFAULT_WORKER_EVENT_LOOP_GROUP
-        = new DefaultEventLoopGroupResource(0,"grpc-default-worker-ELG", EventLoopGroupType.EPOLL);
+      DEFAULT_BOSS_EVENT_LOOP_GROUP = new DefaultEventLoopGroupResource(
+          1, "grpc-default-boss-ELG", EventLoopGroupType.EPOLL);
+      DEFAULT_WORKER_EVENT_LOOP_GROUP = new DefaultEventLoopGroupResource(
+          0, "grpc-default-worker-ELG", EventLoopGroupType.EPOLL);
     } else {
       logger.log(Level.FINE, "Epoll is not available, using Nio.", getEpollUnavailabilityCause());
       DEFAULT_SERVER_CHANNEL_FACTORY = nioServerChannelFactory();
@@ -513,7 +512,10 @@ class Utils {
       ThreadFactory threadFactory = new DefaultThreadFactory(name, /* daemon= */ true);
       switch (eventLoopGroupType) {
         case NIO:
-          return new NioEventLoopGroup(numEventLoops, threadFactory);
+          @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+          EventLoopGroup group =
+              new io.netty.channel.nio.NioEventLoopGroup(numEventLoops, threadFactory);
+          return group;
         case EPOLL:
           return createEpollEventLoopGroup(numEventLoops, threadFactory);
         default:

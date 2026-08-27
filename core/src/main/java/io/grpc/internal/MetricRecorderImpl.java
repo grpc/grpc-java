@@ -20,12 +20,14 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import io.grpc.CallbackMetricInstrument;
 import io.grpc.DoubleCounterMetricInstrument;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.LongHistogramMetricInstrument;
+import io.grpc.LongUpDownCounterMetricInstrument;
 import io.grpc.MetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricRecorder;
@@ -48,7 +50,7 @@ final class MetricRecorderImpl implements MetricRecorder {
 
   @VisibleForTesting
   MetricRecorderImpl(List<MetricSink> metricSinks, MetricInstrumentRegistry registry) {
-    this.metricSinks = metricSinks;
+    this.metricSinks = ImmutableList.copyOf(metricSinks);
     this.registry = registry;
   }
 
@@ -82,7 +84,7 @@ final class MetricRecorderImpl implements MetricRecorder {
    * Records a long counter value.
    *
    * @param metricInstrument the {@link LongCounterMetricInstrument} to record.
-   * @param value the value to record.
+   * @param value the value to record. Must be non-negative.
    * @param requiredLabelValues the required label values for the metric.
    * @param optionalLabelValues the optional label values for the metric.
    */
@@ -100,6 +102,32 @@ final class MetricRecorderImpl implements MetricRecorder {
         sink.updateMeasures(registry.getMetricInstruments());
       }
       sink.addLongCounter(metricInstrument, value, requiredLabelValues, optionalLabelValues);
+    }
+  }
+
+  /**
+   * Adds a long up down counter value.
+   *
+   * @param metricInstrument    the {@link io.grpc.LongUpDownCounterMetricInstrument} to record.
+   * @param value               the value to record. May be positive, negative or zero.
+   * @param requiredLabelValues the required label values for the metric.
+   * @param optionalLabelValues the optional label values for the metric.
+   */
+  @Override
+  public void addLongUpDownCounter(LongUpDownCounterMetricInstrument metricInstrument, long value,
+                                   List<String> requiredLabelValues,
+                                   List<String> optionalLabelValues) {
+    MetricRecorder.super.addLongUpDownCounter(metricInstrument, value, requiredLabelValues,
+        optionalLabelValues);
+    for (MetricSink sink : metricSinks) {
+      int measuresSize = sink.getMeasuresSize();
+      if (measuresSize <= metricInstrument.getIndex()) {
+        // Measures may need updating in two cases:
+        // 1. When the sink is initially created with an empty list of measures.
+        // 2. When new metric instruments are registered, requiring the sink to accommodate them.
+        sink.updateMeasures(registry.getMetricInstruments());
+      }
+      sink.addLongUpDownCounter(metricInstrument, value, requiredLabelValues, optionalLabelValues);
     }
   }
 

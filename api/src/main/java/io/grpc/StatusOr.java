@@ -33,7 +33,7 @@ public class StatusOr<T> {
   }
 
   /** Construct from a value. */
-  public static <T> StatusOr<T> fromValue(@Nullable T value) {
+  public static <T> StatusOr<T> fromValue(T value) {
     StatusOr<T> result = new StatusOr<T>(null, value);
     return result;
   }
@@ -54,7 +54,7 @@ public class StatusOr<T> {
    * Returns the value if set or throws exception if there is no value set. This method is meant
    * to be called after checking the return value of hasValue() first.
    */
-  public @Nullable T getValue() {
+  public T getValue() {
     if (status != null) {
       throw new IllegalStateException("No value present.");
     }
@@ -66,6 +66,14 @@ public class StatusOr<T> {
     return status == null ? Status.OK : status;
   }
 
+  /**
+   * Note that StatusOr containing statuses, the equality comparision is delegated to
+   * {@link Status#equals} which just does a reference equality check because equality on
+   * Statuses is not well defined.
+   * Instead, do comparison based on their Code with {@link Status#getCode}.  The description and
+   * cause of the Status are unlikely to be stable, and additional fields may be added to Status
+   * in the future.
+   */
   @Override
   public boolean equals(Object other) {
     if (!(other instanceof StatusOr)) {
@@ -97,6 +105,7 @@ public class StatusOr<T> {
     return stringHelper.toString();
   }
 
+  @Nullable
   private final Status status;
   private final T value;
 }

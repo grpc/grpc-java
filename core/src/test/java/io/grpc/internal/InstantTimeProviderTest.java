@@ -34,8 +34,7 @@ public class InstantTimeProviderTest {
   @Test
   public void testInstantCurrentTimeNanos() throws Exception {
 
-    InstantTimeProvider instantTimeProvider = new InstantTimeProvider(
-        Class.forName("java.time.Instant"));
+    InstantTimeProvider instantTimeProvider = new InstantTimeProvider();
 
     // Get the current time from the InstantTimeProvider
     long actualTimeNanos = instantTimeProvider.currentTimeNanos();

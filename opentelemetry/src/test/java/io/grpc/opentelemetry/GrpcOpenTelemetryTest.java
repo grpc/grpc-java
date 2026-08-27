@@ -25,10 +25,12 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
@@ -97,6 +99,7 @@ public class GrpcOpenTelemetryTest {
     grpcOpenTelemetry.configureServerBuilder(mockServerBuiler);
     verify(mockServerBuiler, times(2)).addStreamTracerFactory(any());
     verify(mockServerBuiler).intercept(any());
+    verify(mockServerBuiler).addMetricSink(any());
     verifyNoMoreInteractions(mockServerBuiler);
 
     ManagedChannelBuilder<?> mockChannelBuilder = mock(ManagedChannelBuilder.class);
@@ -120,7 +123,6 @@ public class GrpcOpenTelemetryTest {
         .build());
     assertThat(module.getEnableMetrics()).isEmpty();
     assertThat(module.getOptionalLabels()).isEmpty();
-    assertThat(module.getSink()).isInstanceOf(MetricSink.class);
 
     assertThat(module.getTracer()).isSameInstanceAs(noopOpenTelemetry
         .getTracerProvider()
@@ -128,6 +130,18 @@ public class GrpcOpenTelemetryTest {
         .setInstrumentationVersion(GrpcUtil.IMPLEMENTATION_VERSION)
         .build()
     );
+  }
+
+  @Test
+  public void builderTargetAttributeFilter() {
+    GrpcOpenTelemetry module = GrpcOpenTelemetry.newBuilder()
+        .targetAttributeFilter(t -> t.contains("allowed.com"))
+        .build();
+
+    TargetFilter internalFilter = module.getTargetAttributeFilter();
+
+    assertThat(internalFilter.test("allowed.com")).isTrue();
+    assertThat(internalFilter.test("example.com")).isFalse();
   }
 
   @Test
@@ -156,6 +170,36 @@ public class GrpcOpenTelemetryTest {
     assertThat(module.getEnableMetrics()).isEmpty();
   }
 
-  // TODO(dnvindhya): Add tests for configurator
+  @Test
+  public void configureChannelBuilder_registersMetricSink() {
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder().build();
+    TestChannelBuilder testBuilder = new TestChannelBuilder();
+    grpcOpenTelemetry.configureChannelBuilder(testBuilder);
+    assertThat(testBuilder.metricSink).isSameInstanceAs(grpcOpenTelemetry.getSink());
+    assertThat(testBuilder.interceptorFactory).isNotNull();
+  }
 
+  private static class TestChannelBuilder extends ForwardingChannelBuilder2<TestChannelBuilder> {
+    Object interceptorFactory;
+    MetricSink metricSink;
+
+    @Override
+    protected ManagedChannelBuilder<?> delegate() {
+      return null;
+    }
+
+    @Override
+    protected TestChannelBuilder interceptWithTarget(InterceptorFactory factory) {
+      this.interceptorFactory = factory;
+      return this;
+    }
+
+    @Override
+    public TestChannelBuilder addMetricSink(MetricSink metricSink) {
+      this.metricSink = metricSink;
+      return this;
+    }
+  }
+
+  // TODO(dnvindhya): Add tests for configurator
 }

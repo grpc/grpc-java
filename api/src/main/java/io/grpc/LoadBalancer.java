@@ -32,7 +32,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A pluggable component that receives resolved addresses from {@link NameResolver} and provides the
@@ -64,7 +63,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * allows implementations to schedule tasks to be run in the same Synchronization Context, with or
  * without a delay, thus those tasks don't need to worry about synchronizing with the balancer
  * methods.
- * 
+ *
  * <p>However, the actual running thread may be the network thread, thus the following rules must be
  * followed to prevent blocking or even dead-locking in a network:
  *
@@ -156,15 +155,16 @@ public abstract class LoadBalancer {
   private int recursionCount;
 
   /**
-   * Handles newly resolved server groups and metadata attributes from name resolution system.
-   * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
-   * but may be flattened into a single list if needed.
-   *
-   * <p>Implementations should not modify the given {@code servers}.
+   * Handles newly resolved addresses and metadata attributes from name resolution system.
+   * Addresses in {@link EquivalentAddressGroup} should be considered equivalent but may be
+   * flattened into a single list if needed.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.21.0
+   *
+   * @deprecated  Use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
    */
+  @Deprecated
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
       // Note that the information about the addresses actually being accepted will be lost
@@ -179,12 +179,10 @@ public abstract class LoadBalancer {
    * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
    * single list if needed.
    *
-   * <p>Implementations can choose to reject the given addresses by returning {@code false}.
+   * @param resolvedAddresses the resolved server addresses, attributes, and config
+   * @return {@code Status.OK} if the resolved addresses were accepted, otherwise an error to report
+   *     to the name resolver
    *
-   * <p>Implementations should not modify the given {@code addresses}.
-   *
-   * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
    * @since 1.49.0
    */
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -339,8 +337,8 @@ public abstract class LoadBalancer {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("addresses", addresses)
-          .add("attributes", attributes)
           .add("loadBalancingPolicyConfig", loadBalancingPolicyConfig)
+          .add("attributes", attributes)
           .toString();
     }
 
@@ -418,7 +416,16 @@ public abstract class LoadBalancer {
    *
    * <p>This method should always return a constant value.  It's not specified when this will be
    * called.
+   *
+   * <p>Note that this method is only called when implementing {@code handleResolvedAddresses()}
+   * instead of {@code acceptResolvedAddresses()}.
+   *
+   * @deprecated Instead of overwriting this and {@code handleResolvedAddresses()}, only
+   *     overwrite {@code acceptResolvedAddresses()} which indicates if the addresses provided
+   *     by the name resolver are acceptable with the {@code boolean} return value.
    */
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return false;
   }
@@ -442,7 +449,6 @@ public abstract class LoadBalancer {
    *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class SubchannelPicker {
     /**
@@ -452,18 +458,6 @@ public abstract class LoadBalancer {
      * @since 1.3.0
      */
     public abstract PickResult pickSubchannel(PickSubchannelArgs args);
-
-    /**
-     * Tries to establish connections now so that the upcoming RPC may then just pick a ready
-     * connection without having to connect first.
-     *
-     * <p>No-op if unsupported.
-     *
-     * @deprecated override {@link LoadBalancer#requestConnection} instead.
-     * @since 1.11.0
-     */
-    @Deprecated
-    public void requestConnection() {}
   }
 
   /**
@@ -553,25 +547,32 @@ public abstract class LoadBalancer {
     // True if the result is created by withDrop()
     private final boolean drop;
     @Nullable private final String authorityOverride;
+    @Nullable private final String delayType;
+    @Nullable private final String delayReason;
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
         Status status, boolean drop) {
-      this.subchannel = subchannel;
-      this.streamTracerFactory = streamTracerFactory;
-      this.status = checkNotNull(status, "status");
-      this.drop = drop;
-      this.authorityOverride = null;
+      this(subchannel, streamTracerFactory, status, drop, null, null, null);
     }
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
         Status status, boolean drop, @Nullable String authorityOverride) {
+      this(subchannel, streamTracerFactory, status, drop, authorityOverride, null, null);
+    }
+
+    private PickResult(
+        @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
+        Status status, boolean drop, @Nullable String authorityOverride,
+        @Nullable String delayType, @Nullable String delayReason) {
       this.subchannel = subchannel;
       this.streamTracerFactory = streamTracerFactory;
       this.status = checkNotNull(status, "status");
       this.drop = drop;
       this.authorityOverride = authorityOverride;
+      this.delayType = delayType;
+      this.delayReason = delayReason;
     }
 
     /**
@@ -644,6 +645,8 @@ public abstract class LoadBalancer {
      *                            stream is created at all in some cases.
      * @since 1.3.0
      */
+    // TODO(shivaspeaks): Need to deprecate old APIs and create new ones,
+    // per https://github.com/grpc/grpc-java/issues/12662.
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory) {
       return new PickResult(
@@ -671,6 +674,30 @@ public abstract class LoadBalancer {
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return withSubchannel(subchannel, null);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code subchannel},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithSubchannel(Subchannel subchannel) {
+      return new PickResult(checkNotNull(subchannel, "subchannel"), streamTracerFactory,
+          status, drop, authorityOverride, delayType, delayReason);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code streamTracerFactory},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithStreamTracerFactory(
+        @Nullable ClientStreamTracer.Factory streamTracerFactory) {
+      return new PickResult(
+          subchannel, streamTracerFactory, status, drop, authorityOverride, delayType,
+          delayReason);
     }
 
     /**
@@ -705,6 +732,31 @@ public abstract class LoadBalancer {
      */
     public static PickResult withNoResult() {
       return NO_RESULT;
+    }
+
+    /**
+     * No decision could be made.  The RPC will stay buffered with a specific delay type and reason.
+     *
+     * @param delayType low-cardinality root cause label (e.g., "connecting")
+     * @param delayReason high-cardinality diagnostic string for trace events
+     * @since 1.82.0
+     */
+    public static PickResult withNoResult(String delayType, String delayReason) {
+      Preconditions.checkNotNull(delayType, "delayType");
+      Preconditions.checkNotNull(delayReason, "delayReason");
+      return new PickResult(null, null, Status.OK, false, null, delayType, delayReason);
+    }
+
+    /** Returns the delay type label if any. */
+    @Nullable
+    public String getDelayType() {
+      return delayType;
+    }
+
+    /** Returns the diagnostic delay reason if any. */
+    @Nullable
+    public String getDelayReason() {
+      return delayReason;
     }
 
     /** Returns the authority override if any. */
@@ -867,9 +919,11 @@ public abstract class LoadBalancer {
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
 
+      private static final Object[][] EMPTY_CUSTOM_OPTIONS = new Object[0][2];
+
       private List<EquivalentAddressGroup> addrs;
       private Attributes attrs = Attributes.EMPTY;
-      private Object[][] customOptions = new Object[0][2];
+      private Object[][] customOptions = EMPTY_CUSTOM_OPTIONS;
 
       Builder() {
       }
@@ -1008,9 +1062,10 @@ public abstract class LoadBalancer {
   /**
    * Provides essentials for LoadBalancer implementations.
    *
+   * <p>This class is thread-safe.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Helper {
     /**
@@ -1201,6 +1256,10 @@ public abstract class LoadBalancer {
      * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
      * as that the callback methods on the {@link LoadBalancer} interface are run in.
      *
+     * <p>Work added to the synchronization context might not run immediately, so LB implementations
+     * must be careful to ensure that any assumptions still hold when it is executed. In particular,
+     * the LB might have been shut down or subchannels might have changed state.
+     *
      * <p>Pro-tip: in order to call {@link SynchronizationContext#schedule}, you need to provide a
      * {@link ScheduledExecutorService}.  {@link #getScheduledExecutorService} is provided for your
      * convenience.
@@ -1306,7 +1365,7 @@ public abstract class LoadBalancer {
   }
 
   /**
-   * A logical connection to a server, or a group of equivalent servers represented by an {@link 
+   * A logical connection to a server, or a group of equivalent servers represented by an {@link
    * EquivalentAddressGroup}.
    *
    * <p>It maintains at most one physical connection (aka transport) for sending new RPCs, while
@@ -1525,9 +1584,10 @@ public abstract class LoadBalancer {
   /**
    * Factory to create {@link LoadBalancer} instance.
    *
+   * <p>This class is thread-safe.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Factory {
     /**

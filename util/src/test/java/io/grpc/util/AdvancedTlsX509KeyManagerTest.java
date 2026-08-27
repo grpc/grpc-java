@@ -18,6 +18,7 @@ package io.grpc.util;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -48,7 +49,6 @@ public class AdvancedTlsX509KeyManagerTest {
   private static final String SERVER_0_PEM_FILE = "server0.pem";
   private static final String CLIENT_0_KEY_FILE = "client.key";
   private static final String CLIENT_0_PEM_FILE = "client.pem";
-  private static final String ALIAS = "default";
 
   private ScheduledExecutorService executor;
 
@@ -79,22 +79,62 @@ public class AdvancedTlsX509KeyManagerTest {
   public void updateTrustCredentials_replacesIssuers() throws Exception {
     // Overall happy path checking of public API.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
+
     serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
-    assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
-    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
+    String alias1 = serverKeyManager.chooseEngineServerAlias(null, null, null);
+    assertEquals(AdvancedTlsX509KeyManager.ALIAS_PREFIX + "1", alias1);
+    assertEquals(serverKey0, serverKeyManager.getPrivateKey(alias1));
+    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(alias1));
 
     serverKeyManager.updateIdentityCredentials(clientCert0File, clientKey0File);
-    assertEquals(clientKey0, serverKeyManager.getPrivateKey(ALIAS));
-    assertArrayEquals(clientCert0, serverKeyManager.getCertificateChain(ALIAS));
+    String alias2 = serverKeyManager.chooseEngineServerAlias(null, null, null);
+    assertEquals(AdvancedTlsX509KeyManager.ALIAS_PREFIX + "2", alias2);
+    assertEquals(clientKey0, serverKeyManager.getPrivateKey(alias2));
+    assertArrayEquals(clientCert0, serverKeyManager.getCertificateChain(alias2));
+    // Previous alias still resolves — retained to allow in-progress handshakes to complete.
+    assertEquals(serverKey0, serverKeyManager.getPrivateKey(alias1));
+    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(alias1));
 
-    serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File,1,
+    serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File, 1,
         TimeUnit.MINUTES, executor);
-    assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
-    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
+    String alias3 = serverKeyManager.chooseEngineServerAlias(null, null, null);
+    assertEquals(serverKey0, serverKeyManager.getPrivateKey(alias3));
+    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(alias3));
+    // alias1 is now two rotations back — no longer retained.
+    assertNull(serverKeyManager.getPrivateKey(alias1));
 
     serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
-    assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
-    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
+    String alias4 = serverKeyManager.chooseEngineServerAlias(null, null, null);
+    assertEquals(serverKey0, serverKeyManager.getPrivateKey(alias4));
+    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(alias4));
+  }
+
+  @Test
+  public void allAliasMethods_returnNullBeforeCredentialsLoaded() {
+    AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
+
+    assertNull(keyManager.chooseClientAlias(null, null, null));
+    assertNull(keyManager.chooseServerAlias(null, null, null));
+    assertNull(keyManager.chooseEngineClientAlias(null, null, null));
+    assertNull(keyManager.chooseEngineServerAlias(null, null, null));
+    assertNull(keyManager.getClientAliases(null, null));
+    assertNull(keyManager.getServerAliases(null, null));
+    assertNull(keyManager.getPrivateKey("key-1"));
+    assertNull(keyManager.getCertificateChain("key-1"));
+  }
+
+  @Test
+  public void allAliasMethods_agreeAfterCredentialLoad() throws Exception {
+    AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
+    keyManager.updateIdentityCredentials(serverCert0, serverKey0);
+
+    String expectedAlias = AdvancedTlsX509KeyManager.ALIAS_PREFIX + "1";
+    assertEquals(expectedAlias, keyManager.chooseClientAlias(null, null, null));
+    assertEquals(expectedAlias, keyManager.chooseServerAlias(null, null, null));
+    assertEquals(expectedAlias, keyManager.chooseEngineClientAlias(null, null, null));
+    assertEquals(expectedAlias, keyManager.chooseEngineServerAlias(null, null, null));
+    assertArrayEquals(new String[]{expectedAlias}, keyManager.getClientAliases(null, null));
+    assertArrayEquals(new String[]{expectedAlias}, keyManager.getServerAliases(null, null));
   }
 
   @Test

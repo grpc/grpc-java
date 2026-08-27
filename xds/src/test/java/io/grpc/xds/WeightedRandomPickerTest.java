@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.LoadBalancer.PickResult;
@@ -27,10 +28,10 @@ import io.grpc.Status;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -42,9 +43,6 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class WeightedRandomPickerTest {
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
@@ -128,20 +126,18 @@ public class WeightedRandomPickerTest {
   public void emptyList() {
     List<WeightedChildPicker> emptyList = new ArrayList<>();
 
-    thrown.expect(IllegalArgumentException.class);
-    new WeightedRandomPicker(emptyList);
+    assertThrows(IllegalArgumentException.class, () -> new WeightedRandomPicker(emptyList));
   }
 
   @Test
   public void negativeWeight() {
-    thrown.expect(IllegalArgumentException.class);
-    new WeightedChildPicker(-1, childPicker0);
+    assertThrows(IllegalArgumentException.class, () -> new WeightedChildPicker(-1, childPicker0));
   }
 
   @Test
   public void overWeightSingle() {
-    thrown.expect(IllegalArgumentException.class);
-    new WeightedChildPicker(Integer.MAX_VALUE * 3L, childPicker0);
+    assertThrows(IllegalArgumentException.class,
+        () -> new WeightedChildPicker(Integer.MAX_VALUE * 3L, childPicker0));
   }
 
   @Test
@@ -152,8 +148,8 @@ public class WeightedRandomPickerTest {
         new WeightedChildPicker(Integer.MAX_VALUE, childPicker1),
         new WeightedChildPicker(10, childPicker2));
 
-    thrown.expect(IllegalArgumentException.class);
-    new WeightedRandomPicker(weightedChildPickers, fakeRandom);
+    assertThrows(IllegalArgumentException.class,
+        () -> new WeightedRandomPicker(weightedChildPickers, fakeRandom));
   }
 
   @Test
@@ -252,5 +248,25 @@ public class WeightedRandomPickerTest {
     fakeRandom.nextInt = 3;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult3);
     assertThat(fakeRandom.bound).isEqualTo(4);
+  }
+
+  @Test
+  public void pickSubchannelEnrichesDelayReason() {
+    final PickResult pending =
+        PickResult.withNoResult("connecting", "TCP handshake in progress");
+    SubchannelPicker delayedPicker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return pending;
+      }
+    };
+    WeightedRandomPicker picker = new WeightedRandomPicker(
+        Collections.singletonList(new WeightedChildPicker(10, delayedPicker)));
+
+    PickResult res = picker.pickSubchannel(pickSubchannelArgs);
+    assertThat(res.hasResult()).isFalse();
+    assertThat(res.getDelayType()).isEqualTo("connecting");
+    assertThat(res.getDelayReason())
+        .isEqualTo("weighted_target: TCP handshake in progress");
   }
 }

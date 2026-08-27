@@ -22,6 +22,9 @@ import static com.google.common.base.Verify.verify;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.s2a.proto.v2.S2AServiceGrpc;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.Optional;
@@ -40,13 +43,23 @@ public class S2AStub implements AutoCloseable {
   private final BlockingQueue<Result> responses = new ArrayBlockingQueue<>(10);
   private S2AServiceGrpc.S2AServiceStub serviceStub;
   private StreamObserver<SessionReq> writer;
+  private long deadlineSeconds = HANDSHAKE_RPC_DEADLINE_SECS;
   private boolean doneReading = false;
   private boolean doneWriting = false;
   private boolean isClosed = false;
 
-  static S2AStub newInstance(S2AServiceGrpc.S2AServiceStub serviceStub) {
+  @VisibleForTesting
+  public static S2AStub newInstance(S2AServiceGrpc.S2AServiceStub serviceStub) {
     checkNotNull(serviceStub);
     return new S2AStub(serviceStub);
+  }
+
+  @VisibleForTesting
+  static S2AStub newInstanceWithDeadline(
+      S2AServiceGrpc.S2AServiceStub serviceStub, long deadlineSeconds) {
+    checkNotNull(serviceStub);
+    checkArgument(deadlineSeconds > 0);
+    return new S2AStub(serviceStub, deadlineSeconds);
   }
 
   @VisibleForTesting
@@ -57,6 +70,11 @@ public class S2AStub implements AutoCloseable {
 
   private S2AStub(S2AServiceGrpc.S2AServiceStub serviceStub) {
     this.serviceStub = serviceStub;
+  }
+
+  private S2AStub(S2AServiceGrpc.S2AServiceStub serviceStub, long deadlineSeconds) {
+    this.serviceStub = serviceStub;
+    this.deadlineSeconds = deadlineSeconds;
   }
 
   private S2AStub(StreamObserver<SessionReq> writer) {
@@ -150,7 +168,7 @@ public class S2AStub implements AutoCloseable {
       writer =
           serviceStub
               .withWaitForReady()
-              .withDeadlineAfter(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS)
+              .withDeadlineAfter(deadlineSeconds, SECONDS)
               .setUpSession(reader);
     }
   }

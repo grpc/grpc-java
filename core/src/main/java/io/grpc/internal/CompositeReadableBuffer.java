@@ -16,14 +16,13 @@
 
 package io.grpc.internal;
 
+import com.google.common.annotations.VisibleForTesting;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.InvalidMarkException;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.Queue;
 import javax.annotation.Nullable;
 
 /**
@@ -39,7 +38,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   private final Deque<ReadableBuffer> readableBuffers;
   private Deque<ReadableBuffer> rewindableBuffers;
   private int readableBytes;
-  private final Queue<ReadableBuffer> buffers = new ArrayDeque<ReadableBuffer>(2);
   private boolean marked;
 
   public CompositeReadableBuffer(int initialCapacity) {
@@ -64,21 +62,78 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
     }
   }
 
+  private static final int MIN_LARGE_BUFFER_SIZE = 1024;
+  private static final int MAX_SMALL_BUFFERS = 1000;
+
+  // Tracks the number of consecutive small buffers currently at the tail of the queue
+  private int tailSmallBufferCount = 0;
+
   private void enqueueBuffer(ReadableBuffer buffer) {
-    if (!(buffer instanceof CompositeReadableBuffer)) {
+    int bytes = buffer.readableBytes();
+
+    if (bytes >= MIN_LARGE_BUFFER_SIZE) {
+      // A large buffer arrived. Compact any preceding small buffers FIRST.
+      if (tailSmallBufferCount > 1) {
+        coalesceTailSmallBuffers(tailSmallBufferCount);
+      }
+      // Reset the counter and enqueue the large buffer.
+      // This strictly excludes the large buffer from any copying.
+      tailSmallBufferCount = 0;
       readableBuffers.add(buffer);
-      readableBytes += buffer.readableBytes();
+      readableBytes += bytes;
+    } else {
+      readableBuffers.add(buffer);
+      readableBytes += bytes;
+      tailSmallBufferCount++;
+
+      if (tailSmallBufferCount >= MAX_SMALL_BUFFERS) {
+        coalesceTailSmallBuffers(tailSmallBufferCount);
+
+        // Resetting to 0 ensures this newly coalesced chunk is NOT re-copied
+        // into the next batch. This restricts our time complexity to strictly O(N).
+        tailSmallBufferCount = 0;
+      }
+    }
+  }
+
+  private void coalesceTailSmallBuffers(int count) {
+    if (marked) {
       return;
     }
 
-    CompositeReadableBuffer compositeBuffer = (CompositeReadableBuffer) buffer;
-    while (!compositeBuffer.readableBuffers.isEmpty()) {
-      ReadableBuffer subBuffer = compositeBuffer.readableBuffers.remove();
-      readableBuffers.add(subBuffer);
+    // Extract ONLY the last 'count' buffers from the tail of the queue
+    ReadableBuffer[] toMerge = new ReadableBuffer[count];
+    int totalCoalescedBytes = 0;
+
+    // ArrayDeque.pollLast() retrieves elements in reverse order, so we populate backwards
+    for (int i = count - 1; i >= 0; i--) {
+      ReadableBuffer b = readableBuffers.pollLast();
+      toMerge[i] = b;
+      totalCoalescedBytes += b.readableBytes();
     }
-    readableBytes += compositeBuffer.readableBytes;
-    compositeBuffer.readableBytes = 0;
-    compositeBuffer.close();
+
+    byte[] coalescedBytes = new byte[totalCoalescedBytes];
+    int offset = 0;
+
+    for (int i = 0; i < count; i++) {
+      ReadableBuffer b = toMerge[i];
+      int len = b.readableBytes();
+      b.readBytes(coalescedBytes, offset, len);
+      offset += len;
+      b.close();
+    }
+
+    // Wrap and enqueue the single compacted buffer back at the tail
+    ReadableBuffer singleBuffer = ReadableBuffers.wrap(coalescedBytes);
+    readableBuffers.add(singleBuffer);
+
+    // Note: The global `readableBytes` remains perfectly synced since we
+    // subtracted and added the exact same amount of bytes.
+  }
+
+  @VisibleForTesting
+  int getBufferCount() {
+    return readableBuffers.size();
   }
 
   @Override
@@ -122,20 +177,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
         }
       };
 
-  private static final NoThrowReadOperation<ByteBuffer> BYTE_BUF_OP =
-      new NoThrowReadOperation<ByteBuffer>() {
-        @Override
-        public int read(ReadableBuffer buffer, int length, ByteBuffer dest, int unused) {
-          // Change the limit so that only lengthToCopy bytes are available.
-          int prevLimit = dest.limit();
-          ((Buffer) dest).limit(dest.position() + length);
-          // Write the bytes and restore the original limit.
-          buffer.readBytes(dest);
-          ((Buffer) dest).limit(prevLimit);
-          return 0;
-        }
-      };
-
   private static final ReadOperation<OutputStream> STREAM_OP =
       new ReadOperation<OutputStream>() {
         @Override
@@ -152,38 +193,8 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
-  public void readBytes(ByteBuffer dest) {
-    executeNoThrow(BYTE_BUF_OP, dest.remaining(), dest, 0);
-  }
-
-  @Override
   public void readBytes(OutputStream dest, int length) throws IOException {
     execute(STREAM_OP, length, dest, 0);
-  }
-
-  /**
-   * Reads {@code length} bytes from this buffer and writes them to the destination buffer.
-   * Increments the read position by {@code length}. If the required bytes are not readable, throws
-   * {@link IndexOutOfBoundsException}.
-   *
-   * @param dest the destination buffer to receive the bytes.
-   * @param length the number of bytes to be copied.
-   * @throws IndexOutOfBoundsException if required bytes are not readable
-   */
-  public void readBytes(CompositeReadableBuffer dest, int length) {
-    checkReadable(length);
-    readableBytes -= length;
-
-    while (length > 0) {
-      ReadableBuffer buffer = buffers.peek();
-      if (buffer.readableBytes() > length) {
-        dest.addBuffer(buffer.readBytes(length));
-        length = 0;
-      } else {
-        dest.addBuffer(buffers.poll());
-        length -= buffer.readableBytes();
-      }
-    }
   }
 
   @Override
@@ -209,6 +220,7 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
           advanceBuffer();
         } else {
           readBuffer = readableBuffers.poll();
+          adjustTailSmallBufferCount();
         }
         length -= readable;
       }
@@ -299,6 +311,7 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
         rewindableBuffers.remove().close();
       }
     }
+    tailSmallBufferCount = 0;
   }
 
   /**
@@ -361,6 +374,13 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
       }
     } else {
       readableBuffers.remove().close();
+    }
+    adjustTailSmallBufferCount();
+  }
+
+  private void adjustTailSmallBufferCount() {
+    if (tailSmallBufferCount > readableBuffers.size()) {
+      tailSmallBufferCount = readableBuffers.size();
     }
   }
 

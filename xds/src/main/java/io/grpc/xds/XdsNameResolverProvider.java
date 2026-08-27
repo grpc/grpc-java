@@ -22,6 +22,8 @@ import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.Uri;
+import io.grpc.xds.client.XdsClient;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -29,6 +31,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 /**
@@ -43,6 +46,13 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class XdsNameResolverProvider extends NameResolverProvider {
+  /**
+   * If provided, the suppler must return non-null when lb.start() is called (which implies not
+   * throwing), and the XdsClient must remain alive until lb.shutdown() returns. It may only be
+   * called from the synchronization context.
+   */
+  public static final Args.Key<Supplier<XdsClient>> XDS_CLIENT_SUPPLIER =
+      Args.Key.create("io.grpc.xds.XdsNameResolverProvider.XDS_CLIENT_SUPPLIER");
 
   private static final String SCHEME = "xds";
   private final String scheme;
@@ -77,14 +87,41 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return new XdsNameResolver(
-          targetUri, name, args.getOverrideAuthority(),
-          args.getServiceConfigParser(), args.getSynchronizationContext(),
-          args.getScheduledExecutorService(),
-          bootstrapOverride,
-          args.getMetricRecorder());
+      // TODO(jdcormie): java.net.URI#getAuthority incorrectly returns null for both xds:///service
+      //  and xds:/service. This doesn't matter for now since XdsNameResolver treats them the same
+      //  anyway and all this code will go away once newNameResolver(io.grpc.Uri) launches.
+      String targetAuthority = targetUri.getAuthority();
+      return newNameResolver(targetUri.toString(), targetAuthority, name, args);
     }
     return null;
+  }
+
+  @Override
+  public XdsNameResolver newNameResolver(Uri targetUri, Args args) {
+    if (scheme.equals(targetUri.getScheme())) {
+      Preconditions.checkArgument(
+          targetUri.isPathAbsolute(),
+          "the path component of the target (%s) must start with '/'",
+          targetUri);
+      return newNameResolver(
+          targetUri.toString(), targetUri.getAuthority(), targetUri.getPath().substring(1), args);
+    }
+    return null;
+  }
+
+  private XdsNameResolver newNameResolver(
+      String targetUri, String targetAuthority, String name, Args args) {
+    return new XdsNameResolver(
+        targetUri.toString(),
+        targetAuthority,
+        name,
+        args.getOverrideAuthority(),
+        args.getServiceConfigParser(),
+        args.getSynchronizationContext(),
+        args.getScheduledExecutorService(),
+        bootstrapOverride,
+        args.getMetricRecorder(),
+        args);
   }
 
   @Override

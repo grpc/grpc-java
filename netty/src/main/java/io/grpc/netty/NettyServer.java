@@ -31,6 +31,7 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ObjectPool;
@@ -53,6 +54,7 @@ import io.netty.channel.group.ChannelGroupFuture;
 import io.netty.channel.group.ChannelGroupFutureListener;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.util.AbstractReferenceCounted;
+import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
@@ -61,9 +63,11 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -90,9 +94,11 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final ChannelGroup channelGroup;
   private final boolean autoFlowControl;
   private final int flowControlWindow;
+  private final Set<AsciiString> neverIndexedMetadataKeys;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   private final int softLimitHeaderListSize;
+  private MetricRecorder metricRecorder;
   private final long keepAliveTimeInNanos;
   private final long keepAliveTimeoutInNanos;
   private final long maxConnectionIdleInNanos;
@@ -127,6 +133,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       int maxStreamsPerConnection,
       boolean autoFlowControl,
       int flowControlWindow,
+      Set<AsciiString> neverIndexedMetadataKeys,
       int maxMessageSize,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
@@ -136,8 +143,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
       int maxRstCount, long maxRstPeriodNanos,
-      Attributes eagAttributes, InternalChannelz channelz) {
+      Attributes eagAttributes, InternalChannelz channelz,
+      MetricRecorder metricRecorder) {
     this.addresses = checkNotNull(addresses, "addresses");
+    this.metricRecorder = metricRecorder;
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     checkNotNull(channelOptions, "channelOptions");
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -156,6 +165,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.maxStreamsPerConnection = maxStreamsPerConnection;
     this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
+    this.neverIndexedMetadataKeys = Collections.unmodifiableSet(
+        new HashSet<>(checkNotNull(neverIndexedMetadataKeys, "neverIndexedMetadataKeys")));
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
     this.softLimitHeaderListSize = softLimitHeaderListSize;
@@ -173,6 +184,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.logId = InternalLogId.allocate(getClass(), addresses.isEmpty() ? "No address" :
         String.valueOf(addresses));
   }
+
 
   @Override
   public SocketAddress getListenSocketAddress() {
@@ -260,6 +272,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
                     maxStreamsPerConnection,
                     autoFlowControl,
                     flowControlWindow,
+                    neverIndexedMetadataKeys,
                     maxMessageSize,
                     maxHeaderListSize,
                     softLimitHeaderListSize,
@@ -272,7 +285,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
                     permitKeepAliveTimeInNanos,
                     maxRstCount,
                     maxRstPeriodNanos,
-                    eagAttributes);
+                    eagAttributes,
+                    metricRecorder);
         ServerTransportListener transportListener;
         // This is to order callbacks on the listener, not to guard access to channel.
         synchronized (NettyServer.this) {

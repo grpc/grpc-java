@@ -250,7 +250,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       stream = clientStreamProvider.newStream(method, callOptions, headers, context);
     } else {
       ClientStreamTracer[] tracers =
-          GrpcUtil.getClientStreamTracers(callOptions, headers, 0, false);
+          GrpcUtil.getClientStreamTracers(callOptions, headers, 0,
+              false, false);
       String deadlineName = contextIsDeadlineSource ? "Context" : "CallOptions";
       Long nameResolutionDelay = callOptions.getOption(NAME_RESOLUTION_DELAYED);
       String description = String.format(
@@ -561,7 +562,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
-    observer.onClose(status, trailers);
+    try {
+      observer.onClose(status, trailers);
+    } catch (RuntimeException ex) {
+      log.log(Level.WARNING, "Exception thrown by onClose() in ClientCall", ex);
+    }
   }
 
   @Override

@@ -16,7 +16,7 @@
 
 package io.grpc.rls;
 
-import javax.annotation.CheckReturnValue;
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /** An LruCache is a cache with least recently used eviction. */

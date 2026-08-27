@@ -4,9 +4,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 
 /**
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: io/grpc/reflection/testing/reflection_test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class AnotherReflectableServiceGrpc {
 
@@ -58,6 +55,21 @@ public final class AnotherReflectableServiceGrpc {
         }
       };
     return AnotherReflectableServiceStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static AnotherReflectableServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<AnotherReflectableServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AnotherReflectableServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public AnotherReflectableServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AnotherReflectableServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return AnotherReflectableServiceBlockingV2Stub.newStub(factory, channel);
   }
 
   /**
@@ -140,6 +152,30 @@ public final class AnotherReflectableServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service AnotherReflectableService.
+   */
+  public static final class AnotherReflectableServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingV2Stub> {
+    private AnotherReflectableServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected AnotherReflectableServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new AnotherReflectableServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.reflection.testing.Reply method(io.grpc.reflection.testing.Request request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
+          getChannel(), getMethodMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do limited synchronous rpc calls to service AnotherReflectableService.
    */
   public static final class AnotherReflectableServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingStub> {

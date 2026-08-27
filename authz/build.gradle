@@ -15,7 +15,6 @@ dependencies {
             libraries.guava.jre // JRE required by transitive protobuf-java-util
 
     annotationProcessor libraries.auto.value
-    compileOnly libraries.javax.annotation
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),

@@ -971,8 +971,8 @@ public class ClientCallsTest {
         }
 
         @Override public void halfClose() {
-          Thread.currentThread().interrupt();
           super.halfClose();
+          Thread.currentThread().interrupt();
         }
       };
     }

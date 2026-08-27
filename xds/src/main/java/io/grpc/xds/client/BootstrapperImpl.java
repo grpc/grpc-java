@@ -19,8 +19,11 @@ package io.grpc.xds.client;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.CallCredentials;
+import io.grpc.CompositeCallCredentials;
 import io.grpc.Internal;
 import io.grpc.InternalLogId;
+import io.grpc.auth.JwtTokenFileCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
@@ -31,9 +34,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import javax.annotation.Nullable;
 
 /**
  * A {@link Bootstrapper} implementation that reads xDS configurations from local file system.
@@ -43,6 +49,8 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   public static final String GRPC_EXPERIMENTAL_XDS_FALLBACK =
       "GRPC_EXPERIMENTAL_XDS_FALLBACK";
+  public static final String GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING =
+      "GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING";
 
   // Client features.
   @VisibleForTesting
@@ -54,9 +62,20 @@ public abstract class BootstrapperImpl extends Bootstrapper {
   // Server features.
   private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
   private static final String SERVER_FEATURE_TRUSTED_XDS_SERVER = "trusted_xds_server";
+  private static final String
+      SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR = "resource_timer_is_transient_error";
+  private static final String SERVER_FEATURE_FAIL_ON_DATA_ERRORS = "fail_on_data_errors";
 
   @VisibleForTesting
-  static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, false);
+  static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, true);
+
+  @VisibleForTesting
+  public static boolean enableXdsBootstrapCallCreds = GrpcUtil.getFlag(
+      "GRPC_EXPERIMENTAL_XDS_BOOTSTRAP_CALL_CREDS", false);
+
+  @VisibleForTesting
+  public static boolean xdsDataErrorHandlingEnabled
+      = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING, false);
 
   protected final XdsLogger logger;
 
@@ -230,7 +249,16 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       builder.authorities(authorityInfoMapBuilder.buildOrThrow());
     }
 
+    Map<String, ?> rawAllowedGrpcServices = JsonUtil.getObject(rawData, "allowed_grpc_services");
+    builder.implSpecificObject(parseImplSpecificObject(rawAllowedGrpcServices));
+
     return builder;
+  }
+
+  protected Optional<Object> parseImplSpecificObject(
+      @Nullable Map<String, ?> rawAllowedGrpcServices)
+      throws XdsInitializationException {
+    return Optional.empty();
   }
 
   private List<ServerInfo> parseServerInfos(List<?> rawServerConfigs, XdsLogger logger)
@@ -247,20 +275,72 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
       Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
 
+      boolean resourceTimerIsTransientError = false;
       boolean ignoreResourceDeletion = false;
+      boolean failOnDataErrors = false;
       // "For forward compatibility reasons, the client will ignore any entry in the list that it
       // does not understand, regardless of type."
       List<?> serverFeatures = JsonUtil.getList(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
-        ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
+        if (serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION)) {
+          ignoreResourceDeletion = true;
+        }
+        resourceTimerIsTransientError = xdsDataErrorHandlingEnabled
+            && serverFeatures.contains(SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR);
+        failOnDataErrors = xdsDataErrorHandlingEnabled
+            && serverFeatures.contains(SERVER_FEATURE_FAIL_ON_DATA_ERRORS);
+      }
+      CallCredentials callCredentials = null;
+      List<?> rawCallCreds = JsonUtil.getList(serverConfig, "call_creds");
+      if (enableXdsBootstrapCallCreds && rawCallCreds != null) {
+        List<Map<String, ?>> callCredsList = JsonUtil.checkObjectList(rawCallCreds);
+        callCredentials = parseCallCredentials(callCredsList, serverUri);
       }
       servers.add(
           ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion,
               serverFeatures != null
-                  && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER)));
+                  && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER),
+              resourceTimerIsTransientError, failOnDataErrors, callCredentials));
     }
     return servers.build();
+  }
+
+  @Nullable
+  private CallCredentials parseCallCredentials(List<Map<String, ?>> jsonList, String serverUri)
+      throws XdsInitializationException {
+    List<CallCredentials> parsedCreds = new ArrayList<>();
+    for (Map<String, ?> credJson : jsonList) {
+      String type = JsonUtil.getString(credJson, "type");
+      if (type == null) {
+        throw new XdsInitializationException(
+            "Invalid bootstrap: server " + serverUri + " with 'call_creds' type unspecified");
+      }
+      if ("jwt_token_file".equals(type)) {
+        Map<String, ?> config = JsonUtil.getObject(credJson, "config");
+        if (config == null) {
+          throw new XdsInitializationException(
+              "Invalid bootstrap: server " + serverUri + " with 'jwt_token_file' config missing");
+        }
+        String jwtTokenFile = JsonUtil.getString(config, "jwt_token_file");
+        if (jwtTokenFile == null || jwtTokenFile.isEmpty()) {
+          throw new XdsInitializationException(
+              "Invalid bootstrap: server " + serverUri
+                  + " with 'jwt_token_file' jwt_token_file missing or empty");
+        }
+        parsedCreds.add(new JwtTokenFileCallCredentials(jwtTokenFile));
+      } else {
+        logger.log(XdsLogLevel.INFO, "Skipping unsupported call credential type: {0}", type);
+      }
+    }
+    if (parsedCreds.isEmpty()) {
+      return null;
+    }
+    CallCredentials combined = parsedCreds.get(0);
+    for (int i = 1; i < parsedCreds.size(); i++) {
+      combined = new CompositeCallCredentials(combined, parsedCreds.get(i));
+    }
+    return combined;
   }
 
   @VisibleForTesting

@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.LoadBalancerMatchers.pickerReturns;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -50,6 +51,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
+import io.grpc.LoadBalancer.FixedResultPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -62,7 +64,6 @@ import io.grpc.Status;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.util.AbstractTestHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
-import io.grpc.xds.LeastRequestLoadBalancer.EmptyPicker;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestLbState;
 import io.grpc.xds.LeastRequestLoadBalancer.ReadyPicker;
@@ -238,7 +239,8 @@ public class LeastRequestLoadBalancerTest {
     ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
     Subchannel subchannel = getSubchannel(servers.get(0));
 
-    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
+    inOrder.verify(helper)
+        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
     assertThat(childLbState.getCurrentState()).isEqualTo(CONNECTING);
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
@@ -251,7 +253,8 @@ public class LeastRequestLoadBalancerTest {
     assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
     refreshInvokedAndUpdateBS(inOrder, CONNECTING);
-    assertThat(pickerCaptor.getValue()).isInstanceOf(EmptyPicker.class);
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs))
+        .isEqualTo(PickResult.withNoResult());
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(helper).refreshNameResolution();
@@ -302,7 +305,8 @@ public class LeastRequestLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
-    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
+    inOrder.verify(helper)
+        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
 
     List<Subchannel> savedSubchannels = new ArrayList<>(subchannels.values());
     loadBalancer.shutdown();
@@ -324,7 +328,8 @@ public class LeastRequestLoadBalancerTest {
             .build());
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
-    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
+    inOrder.verify(helper)
+        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
 
     // Simulate state transitions for each subchannel individually.
     List<ChildLbState> children = new ArrayList<>(loadBalancer.getChildLbStates());
@@ -384,7 +389,8 @@ public class LeastRequestLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
+    inOrder.verify(helper)
+        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
 
     // Simulate state transitions for each subchannel individually.
     for (Subchannel sc : subchannels.values()) {
@@ -399,7 +405,8 @@ public class LeastRequestLoadBalancerTest {
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(IDLE));
       inOrder.verify(helper).refreshNameResolution();
       verify(sc, times(2)).requestConnection();
-      inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
+      inOrder.verify(helper)
+          .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
     }
 
     AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
@@ -467,14 +474,6 @@ public class LeastRequestLoadBalancerTest {
     // Finally ensure a finished RPC decreases inFlight
     streamTracer1.streamClosed(Status.OK);
     assertEquals(0, ((LeastRequestLbState) childLbStates.get(0)).getActiveRequests());
-  }
-
-  @Test
-  public void pickerEmptyList() throws Exception {
-    SubchannelPicker picker = new EmptyPicker();
-
-    assertNull(picker.pickSubchannel(mockArgs).getSubchannel());
-    assertEquals(Status.OK, picker.pickSubchannel(mockArgs).getStatus());
   }
 
   @Test
@@ -554,7 +553,8 @@ public class LeastRequestLoadBalancerTest {
     Iterator<SubchannelPicker> pickers = pickerCaptor.getAllValues().iterator();
     // The picker is incrementally updated as subchannels become READY
     assertEquals(CONNECTING, stateIterator.next());
-    assertThat(pickers.next()).isInstanceOf(EmptyPicker.class);
+    assertThat(pickers.next().pickSubchannel(mockArgs))
+        .isEqualTo(PickResult.withNoResult());
     assertEquals(READY, stateIterator.next());
     assertThat(getList(pickers.next())).containsExactly(sc1);
     assertEquals(READY, stateIterator.next());
@@ -585,8 +585,8 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void internalPickerComparisons() {
-    EmptyPicker empty1 = new EmptyPicker();
-    EmptyPicker empty2 = new EmptyPicker();
+    FixedResultPicker empty1 = new FixedResultPicker(PickResult.withNoResult());
+    FixedResultPicker empty2 = new FixedResultPicker(PickResult.withNoResult());
 
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());

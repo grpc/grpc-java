@@ -2,17 +2,17 @@ package io.grpc.binder.internal;
 
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
- * Tracks which {@link BinderTransport.BinderServerTransport} are currently active and allows
- * invoking a {@link Runnable} only once all transports are terminated.
+ * Tracks which {@link BinderServerTransport} are currently active and allows invoking a {@link
+ * Runnable} only once all transports are terminated.
  */
 final class ActiveTransportTracker implements ServerListener {
   private final ServerListener delegate;

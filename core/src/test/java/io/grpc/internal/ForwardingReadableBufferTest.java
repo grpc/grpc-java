@@ -25,7 +25,6 @@ import io.grpc.ForwardingTestUtil;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
 import java.util.Collections;
 import org.junit.Before;
 import org.junit.Rule;
@@ -89,14 +88,6 @@ public class ForwardingReadableBufferTest {
     buffer.readBytes(dest, 1, 2);
 
     verify(delegate).readBytes(dest, 1, 2);
-  }
-
-  @Test
-  public void readBytes_overload1() {
-    ByteBuffer dest = ByteBuffer.allocate(0);
-    buffer.readBytes(dest);
-
-    verify(delegate).readBytes(dest);
   }
 
   @Test

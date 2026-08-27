@@ -19,8 +19,7 @@ package io.grpc.xds;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC;
 import io.grpc.Internal;
 import io.grpc.ServerInterceptor;
-import io.grpc.xds.RbacConfig;
-import io.grpc.xds.RbacFilter;
+import io.grpc.xds.Filter.FilterContext;
 
 /** This class exposes some functionality in RbacFilter to other packages. */
 @Internal
@@ -30,11 +29,13 @@ public final class InternalRbacFilter {
 
   /** Parses RBAC filter config and creates AuthorizationServerInterceptor. */
   public static ServerInterceptor createInterceptor(RBAC rbac) {
-    ConfigOrError<RbacConfig> filterConfig = RbacFilter.parseRbacConfig(rbac);
+    ConfigOrError<RbacConfig> filterConfig = RbacFilter.Provider.parseRbacConfig(rbac);
     if (filterConfig.errorDetail != null) {
       throw new IllegalArgumentException(
         String.format("Failed to parse Rbac policy: %s", filterConfig.errorDetail));
     }
-    return new RbacFilter().buildServerInterceptor(filterConfig.config, null);
+    return new RbacFilter.Provider().newInstance(
+        FilterContext.create("internalRbacFilter", new io.grpc.MetricRecorder() {}))
+        .buildServerInterceptor(filterConfig.config, null);
   }
 }

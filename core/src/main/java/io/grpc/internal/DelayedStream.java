@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.CheckReturnValue;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
@@ -30,8 +32,6 @@ import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.CheckReturnValue;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A stream that queues requests before the transport is available, and delegates to a real stream
@@ -42,6 +42,7 @@ import javax.annotation.concurrent.GuardedBy;
  * necessary.
  */
 class DelayedStream implements ClientStream {
+  private final String bufferContext;
   /** {@code true} once realStream is valid and all pending calls have been drained. */
   private volatile boolean passThrough;
   /**
@@ -63,6 +64,14 @@ class DelayedStream implements ClientStream {
   private long streamSetTimeNanos;
   // No need to synchronize; start() synchronization provides a happens-before
   private List<Runnable> preStartPendingCalls = new ArrayList<>();
+
+  /**
+   * Create a delayed stream with debug context {@code bufferContext}. The context is what this
+   * stream is delayed by (e.g., "connecting", "call_credentials").
+   */
+  public DelayedStream(String bufferContext) {
+    this.bufferContext = checkNotNull(bufferContext, "bufferContext");
+  }
 
   @Override
   public void setMaxInboundMessageSize(final int maxSize) {
@@ -104,11 +113,13 @@ class DelayedStream implements ClientStream {
         return;
       }
       if (realStream != null) {
-        insight.appendKeyValue("buffered_nanos", streamSetTimeNanos - startTimeNanos);
+        insight.appendKeyValue(
+            bufferContext + "_delay", "" + (streamSetTimeNanos - startTimeNanos) + "ns");
         realStream.appendTimeoutInsight(insight);
       } else {
-        insight.appendKeyValue("buffered_nanos", System.nanoTime() - startTimeNanos);
-        insight.append("waiting_for_connection");
+        insight.appendKeyValue(
+            bufferContext + "_delay", "" + (System.nanoTime() - startTimeNanos) + "ns");
+        insight.append("was_still_waiting");
       }
     }
   }

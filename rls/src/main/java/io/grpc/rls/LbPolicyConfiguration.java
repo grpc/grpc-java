@@ -31,6 +31,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
@@ -209,24 +210,34 @@ final class LbPolicyConfiguration {
         new HashMap<>();
 
     private final ChildLoadBalancerHelperProvider childLbHelperProvider;
-    private final ChildLbStatusListener childLbStatusListener;
     private final ChildLoadBalancingPolicy childPolicy;
-    private final ResolvedAddressFactory childLbResolvedAddressFactory;
+    private ResolvedAddressFactory childLbResolvedAddressFactory;
 
     public RefCountedChildPolicyWrapperFactory(
         ChildLoadBalancingPolicy childPolicy,
         ResolvedAddressFactory childLbResolvedAddressFactory,
-        ChildLoadBalancerHelperProvider childLbHelperProvider,
-        ChildLbStatusListener childLbStatusListener) {
+        ChildLoadBalancerHelperProvider childLbHelperProvider) {
       this.childPolicy = checkNotNull(childPolicy, "childPolicy");
       this.childLbResolvedAddressFactory =
           checkNotNull(childLbResolvedAddressFactory, "childLbResolvedAddressFactory");
       this.childLbHelperProvider = checkNotNull(childLbHelperProvider, "childLbHelperProvider");
-      this.childLbStatusListener = checkNotNull(childLbStatusListener, "childLbStatusListener");
     }
 
     void init() {
       childLbHelperProvider.init();
+    }
+
+    Status acceptResolvedAddressFactory(ResolvedAddressFactory childLbResolvedAddressFactory) {
+      this.childLbResolvedAddressFactory = childLbResolvedAddressFactory;
+      Status status = Status.OK;
+      for (RefCountedChildPolicyWrapper wrapper : childPolicyMap.values()) {
+        Status newStatus =
+            wrapper.childPolicyWrapper.acceptResolvedAddressFactory(childLbResolvedAddressFactory);
+        if (!newStatus.isOk()) {
+          status = newStatus;
+        }
+      }
+      return status;
     }
 
     ChildPolicyWrapper createOrGet(String target) {
@@ -234,10 +245,10 @@ final class LbPolicyConfiguration {
       RefCountedChildPolicyWrapper pooledChildPolicyWrapper = childPolicyMap.get(target);
       if (pooledChildPolicyWrapper == null) {
         ChildPolicyWrapper childPolicyWrapper = new ChildPolicyWrapper(
-            target, childPolicy, childLbResolvedAddressFactory, childLbHelperProvider,
-            childLbStatusListener);
+            target, childPolicy, childLbHelperProvider);
         pooledChildPolicyWrapper = RefCountedChildPolicyWrapper.of(childPolicyWrapper);
         childPolicyMap.put(target, pooledChildPolicyWrapper);
+        childPolicyWrapper.start(childLbResolvedAddressFactory);
         return pooledChildPolicyWrapper.getObject();
       } else {
         ChildPolicyWrapper childPolicyWrapper = pooledChildPolicyWrapper.getObject();
@@ -277,37 +288,43 @@ final class LbPolicyConfiguration {
     private final String target;
     private final ChildPolicyReportingHelper helper;
     private final LoadBalancer lb;
+    private final Object childLbConfig;
     private volatile SubchannelPicker picker;
     private ConnectivityState state;
 
     public ChildPolicyWrapper(
         String target,
         ChildLoadBalancingPolicy childPolicy,
-        final ResolvedAddressFactory childLbResolvedAddressFactory,
-        ChildLoadBalancerHelperProvider childLbHelperProvider,
-        ChildLbStatusListener childLbStatusListener) {
+        ChildLoadBalancerHelperProvider childLbHelperProvider) {
       this.target = target;
-      this.helper =
-          new ChildPolicyReportingHelper(childLbHelperProvider, childLbStatusListener);
+      this.helper = new ChildPolicyReportingHelper(childLbHelperProvider);
       LoadBalancerProvider lbProvider = childPolicy.getEffectiveLbProvider();
       final ConfigOrError lbConfig =
           lbProvider
               .parseLoadBalancingPolicyConfig(
                   childPolicy.getEffectiveChildPolicy(target));
       this.lb = lbProvider.newLoadBalancer(helper);
+      this.childLbConfig = lbConfig.getConfig();
       helper.getChannelLogger().log(
-          ChannelLogLevel.DEBUG, "RLS child lb created. config: {0}", lbConfig.getConfig());
+          ChannelLogLevel.DEBUG, "RLS child lb created. config: {0}", childLbConfig);
+    }
+
+    void start(ResolvedAddressFactory childLbResolvedAddressFactory) {
       helper.getSynchronizationContext().execute(
           new Runnable() {
             @Override
             public void run() {
-              if (!lb.acceptResolvedAddresses(
-                  childLbResolvedAddressFactory.create(lbConfig.getConfig())).isOk()) {
+              if (!acceptResolvedAddressFactory(childLbResolvedAddressFactory).isOk()) {
                 helper.refreshNameResolution();
               }
               lb.requestConnection();
             }
           });
+    }
+
+    Status acceptResolvedAddressFactory(ResolvedAddressFactory childLbResolvedAddressFactory) {
+      helper.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
+      return lb.acceptResolvedAddresses(childLbResolvedAddressFactory.create(childLbConfig));
     }
 
     String getTarget() {
@@ -366,14 +383,11 @@ final class LbPolicyConfiguration {
     final class ChildPolicyReportingHelper extends ForwardingLoadBalancerHelper {
 
       private final ChildLoadBalancerHelper delegate;
-      private final ChildLbStatusListener listener;
 
       ChildPolicyReportingHelper(
-          ChildLoadBalancerHelperProvider childHelperProvider,
-          ChildLbStatusListener listener) {
+          ChildLoadBalancerHelperProvider childHelperProvider) {
         checkNotNull(childHelperProvider, "childHelperProvider");
         this.delegate = childHelperProvider.forTarget(getTarget());
-        this.listener = checkNotNull(listener, "listener");
       }
 
       @Override
@@ -386,16 +400,8 @@ final class LbPolicyConfiguration {
         picker = newPicker;
         state = newState;
         super.updateBalancingState(newState, newPicker);
-        listener.onStatusChanged(newState);
       }
     }
-  }
-
-  /** Listener for child lb status change events. */
-  interface ChildLbStatusListener {
-
-    /** Notifies when child lb status changes. */
-    void onStatusChanged(ConnectivityState newState);
   }
 
   private static final class RefCountedChildPolicyWrapper

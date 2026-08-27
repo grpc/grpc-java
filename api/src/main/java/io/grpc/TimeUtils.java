@@ -17,7 +17,6 @@
 package io.grpc;
 
 import java.time.Duration;
-import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 final class TimeUtils {
   private TimeUtils() {}

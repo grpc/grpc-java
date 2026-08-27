@@ -10,7 +10,7 @@ option go_package = "github.com/cncf/xds/go/xds/data/orca/v3";
 import "validate/validate.proto";
 
 // See section `ORCA load report format` of the design document in
-// :ref:`https://github.com/envoyproxy/envoy/issues/6614`.
+// https://github.com/envoyproxy/envoy/issues/6614.
 
 message OrcaLoadReport {
   // CPU utilization expressed as a fraction of available CPU resources. This

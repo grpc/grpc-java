@@ -18,6 +18,7 @@ package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -28,9 +29,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -100,8 +101,10 @@ public final class ManagedChannelRegistry {
     if (instance == null) {
       List<ManagedChannelProvider> providerList = ServiceProviders.loadAll(
           ManagedChannelProvider.class,
-          getHardCodedClasses(),
-          ManagedChannelProvider.class.getClassLoader(),
+          ServiceLoader
+            .load(ManagedChannelProvider.class, ManagedChannelProvider.class.getClassLoader())
+            .iterator(),
+          ManagedChannelRegistry::getHardCodedClasses,
           new ManagedChannelPriorityAccessor());
       instance = new ManagedChannelRegistry();
       for (ManagedChannelProvider provider : providerList) {
@@ -155,13 +158,15 @@ public final class ManagedChannelRegistry {
     return newChannelBuilder(NameResolverRegistry.getDefaultRegistry(), target, creds);
   }
 
-  @VisibleForTesting
   ManagedChannelBuilder<?> newChannelBuilder(NameResolverRegistry nameResolverRegistry,
       String target, ChannelCredentials creds) {
     NameResolverProvider nameResolverProvider = null;
     try {
-      URI uri = new URI(target);
-      nameResolverProvider = nameResolverRegistry.getProviderForScheme(uri.getScheme());
+      String scheme =
+          FeatureFlags.getRfc3986UrisEnabled()
+              ? Uri.parse(target).getScheme()
+              : new URI(target).getScheme();
+      nameResolverProvider = nameResolverRegistry.getProviderForScheme(scheme);
     } catch (URISyntaxException ignore) {
       // bad URI found, just ignore and continue
     }
@@ -192,7 +197,7 @@ public final class ManagedChannelRegistry {
         continue;
       }
       ManagedChannelProvider.NewChannelBuilderResult result
-          = provider.newChannelBuilder(target, creds);
+          = provider.newChannelBuilder(target, creds, nameResolverRegistry, nameResolverProvider);
       if (result.getChannelBuilder() != null) {
         return result.getChannelBuilder();
       }

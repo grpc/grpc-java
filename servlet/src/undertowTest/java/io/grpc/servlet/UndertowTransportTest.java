@@ -63,6 +63,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
 
   private static final String HOST = "localhost";
   private static final String MYAPP = "/service";
+  private static final long MAX_ENTITY_SIZE = Integer.MAX_VALUE;
 
   private final FakeClock fakeClock = new FakeClock();
 
@@ -100,7 +101,9 @@ public class UndertowTransportTest extends AbstractTransportTest {
         ServerTransportListener serverTransportListener =
             listener.transportCreated(new ServerTransportImpl(scheduler));
         ServletAdapter adapter =
-            new ServletAdapter(serverTransportListener, streamTracerFactories, Integer.MAX_VALUE);
+            new ServletAdapter(serverTransportListener, streamTracerFactories,
+                ServletAdapter.DEFAULT_METHOD_NAME_RESOLVER,
+                Integer.MAX_VALUE);
         GrpcServlet grpcServlet = new GrpcServlet(adapter);
         InstanceFactory<? extends Servlet> instanceFactory =
             () -> new ImmediateInstanceHandle<>(grpcServlet);
@@ -129,6 +132,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
         undertowServer =
             Undertow.builder()
                 .setServerOption(UndertowOptions.ENABLE_HTTP2, true)
+                .setServerOption(UndertowOptions.MAX_ENTITY_SIZE, MAX_ENTITY_SIZE)
                 .setServerOption(UndertowOptions.SHUTDOWN_TIMEOUT, 5000 /* 5 sec */)
                 .addHttpListener(0, HOST)
                 .setHandler(path)

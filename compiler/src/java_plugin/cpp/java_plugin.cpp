@@ -23,6 +23,9 @@
 
 #include "java_generator.h"
 #include <google/protobuf/compiler/code_generator.h>
+#if GOOGLE_PROTOBUF_VERSION >= 5027000
+#include <google/protobuf/compiler/java/java_features.pb.h>
+#endif
 #include <google/protobuf/compiler/plugin.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/io/zero_copy_stream.h>
@@ -55,7 +58,17 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
     return protobuf::Edition::EDITION_PROTO2;
   }
   protobuf::Edition GetMaximumEdition() const override {
+#if GOOGLE_PROTOBUF_VERSION >= 7035000
+    return protobuf::Edition::EDITION_2026;
+#elif GOOGLE_PROTOBUF_VERSION >= 6032000
+    return protobuf::Edition::EDITION_2024;
+#else
     return protobuf::Edition::EDITION_2023;
+#endif
+  }
+  std::vector<const protobuf::FieldDescriptor*> GetFeatureExtensions()
+      const override {
+    return {GetExtensionReflection(pb::java)};
   }
 #else
   uint64_t GetSupportedFeatures() const override {
@@ -73,7 +86,7 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
     java_grpc_generator::ProtoFlavor flavor =
         java_grpc_generator::ProtoFlavor::NORMAL;
     java_grpc_generator::GeneratedAnnotation generated_annotation =
-        java_grpc_generator::GeneratedAnnotation::JAVAX;
+        java_grpc_generator::GeneratedAnnotation::OMIT;
 
     bool disable_version = false;
     for (size_t i = 0; i < options.size(); i++) {

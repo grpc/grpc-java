@@ -22,6 +22,7 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
@@ -45,6 +46,7 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.logging.Logger;
 import javax.servlet.AsyncContext;
 import javax.servlet.AsyncEvent;
@@ -72,18 +74,23 @@ import javax.servlet.http.HttpServletResponse;
 public final class ServletAdapter {
 
   static final Logger logger = Logger.getLogger(ServletAdapter.class.getName());
+  static final Function<HttpServletRequest, String> DEFAULT_METHOD_NAME_RESOLVER =
+          req -> req.getRequestURI().substring(1); // remove the leading "/"
 
   private final ServerTransportListener transportListener;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
+  private final Function<HttpServletRequest, String> methodNameResolver;
   private final int maxInboundMessageSize;
   private final Attributes attributes;
 
   ServletAdapter(
       ServerTransportListener transportListener,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      Function<HttpServletRequest, String> methodNameResolver,
       int maxInboundMessageSize) {
     this.transportListener = transportListener;
     this.streamTracerFactories = streamTracerFactories;
+    this.methodNameResolver = methodNameResolver;
     this.maxInboundMessageSize = maxInboundMessageSize;
     attributes = transportListener.transportReady(Attributes.EMPTY);
   }
@@ -119,7 +126,7 @@ public final class ServletAdapter {
 
     AsyncContext asyncCtx = req.startAsync(req, resp);
 
-    String method = req.getRequestURI().substring(1); // remove the leading "/"
+    String method = methodNameResolver.apply(req);
     Metadata headers = getHeaders(req);
 
     if (logger.isLoggable(FINEST)) {
@@ -128,10 +135,9 @@ public final class ServletAdapter {
     }
 
     Long timeoutNanos = headers.get(TIMEOUT_KEY);
-    if (timeoutNanos == null) {
-      timeoutNanos = 0L;
-    }
-    asyncCtx.setTimeout(TimeUnit.NANOSECONDS.toMillis(timeoutNanos));
+    asyncCtx.setTimeout(timeoutNanos != null
+        ? TimeUnit.NANOSECONDS.toMillis(timeoutNanos) + ASYNC_TIMEOUT_SAFETY_MARGIN
+        : 0);
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, method, headers);
 
@@ -157,6 +163,12 @@ public final class ServletAdapter {
         .setReadListener(new GrpcReadListener(stream, asyncCtx, logId));
     asyncCtx.addListener(new GrpcAsyncListener(stream, logId));
   }
+
+  /**
+   * Deadlines are managed via Context, servlet async timeout is not supposed to happen.
+   */
+  @VisibleForTesting
+  static final long ASYNC_TIMEOUT_SAFETY_MARGIN = 5_000;
 
   // This method must use Enumeration and its members, since that is the only way to read headers
   // from the servlet api.
@@ -215,7 +227,9 @@ public final class ServletAdapter {
     }
 
     @Override
-    public void onComplete(AsyncEvent event) {}
+    public void onComplete(AsyncEvent event) {
+      stream.asyncCompleted = true;
+    }
 
     @Override
     public void onTimeout(AsyncEvent event) {

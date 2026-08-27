@@ -193,7 +193,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
     LoadBalancer oldDelegate = lb.getDelegate();
 
-    Status addressAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    Status addressAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
@@ -208,7 +208,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   public void acceptResolvedAddresses_shutsDownOldBalancer() throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"round_robin\": { } } ] }");
-    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig);
+    ConfigOrError lbConfigs = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
 
     final List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
@@ -235,7 +235,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     };
     lb.setDelegate(testlb);
 
-    Status addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    Status addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -252,7 +252,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   public void acceptResolvedAddresses_propagateLbConfigToDelegate() throws Exception {
     Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
-    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig);
+    ConfigOrError lbConfigs = lbf.parseLoadBalancingPolicyConfig(rawServiceConfig);
     assertThat(lbConfigs.getConfig()).isNotNull();
 
     final List<EquivalentAddressGroup> servers =
@@ -260,7 +260,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     Helper helper = new TestHelper();
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
 
-    Status addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    Status addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -280,9 +280,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"low\" } } ] }");
-    lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig);
+    lbConfigs = lbf.parseLoadBalancingPolicyConfig(rawServiceConfig);
 
-    addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -305,7 +305,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   public void acceptResolvedAddresses_propagateAddrsToDelegate() throws Exception {
     Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
-    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig);
+    ConfigOrError lbConfigs = lbf.parseLoadBalancingPolicyConfig(rawServiceConfig);
     assertThat(lbConfigs.getConfig()).isNotNull();
 
     Helper helper = new TestHelper();
@@ -313,7 +313,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new InetSocketAddress(8080){}));
 
-    Status addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    Status addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -329,7 +329,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     servers =
         Collections.singletonList(new EquivalentAddressGroup(new InetSocketAddress(9090){}));
-    addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -353,8 +353,8 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
-    ConfigOrError lbConfig = lbf.parseLoadBalancerPolicy(serviceConfig);
-    Status addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    ConfigOrError lbConfig = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
+    Status addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setLoadBalancingPolicyConfig(lbConfig.getConfig())
@@ -373,8 +373,8 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb2\": { \"setting1\": \"high\" } } ] }");
     ConfigOrError lbConfigs =
-        lbf.parseLoadBalancerPolicy(rawServiceConfig);
-    Status addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+        lbf.parseLoadBalancingPolicyConfig(rawServiceConfig);
+    Status addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -394,7 +394,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   public void acceptResolvedAddresses_useSelectedLbPolicy() throws Exception {
     Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
-    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig);
+    ConfigOrError lbConfigs = lbf.parseLoadBalancingPolicyConfig(rawServiceConfig);
     assertThat(lbConfigs.getConfig()).isNotNull();
     assertThat(((PolicySelection) lbConfigs.getConfig()).provider.getClass().getName())
         .isEqualTo("io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
@@ -409,7 +409,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       }
     };
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
-    Status addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    Status addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -431,7 +431,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       }
     };
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
-    Status addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    Status addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(null)
@@ -446,7 +446,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         .newLoadBalancer(new TestHelper());
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    Status addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    Status addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(null)
@@ -468,7 +468,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     AutoConfiguredLoadBalancer lb =
         new AutoConfiguredLoadBalancerFactory(GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(helper);
-    Status addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    Status addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
@@ -481,8 +481,8 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     nextParsedConfigOrError.set(testLbParsedConfig);
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { } } ] }");
-    ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig);
-    addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    ConfigOrError lbConfigs = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
+    addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -504,8 +504,8 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     testLbParsedConfig = ConfigOrError.fromConfig("bar");
     nextParsedConfigOrError.set(testLbParsedConfig);
     serviceConfig = parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { } } ] }");
-    lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig);
-    addressesAcceptanceStatus = lb.tryAcceptResolvedAddresses(
+    lbConfigs = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
+    addressesAcceptanceStatus = lb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -519,33 +519,33 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void parseLoadBalancerConfig_failedOnUnknown() throws Exception {
+  public void parseLoadBalancingConfig_failedOnUnknown() throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"magic_balancer\": {} } ] }");
-    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig);
+    ConfigOrError parsed = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
     assertThat(parsed.getError()).isNotNull();
     assertThat(parsed.getError().getDescription())
         .isEqualTo("None of [magic_balancer] specified by Service Config are available.");
   }
 
   @Test
-  public void parseLoadBalancerPolicy_failedOnUnknown() throws Exception {
+  public void parseLoadBalancingPolicy_failedOnUnknown() throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingPolicy\": \"magic_balancer\"}");
-    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig);
+    ConfigOrError parsed = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
     assertThat(parsed.getError()).isNotNull();
     assertThat(parsed.getError().getDescription())
         .isEqualTo("None of [magic_balancer] specified by Service Config are available.");
   }
 
   @Test
-  public void parseLoadBalancerConfig_multipleValidPolicies() throws Exception {
+  public void parseLoadBalancingConfig_multipleValidPolicies() throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig(
             "{\"loadBalancingConfig\": ["
                 + "{\"round_robin\": {}},"
                 + "{\"test_lb\": {} } ] }");
-    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig);
+    ConfigOrError parsed = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
     assertThat(parsed).isNotNull();
     assertThat(parsed.getError()).isNull();
     assertThat(parsed.getConfig()).isInstanceOf(PolicySelection.class);
@@ -554,12 +554,12 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void parseLoadBalancerConfig_policyShouldBeIgnoredIfConfigExists() throws Exception {
+  public void parseLoadBalancingConfig_policyShouldBeIgnoredIfConfigExists() throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig(
             "{\"loadBalancingConfig\": [{\"round_robin\": {} } ],"
                 + "\"loadBalancingPolicy\": \"pick_first\" }");
-    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig);
+    ConfigOrError parsed = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
     assertThat(parsed).isNotNull();
     assertThat(parsed.getError()).isNull();
     assertThat(parsed.getConfig()).isInstanceOf(PolicySelection.class);
@@ -568,13 +568,13 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void parseLoadBalancerConfig_policyShouldBeIgnoredEvenIfUnknownPolicyExists()
+  public void parseLoadBalancingConfig_policyShouldBeIgnoredEvenIfUnknownPolicyExists()
       throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig(
             "{\"loadBalancingConfig\": [{\"magic_balancer\": {} } ],"
                 + "\"loadBalancingPolicy\": \"round_robin\" }");
-    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig);
+    ConfigOrError parsed = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
     assertThat(parsed.getError()).isNotNull();
     assertThat(parsed.getError().getDescription())
         .isEqualTo("None of [magic_balancer] specified by Service Config are available.");
@@ -582,7 +582,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void parseLoadBalancerConfig_firstInvalidPolicy() throws Exception {
+  public void parseLoadBalancingConfig_firstInvalidPolicy() throws Exception {
     when(testLbBalancerProvider.parseLoadBalancingPolicyConfig(any(Map.class)))
         .thenReturn(ConfigOrError.fromError(Status.UNKNOWN));
     Map<String, ?> serviceConfig =
@@ -590,7 +590,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             "{\"loadBalancingConfig\": ["
                 + "{\"test_lb\": {}},"
                 + "{\"round_robin\": {} } ] }");
-    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig);
+    ConfigOrError parsed = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
     assertThat(parsed).isNotNull();
     assertThat(parsed.getConfig()).isNull();
     assertThat(parsed.getError()).isEqualTo(Status.UNKNOWN);
@@ -598,7 +598,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void parseLoadBalancerConfig_firstValidSecondInvalidPolicy() throws Exception {
+  public void parseLoadBalancingConfig_firstValidSecondInvalidPolicy() throws Exception {
     when(testLbBalancerProvider.parseLoadBalancingPolicyConfig(any(Map.class)))
         .thenReturn(ConfigOrError.fromError(Status.UNKNOWN));
     Map<String, ?> serviceConfig =
@@ -606,32 +606,32 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             "{\"loadBalancingConfig\": ["
                 + "{\"round_robin\": {}},"
                 + "{\"test_lb\": {} } ] }");
-    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig);
+    ConfigOrError parsed = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
     assertThat(parsed).isNotNull();
     assertThat(parsed.getConfig()).isNotNull();
     assertThat(((PolicySelection) parsed.getConfig()).config).isNotNull();
   }
 
   @Test
-  public void parseLoadBalancerConfig_someProvidesAreNotAvailable() throws Exception {
+  public void parseLoadBalancingConfig_someProvidesAreNotAvailable() throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ "
             + "{\"magic_balancer\": {} },"
             + "{\"round_robin\": {}} ] }");
-    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(serviceConfig);
+    ConfigOrError parsed = lbf.parseLoadBalancingPolicyConfig(serviceConfig);
     assertThat(parsed).isNotNull();
     assertThat(parsed.getConfig()).isNotNull();
     assertThat(((PolicySelection) parsed.getConfig()).config).isNotNull();
   }
 
   @Test
-  public void parseLoadBalancerConfig_lbConfigPropagated() throws Exception {
+  public void parseLoadBalancingConfig_lbConfigPropagated() throws Exception {
     Map<String, ?> rawServiceConfig =
         parseConfig(
             "{\"loadBalancingConfig\": ["
                 + "{\"pick_first\": {\"shuffleAddressList\": true } }"
                 + "] }");
-    ConfigOrError parsed = lbf.parseLoadBalancerPolicy(rawServiceConfig);
+    ConfigOrError parsed = lbf.parseLoadBalancingPolicyConfig(rawServiceConfig);
     assertThat(parsed).isNotNull();
     assertThat(parsed.getConfig()).isNotNull();
     PolicySelection policySelection = (PolicySelection) parsed.getConfig();

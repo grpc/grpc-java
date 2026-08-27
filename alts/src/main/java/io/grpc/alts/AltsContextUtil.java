@@ -17,6 +17,7 @@
 package io.grpc.alts;
 
 import io.grpc.Attributes;
+import io.grpc.ClientCall;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerCall;
 import io.grpc.alts.internal.AltsInternalContext;
@@ -29,14 +30,36 @@ public final class AltsContextUtil {
   private AltsContextUtil() {}
 
   /**
-   * Creates a {@link AltsContext} from ALTS context information in the {@link ServerCall}.
+   * Creates an {@link AltsContext} from ALTS context information in the {@link ServerCall}.
    *
    * @param call the {@link ServerCall} containing the ALTS information
    * @return the created {@link AltsContext}
    * @throws IllegalArgumentException if the {@link ServerCall} has no ALTS information.
    */
   public static AltsContext createFrom(ServerCall<?, ?> call) {
-    Object authContext = call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
+    return createFrom(call.getAttributes());
+  }
+
+  /**
+   * Creates an {@link AltsContext} from ALTS context information in the {@link ClientCall}.
+   *
+   * @param call the {@link ClientCall} containing the ALTS information
+   * @return the created {@link AltsContext}
+   * @throws IllegalArgumentException if the {@link ClientCall} has no ALTS information.
+   */
+  public static AltsContext createFrom(ClientCall<?, ?> call) {
+    return createFrom(call.getAttributes());
+  }
+
+  /**
+   * Creates an {@link AltsContext} from ALTS context information in the {@link Attributes}.
+   *
+   * @param attributes the {@link Attributes} containing the ALTS information
+   * @return the created {@link AltsContext}
+   * @throws IllegalArgumentException if the {@link Attributes} has no ALTS information.
+   */
+  public static AltsContext createFrom(Attributes attributes) {
+    Object authContext = attributes.get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
     if (!(authContext instanceof AltsInternalContext)) {
       throw new IllegalArgumentException("No ALTS context information found");
     }
@@ -50,6 +73,16 @@ public final class AltsContextUtil {
    * @return true, if the {@link ServerCall} contains ALTS information and false otherwise.
    */
   public static boolean check(ServerCall<?, ?> call) {
+    return check(call.getAttributes());
+  }
+
+  /**
+   * Checks if the {@link ClientCall} contains ALTS information.
+   *
+   * @param call the {@link ClientCall} to check
+   * @return true, if the {@link ClientCall} contains ALTS information and false otherwise.
+   */
+  public static boolean check(ClientCall<?, ?> call) {
     return check(call.getAttributes());
   }
 

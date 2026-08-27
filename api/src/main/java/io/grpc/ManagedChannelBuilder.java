@@ -45,11 +45,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Creates a channel with a target string, which can be either a valid {@link
-   * NameResolver}-compliant URI, or an authority string.
+   * Creates a channel with a target string, which can be either an RFC 3986 URI, or an authority
+   * string.
    *
-   * <p>A {@code NameResolver}-compliant URI is an absolute hierarchical URI as defined by {@link
-   * java.net.URI}. Example URIs:
+   * <p>Example URIs:
    * <ul>
    *   <li>{@code "dns:///foo.googleapis.com:8080"}</li>
    *   <li>{@code "dns:///foo.googleapis.com"}</li>
@@ -57,13 +56,13 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *   <li>{@code "dns://8.8.8.8/foo.googleapis.com:8080"}</li>
    *   <li>{@code "dns://8.8.8.8/foo.googleapis.com"}</li>
    *   <li>{@code "zookeeper://zk.example.com:9900/example_service"}</li>
+   *   <li>{@code "intent:#Intent;package=com.some.app;action=a;category=c;end;"}</li>
    * </ul>
    *
-   * <p>An authority string will be converted to a {@code NameResolver}-compliant URI, which has
-   * the scheme from the name resolver with the highest priority (e.g. {@code "dns"}),
-   * no authority, and the original authority string as its path after properly escaped.
-   * We recommend libraries to specify the schema explicitly if it is known, since libraries cannot
-   * know which NameResolver will be default during runtime.
+   * <p>An authority string will be converted to a URI having the scheme of the name resolver with
+   * the highest priority (e.g. {@code "dns"}), the empty string as the authority, and
+   * {@code target} as its absolute path. We recommend libraries specify {@code target} as a URI
+   * instead since they cannot know which NameResolver will be default at runtime.
    * Example authority strings:
    * <ul>
    *   <li>{@code "localhost"}</li>
@@ -74,6 +73,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]"}</li>
    *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:443"}</li>
    * </ul>
+   *
+   * <p>The URI form of {@code target} is preferred because it is less ambiguous. For example, the
+   * target string {@code foo:8080} is a valid authority string with host {@code foo} and port
+   * {@code 8080} but it is also a valid RFC 3986 URI with scheme {@code foo} and path {@code 8080}.
+   * gRPC prioritizes the URI form, which means {@code foo:8080} will be treated as a URI with
+   * scheme {@code foo}. Using {@code dns:///foo:8080} avoids this ambiguity.
    *
    * <p>Note that there is an open JDK bug on {@link java.net.URI} class parsing an ipv6 scope ID:
    * bugs.openjdk.org/browse/JDK-8199396. This method is exposed to this bug. If you experience an
@@ -87,11 +92,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Execute application code directly in the transport thread.
-   *
-   * <p>Depending on the underlying transport, using a direct executor may lead to substantial
-   * performance improvements. However, it also requires the application to not block under
+   * Execute application code directly in the transport thread. The application must not block under
    * any circumstances.
+   *
+   * <p>Depending on the underlying transport and the application code, using a direct executor may
+   * lead to 10s of µs latency reduction but causes a substantial performance degradation when
+   * misused.
    *
    * <p>Calling this method is semantically equivalent to calling {@link #executor(Executor)} and
    * passing in a direct executor. However, this is the preferred way as it may allow the transport
@@ -103,7 +109,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T directExecutor();
 
   /**
-   * Provides a custom executor.
+   * Set the default executor for callbacks. This is used for async and future stub callbacks, but
+   * can be overridden by {@link CallOptions#withExecutor} and {@code stub.withExecutor()}. Blocking
+   * stubs specify a per-RPC executor. This is also used for {@link
+   * ManagedChannel#notifyWhenStateChanged}.
    *
    * <p>It's an optional parameter. If the user has not provided an executor when the channel is
    * built, the builder will use a static cached thread pool.
@@ -374,9 +383,17 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * notice when they are causing excessive load. Clients are strongly encouraged to use only as
    * small of a value as necessary.
    *
+   * <p>When the channel implementation supports TCP_USER_TIMEOUT, enabling keepalive will also
+   * enable TCP_USER_TIMEOUT for the connection. This requires <em>all</em> sent packets to receive
+   * a TCP acknowledgement before the keepalive timeout. The keepalive time is not used for
+   * TCP_USER_TIMEOUT, except as a signal to enable the feature. grpc-netty supports
+   * TCP_USER_TIMEOUT on Linux platforms supported by netty-transport-native-epoll.
+   *
    * @throws UnsupportedOperationException if unsupported
    * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
    *     Client-side Keepalive</a>
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A18-tcp-user-timeout.md">gRFC A18
+   *     TCP User Timeout</a>
    * @since 1.7.0
    */
   public T keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
@@ -393,6 +410,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @throws UnsupportedOperationException if unsupported
    * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
    *     Client-side Keepalive</a>
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A18-tcp-user-timeout.md">gRFC A18
+   *     TCP User Timeout</a>
    * @since 1.7.0
    */
   public T keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
@@ -649,6 +668,23 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public <X> T setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
     throw new UnsupportedOperationException();
+  }
+
+
+  /**
+   * Sets a configurator that will be applied to all internal child channels created by this
+   * channel.
+   *
+   * <p>This allows injecting universal configuration (like interceptors)
+   * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections.
+   *
+   * @param channelConfigurator the configurator to apply.
+   * @return this
+   * @since 1.83.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T childChannelConfigurator(ChannelConfigurator channelConfigurator) {
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   /**

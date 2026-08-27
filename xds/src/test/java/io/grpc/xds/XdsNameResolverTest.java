@@ -17,15 +17,19 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.xds.FaultFilter.HEADER_ABORT_GRPC_STATUS_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_ABORT_HTTP_STATUS_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_ABORT_PERCENTAGE_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_PERCENTAGE_KEY;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -43,6 +47,8 @@ import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
+import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -62,21 +68,32 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NoopClientCall;
 import io.grpc.NoopClientCall.NoopClientCallListener;
+import io.grpc.ProxyDetector;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ScParser;
+import io.grpc.stub.ClientCalls;
+import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.VirtualHost.Route;
@@ -86,6 +103,8 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
@@ -93,14 +112,16 @@ import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsResourceType;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -130,6 +151,19 @@ public class XdsNameResolverTest {
   private static final String RDS_RESOURCE_NAME = "route-configuration.googleapis.com";
   private static final String FAULT_FILTER_INSTANCE_NAME = "envoy.fault";
   private static final String ROUTER_FILTER_INSTANCE_NAME = "envoy.router";
+  private static final FaultFilter.Provider FAULT_FILTER_PROVIDER = new FaultFilter.Provider();
+  private static final RouterFilter.Provider ROUTER_FILTER_PROVIDER = new RouterFilter.Provider();
+
+  // Readability: makes it simpler to distinguish resource parameters.
+  private static final ImmutableMap<String, FilterConfig> NO_FILTER_OVERRIDES = ImmutableMap.of();
+  private static final ImmutableList<HashPolicy> NO_HASH_POLICIES = ImmutableList.of();
+
+  // Stateful instance filter names.
+  private static final String STATEFUL_1 = "test.stateful.filter.1";
+  private static final String STATEFUL_2 = "test.stateful.filter.2";
+
+  @Rule
+  public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -154,6 +188,15 @@ public class XdsNameResolverTest {
   private final CallInfo call2 = new CallInfo("GreetService", "bye");
   private final TestChannel channel = new TestChannel();
   private final MetricRecorder metricRecorder = new MetricRecorder() {};
+  private final Map<String, ?> rawBootstrap = ImmutableMap.of(
+      "xds_servers", ImmutableList.of(
+          ImmutableMap.of(
+              "server_uri", "td.googleapis.com",
+              "channel_creds", ImmutableList.of(
+                  ImmutableMap.of(
+                      "type", "insecure")))
+      ));
+
   private BootstrapInfo bootstrapInfo = BootstrapInfo.builder()
       .servers(ImmutableList.of(ServerInfo.create(
           "td.googleapis.com", InsecureChannelCredentials.create())))
@@ -172,80 +215,77 @@ public class XdsNameResolverTest {
   private XdsNameResolver resolver;
   private TestCall<?, ?> testCall;
   private boolean originalEnableTimeout;
-  private URI targetUri;
+  private String targetUri = AUTHORITY;
+  private final NameResolver.Args nameResolverArgs = NameResolver.Args.newBuilder()
+      .setDefaultPort(8080)
+      .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
+      .setSynchronizationContext(syncContext)
+      .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
+      .setChannelLogger(mock(ChannelLogger.class))
+      .setScheduledExecutorService(fakeClock.getScheduledExecutorService())
+      .build();
+
 
   @Before
   public void setUp() {
-    try {
-      targetUri = new URI(AUTHORITY);
-    } catch (URISyntaxException e) {
-      targetUri = null;
-    }
+    lenient().doReturn(Status.OK).when(mockListener).onResult2(any());
 
     originalEnableTimeout = XdsNameResolver.enableTimeout;
     XdsNameResolver.enableTimeout = true;
+
+    // Replace FaultFilter.Provider with the one returning FaultFilter injected with mockRandom.
+    Filter.Provider faultFilterProvider =
+        mock(Filter.Provider.class, delegatesTo(FAULT_FILTER_PROVIDER));
+    // Lenient: suppress [MockitoHint] Unused warning, only used in resolved_fault* tests.
+    lenient()
+        .doReturn(new FaultFilter(mockRandom, new AtomicLong()))
+        .when(faultFilterProvider).newInstance(any(FilterContext.class));
+
     FilterRegistry filterRegistry = FilterRegistry.newRegistry().register(
-        new FaultFilter(mockRandom, new AtomicLong()),
-        RouterFilter.INSTANCE);
+        ROUTER_FILTER_PROVIDER,
+        faultFilterProvider);
+
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, filterRegistry, null, metricRecorder);
+        xdsClientPoolFactory, mockRandom, filterRegistry, rawBootstrap, metricRecorder,
+        nameResolverArgs);
   }
 
   @After
   public void tearDown() {
     XdsNameResolver.enableTimeout = originalEnableTimeout;
+    if (resolver == null) {
+      // Allow tests to test shutdown.
+      return;
+    }
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     resolver.shutdown();
     if (xdsClient != null) {
       assertThat(xdsClient.ldsWatcher).isNull();
-      assertThat(xdsClient.rdsWatcher).isNull();
+      assertThat(xdsClient.rdsWatchers).isEmpty();
     }
   }
 
   @Test
   public void resolving_failToCreateXdsClientPool() {
-    XdsClientPoolFactory xdsClientPoolFactory = new XdsClientPoolFactory() {
-      @Override
-      public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      }
-
-      @Override
-      @Nullable
-      public ObjectPool<XdsClient> get(String target) {
-        throw new UnsupportedOperationException("Should not be called");
-      }
-
-      @Override
-      public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
-          throws XdsInitializationException {
-        throw new XdsInitializationException("Fail to read bootstrap file");
-      }
-
-      @Override
-      public List<String> getTargets() {
-        return null;
-      }
-    };
-
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(),
+        Collections.emptyMap(), metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Failed to initialize xDS");
-    assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
+    assertThat(error.getCause()).hasMessageThat().contains("Invalid bootstrap");
   }
 
   @Test
   public void resolving_withTargetAuthorityNotFound() {
     resolver = new XdsNameResolver(targetUri,
         "notfound.google.com", AUTHORITY, null, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap,
+        metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
@@ -267,7 +307,42 @@ public class XdsNameResolverTest {
     resolver = new XdsNameResolver(
         targetUri, null, serviceAuthority, null, serviceConfigParser, syncContext,
         scheduler, xdsClientPoolFactory,
-        mockRandom, FilterRegistry.getDefaultRegistry(), null, metricRecorder);
+        mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap, metricRecorder,
+        nameResolverArgs);
+    resolver.start(mockListener);
+    verify(mockListener, never()).onError(any(Status.class));
+  }
+
+  @Test
+  public void resolving_emptyTargetAuthority_templateWithXdstp() {
+    bootstrapInfo =
+        BootstrapInfo.builder()
+            .servers(
+                ImmutableList.of(
+                    ServerInfo.create("td.googleapis.com", InsecureChannelCredentials.create())))
+            .node(Node.newBuilder().build())
+            .clientDefaultListenerResourceNameTemplate(
+                "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
+            .build();
+    String serviceAuthority = "[::FFFF:129.144.52.38]:80";
+    expectedLdsResourceName =
+        "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
+            + "%5B::FFFF:129.144.52.38%5D:80?id=1";
+    resolver =
+        new XdsNameResolver(
+            "xds:///foo.googleapis.com",
+            "",
+            serviceAuthority,
+            null,
+            serviceConfigParser,
+            syncContext,
+            scheduler,
+            xdsClientPoolFactory,
+            mockRandom,
+            FilterRegistry.getDefaultRegistry(),
+            rawBootstrap,
+            metricRecorder,
+            nameResolverArgs);
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
   }
@@ -287,8 +362,8 @@ public class XdsNameResolverTest {
             + "%5B::FFFF:129.144.52.38%5D:80?id=1";
     resolver = new XdsNameResolver(
         targetUri, null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap,
+        metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
   }
@@ -308,8 +383,8 @@ public class XdsNameResolverTest {
             + "path/to/service?id=1";
     resolver = new XdsNameResolver(
         targetUri, null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap,
+        metricRecorder, nameResolverArgs);
 
 
     // The Service Authority must be URL encoded, but unlike the LDS resource name.
@@ -325,26 +400,28 @@ public class XdsNameResolverTest {
     String serviceAuthority = "[::FFFF:129.144.52.38]:80";
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true, true)))
+            "td.googleapis.com", InsecureChannelCredentials.create(), true, true, false, false,
+            null)))
         .node(Node.newBuilder().build())
         .authorities(
             ImmutableMap.of(targetAuthority, AuthorityInfo.create(
                 "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s?foo=1&bar=2",
                 ImmutableList.of(ServerInfo.create(
-                    "td.googleapis.com", InsecureChannelCredentials.create(), true, true)))))
+                    "td.googleapis.com", InsecureChannelCredentials.create(),
+                    true, true, false, false, null)))))
         .build();
     expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
         + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
     resolver = new XdsNameResolver(targetUri,
         "xds.authority.com", serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap,
+        metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
   }
 
   @Test
-  public void resolving_ldsResourceNotFound() {
+  public void resolving_ldsResourceNotFound() { // hi
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsResourceNotFound();
@@ -370,8 +447,8 @@ public class XdsNameResolverTest {
         .build();
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap,
+        metricRecorder, nameResolverArgs);
     // use different ldsResourceName and service authority. The virtualhost lookup should use
     // service authority.
     expectedLdsResourceName = "test-" + expectedLdsResourceName;
@@ -379,32 +456,36 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
-    assertThat(xdsClient.rdsResource).isEqualTo(RDS_RESOURCE_NAME);
+    assertThat(xdsClient.rdsWatchers.keySet()).containsExactly(RDS_RESOURCE_NAME);
     VirtualHost virtualHost =
         VirtualHost.create("virtualhost", Collections.singletonList(AUTHORITY),
             Collections.singletonList(route1),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
         (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     ArgumentCaptor<ResolutionResult> resultCaptor =
         ArgumentCaptor.forClass(ResolutionResult.class);
     String alternativeRdsResource = "route-configuration-alter.googleapis.com";
     xdsClient.deliverLdsUpdateForRdsName(alternativeRdsResource);
-    assertThat(xdsClient.rdsResource).isEqualTo(alternativeRdsResource);
+    assertThat(xdsClient.rdsWatchers.keySet()).contains(alternativeRdsResource);
     virtualHost =
         VirtualHost.create("virtualhost-alter", Collections.singletonList(AUTHORITY),
             Collections.singletonList(route2),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(alternativeRdsResource, Collections.singletonList(virtualHost));
+    createAndDeliverClusterUpdates(xdsClient, cluster2);
+    assertThat(xdsClient.rdsWatchers.keySet()).containsExactly(alternativeRdsResource);
     // Two new service config updates triggered:
     //  - with load balancing config being able to select cluster1 and cluster2
     //  - with load balancing config being able to select cluster2 only
-    verify(mockListener, times(2)).onResult(resultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2),
         (Map<String, ?>) resultCaptor.getAllValues().get(0).getServiceConfig().getConfig());
@@ -433,29 +514,33 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
-    assertThat(xdsClient.rdsResource).isEqualTo(RDS_RESOURCE_NAME);
+    assertThat(xdsClient.rdsWatchers.keySet()).containsExactly(RDS_RESOURCE_NAME);
     VirtualHost virtualHost =
         VirtualHost.create("virtualhost", Collections.singletonList(AUTHORITY),
             Collections.singletonList(route),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
         (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverLdsResourceNotFound();  // revoke LDS resource
-    assertThat(xdsClient.rdsResource).isNull();  // stop subscribing to stale RDS resource
+    assertThat(xdsClient.rdsWatchers.keySet()).isEmpty();  // stop subscribing to stale RDS resource
     assertEmptyResolutionResult(expectedLdsResourceName);
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
     // No name resolution result until new RDS resource update is received. Do not use stale config
     verifyNoInteractions(mockListener);
-    assertThat(xdsClient.rdsResource).isEqualTo(RDS_RESOURCE_NAME);
+    assertThat(xdsClient.rdsWatchers.keySet()).containsExactly(RDS_RESOURCE_NAME);
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
         (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
@@ -472,25 +557,29 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
-    assertThat(xdsClient.rdsResource).isEqualTo(RDS_RESOURCE_NAME);
+    assertThat(xdsClient.rdsWatchers.keySet()).containsExactly(RDS_RESOURCE_NAME);
     VirtualHost virtualHost =
         VirtualHost.create("virtualhost", Collections.singletonList(AUTHORITY),
             Collections.singletonList(route),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
         (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);  // revoke RDS resource
     assertEmptyResolutionResult(RDS_RESOURCE_NAME);
 
     // Simulate management server adds back the previously used RDS resource.
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
         (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
@@ -501,11 +590,15 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverError(Status.UNAVAILABLE.withDescription("server unreachable"));
-    verify(mockListener).onError(errorCaptor.capture());
-    Status error = errorCaptor.getValue();
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector = resolutionResultCaptor.getValue()
+        .getAttributes().get(InternalConfigSelector.KEY);
+    Result selectResult = configSelector.selectConfig(
+        newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    Status error = selectResult.getStatus();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
-        + ". xDS server returned: UNAVAILABLE: server unreachable");
+    assertThat(error.getDescription()).contains(AUTHORITY);
+    assertThat(error.getDescription()).contains("server unreachable");
   }
 
   @Test
@@ -513,11 +606,15 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverError(Status.NOT_FOUND.withDescription("server unreachable"));
-    verify(mockListener).onError(errorCaptor.capture());
-    Status error = errorCaptor.getValue();
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector = resolutionResultCaptor.getValue()
+        .getAttributes().get(InternalConfigSelector.KEY);
+    Result selectResult = configSelector.selectConfig(
+        newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    Status error = selectResult.getStatus();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
-        + ". xDS server returned: NOT_FOUND: server unreachable");
+    assertThat(error.getDescription()).contains(AUTHORITY);
+    assertThat(error.getDescription()).contains("server unreachable");
     assertThat(error.getCause()).isNull();
   }
 
@@ -527,15 +624,17 @@ public class XdsNameResolverTest {
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
     xdsClient.deliverError(Status.UNAVAILABLE.withDescription("server unreachable"));
-    verify(mockListener, times(2)).onError(errorCaptor.capture());
-    Status error = errorCaptor.getAllValues().get(0);
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector = resolutionResultCaptor.getValue()
+        .getAttributes().get(InternalConfigSelector.KEY);
+    Result selectResult = configSelector.selectConfig(
+        newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    Status error = selectResult.getStatus();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
-        + ". xDS server returned: UNAVAILABLE: server unreachable");
-    error = errorCaptor.getAllValues().get(1);
-    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Unable to load RDS " + RDS_RESOURCE_NAME
-        + ". xDS server returned: UNAVAILABLE: server unreachable");
+    // XdsDepManager.buildUpdate doesn't allow this
+    // assertThat(error.getDescription()).contains(RDS_RESOURCE_NAME);
+    assertThat(error.getDescription()).contains(expectedLdsResourceName);
+    assertThat(error.getDescription()).contains("server unreachable");
   }
 
   @SuppressWarnings("unchecked")
@@ -552,12 +651,13 @@ public class XdsNameResolverTest {
 
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, "random",
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap,
+        metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
         (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
@@ -576,11 +676,12 @@ public class XdsNameResolverTest {
 
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, "random",
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap,
+        metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
+    xdsClient.deliverLdsUpdateOnly(0L, Arrays.asList(virtualHost));
+    fakeClock.forwardTime(15, TimeUnit.SECONDS);
     assertEmptyResolutionResult("random");
   }
 
@@ -588,8 +689,8 @@ public class XdsNameResolverTest {
   public void resolving_matchingVirtualHostNotFoundForOverrideAuthority() {
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, AUTHORITY,
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap,
+        metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(0L, buildUnmatchedVirtualHosts());
@@ -643,7 +744,7 @@ public class XdsNameResolverTest {
         Collections.singletonList(AUTHORITY), Collections.singletonList(route),
         ImmutableMap.of());
     xdsClient.deliverLdsUpdate(0L, Collections.singletonList(virtualHost));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     assertCallSelectClusterResult(call1, configSelector, cluster1, null);
@@ -662,7 +763,7 @@ public class XdsNameResolverTest {
         ImmutableMap.of());
     xdsClient.deliverLdsUpdate(TimeUnit.SECONDS.toNanos(5L),
         Collections.singletonList(virtualHost));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     assertCallSelectClusterResult(call1, configSelector, cluster1, 5.0);
@@ -673,8 +774,8 @@ public class XdsNameResolverTest {
     ServiceConfigParser realParser = new ScParser(
         true, 5, 5, new AutoConfiguredLoadBalancerFactory("pick-first"));
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, realParser, syncContext,
-        scheduler, xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        scheduler, xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(),
+        rawBootstrap, metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     RetryPolicy retryPolicy = RetryPolicy.create(
@@ -691,7 +792,7 @@ public class XdsNameResolverTest {
                     retryPolicy,
                     false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     Result selectResult = configSelector.selectConfig(
@@ -749,14 +850,14 @@ public class XdsNameResolverTest {
                 RouteAction.forCluster(cluster2, Collections.emptyList(),
                     TimeUnit.SECONDS.toNanos(15L), null, false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster2),
         (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
-    assertThat(result.getAttributes().get(InternalXdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     // Simulates making a call1 RPC.
     Result selectResult = configSelector.selectConfig(
@@ -786,7 +887,7 @@ public class XdsNameResolverTest {
                     null,
                     false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     InternalConfigSelector configSelector =
         resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
 
@@ -822,7 +923,7 @@ public class XdsNameResolverTest {
                     null,
                     false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     InternalConfigSelector configSelector =
         resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
 
@@ -862,7 +963,7 @@ public class XdsNameResolverTest {
                     null,
                     false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     InternalConfigSelector configSelector =
         resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
 
@@ -881,11 +982,12 @@ public class XdsNameResolverTest {
     // A different resolver/Channel.
     resolver.shutdown();
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     when(mockRandom.nextLong()).thenReturn(123L);
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
-        metricRecorder);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap,
+        metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -900,7 +1002,7 @@ public class XdsNameResolverTest {
                     null,
                     false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     configSelector = resolutionResultCaptor.getValue().getAttributes().get(
         InternalConfigSelector.KEY);
 
@@ -918,7 +1020,7 @@ public class XdsNameResolverTest {
   public void resolved_routeActionHasAutoHostRewrite_emitsCallOptionForTheSame() {
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler, xdsClientPoolFactory, mockRandom,
-        FilterRegistry.getDefaultRegistry(), null, metricRecorder);
+        FilterRegistry.getDefaultRegistry(), rawBootstrap, metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -934,7 +1036,7 @@ public class XdsNameResolverTest {
                     null,
                     true),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     InternalConfigSelector configSelector =
         resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
 
@@ -949,7 +1051,7 @@ public class XdsNameResolverTest {
   public void resolved_routeActionNoAutoHostRewrite_doesntEmitCallOptionForTheSame() {
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler, xdsClientPoolFactory, mockRandom,
-        FilterRegistry.getDefaultRegistry(), null, metricRecorder);
+        FilterRegistry.getDefaultRegistry(), rawBootstrap, metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -965,7 +1067,7 @@ public class XdsNameResolverTest {
                     null,
                     false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     InternalConfigSelector configSelector =
         resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
 
@@ -984,6 +1086,7 @@ public class XdsNameResolverTest {
     TestCall<?, ?> firstCall = testCall;
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         Arrays.asList(
@@ -999,7 +1102,7 @@ public class XdsNameResolverTest {
                     cluster2, Collections.emptyList(), TimeUnit.SECONDS.toNanos(15L),
                     null, false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     // Updated service config still contains cluster1 while it is removed resource. New calls no
     // longer routed to cluster1.
@@ -1011,7 +1114,9 @@ public class XdsNameResolverTest {
     assertCallSelectClusterResult(call1, configSelector, "another-cluster", 20.0);
 
     firstCall.deliverErrorStatus();  // completes previous call
-    verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
+    // Two updates: one for XdsNameResolver releasing the cluster, and another for
+    // XdsDependencyManager updating the XdsConfig
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster2, "another-cluster"),
@@ -1024,6 +1129,7 @@ public class XdsNameResolverTest {
   public void resolved_resourceUpdatedBeforeCallStarted() {
     InternalConfigSelector configSelector = resolveToClusters();
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         Arrays.asList(
@@ -1041,7 +1147,7 @@ public class XdsNameResolverTest {
                 ImmutableMap.of())));
     // Two consecutive service config updates: one for removing clcuster1,
     // one for adding "another=cluster".
-    verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster2, "another-cluster"),
@@ -1060,6 +1166,7 @@ public class XdsNameResolverTest {
     assertCallSelectClusterResult(call1, configSelector, cluster1, 15.0);
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         Arrays.asList(
@@ -1076,7 +1183,7 @@ public class XdsNameResolverTest {
                     TimeUnit.SECONDS.toNanos(15L), null, false),
                 ImmutableMap.of())));
 
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2, "another-cluster"),
@@ -1096,7 +1203,7 @@ public class XdsNameResolverTest {
                     cluster2, Collections.emptyList(),
                     TimeUnit.SECONDS.toNanos(15L), null, false),
                 ImmutableMap.of())));
-    verifyNoMoreInteractions(mockListener);  // no cluster added/deleted
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
     assertCallSelectClusterResult(call1, configSelector, "another-cluster", 15.0);
   }
 
@@ -1128,7 +1235,13 @@ public class XdsNameResolverTest {
                     null, false),
                 ImmutableMap.of())));
     testCall.deliverErrorStatus();
-    verifyNoMoreInteractions(mockListener);
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), resolutionResultCaptor.getAllValues().get(1));
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), resolutionResultCaptor.getAllValues().get(2));
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), resolutionResultCaptor.getAllValues().get(3));
   }
 
   @SuppressWarnings("unchecked")
@@ -1151,15 +1264,29 @@ public class XdsNameResolverTest {
                     TimeUnit.SECONDS.toNanos(20L),
                     null, false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     assertCallSelectClusterResult(call1, configSelector, cluster2, 20.0);
     assertCallSelectClusterResult(call1, configSelector, cluster1, 20.0);
+  }
+
+  /** Creates and delivers both CDS and EDS updates for the given clusters. */
+  private static void createAndDeliverClusterUpdates(
+      FakeXdsClient xdsClient, String... clusterNames) {
+    for (String clusterName : clusterNames) {
+      CdsUpdate.Builder forEds = CdsUpdate
+          .forEds(clusterName, clusterName, null, null, null, null, false, null)
+              .lbPolicyConfigJsonForTesting(ImmutableMap.of("round_robin", ImmutableMap.of()));
+      xdsClient.deliverCdsUpdate(clusterName, forEds.build());
+      EdsUpdate edsUpdate = new EdsUpdate(clusterName,
+          XdsTestUtils.createMinimalLbEndpointsMap("127.0.0.3"), Collections.emptyList());
+      xdsClient.deliverEdsUpdate(clusterName, edsUpdate);
+    }
   }
 
   @Test
@@ -1180,7 +1307,7 @@ public class XdsNameResolverTest {
                     TimeUnit.SECONDS.toNanos(20L),
                     null, false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddressesOrError().getValue()).isEmpty();
     @SuppressWarnings("unchecked")
@@ -1195,7 +1322,7 @@ public class XdsNameResolverTest {
         "routeLookupConfig",
         ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"),
         "childPolicy",
-        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())),
+        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of("is_dynamic", true))),
         "childPolicyConfigTargetFieldName",
         "cluster");
     Map<String, ?> expectedClusterManagerLbConfig = ImmutableMap.of(
@@ -1207,7 +1334,7 @@ public class XdsNameResolverTest {
                 ImmutableList.of(ImmutableMap.of("rls_experimental", expectedRlsLbConfig)))));
     assertThat(clusterManagerLbConfig).isEqualTo(expectedClusterManagerLbConfig);
 
-    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     assertCallSelectRlsPluginResult(
         call1, configSelector, "rls-plugin-foo", 20.0);
@@ -1228,7 +1355,7 @@ public class XdsNameResolverTest {
                     TimeUnit.SECONDS.toNanos(30L),
                     null, false),
                 ImmutableMap.of())));
-    verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result2 = resolutionResultCaptor.getValue();
     @SuppressWarnings("unchecked")
     Map<String, ?> resultServiceConfig2 = (Map<String, ?>) result2.getServiceConfig().getConfig();
@@ -1242,7 +1369,7 @@ public class XdsNameResolverTest {
         "routeLookupConfig",
         ImmutableMap.of("lookupService", "rls-cbt-2.googleapis.com"),
         "childPolicy",
-        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())),
+        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of("is_dynamic", true))),
         "childPolicyConfigTargetFieldName",
         "cluster");
     Map<String, ?> expectedClusterManagerLbConfig2 = ImmutableMap.of(
@@ -1259,9 +1386,377 @@ public class XdsNameResolverTest {
         call1, configSelector2, "rls-plugin-foo", 30.0);
   }
 
+  // Begin filter state tests.
+
+  /**
+   * Verifies the lifecycle of HCM filter instances across LDS updates.
+   *
+   * <p>Filter instances:
+   *   1. Must have one unique instance per HCM filter name.
+   *   2. Must be reused when an LDS update with HCM contains a filter with the same name.
+   *   3. Must be shutdown (closed) when an HCM in a LDS update doesn't a filter with the same name.
+   */
+  @Test
+  public void filterState_survivesLds() {
+    StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
+
+    // LDS 1.
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds1Snapshot = statefulFilterProvider.getAllInstances();
+    // Verify that StatefulFilter with different filter names result in different Filter instances.
+    assertWithMessage("LDS 1: expected to create filter instances").that(lds1Snapshot).hasSize(2);
+    // Naming: lds<LDS#>Filter<name#>
+    StatefulFilter lds1Filter1 = lds1Snapshot.get(0);
+    StatefulFilter lds1Filter2 = lds1Snapshot.get(1);
+    assertThat(lds1Filter1).isNotSameInstanceAs(lds1Filter2);
+    // Redundant check just in case StatefulFilter synchronization is broken.
+    assertThat(lds1Filter1.idx).isEqualTo(0);
+    assertThat(lds1Filter2.idx).isEqualTo(1);
+
+    // LDS 2: filter configs with the same names.
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds2Snapshot = statefulFilterProvider.getAllInstances();
+    // Filter names hasn't changed, so expecting no new StatefulFilter instances.
+    assertWithMessage("LDS 2: Expected Filter instances to be reused across LDS updates")
+        .that(lds2Snapshot).isEqualTo(lds1Snapshot);
+
+    // LDS 3: Filter "STATEFUL_2" removed.
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds3Snapshot = statefulFilterProvider.getAllInstances();
+    // Again, no new StatefulFilter instances should be created.
+    assertWithMessage("LDS 3: Expected Filter instances to be reused across LDS updates")
+        .that(lds3Snapshot).isEqualTo(lds1Snapshot);
+    // Verify the shutdown state.
+    assertThat(lds1Filter1.isShutdown()).isFalse();
+    assertWithMessage("LDS 3: Expected %s to be shut down", lds1Filter2)
+        .that(lds1Filter2.isShutdown()).isTrue();
+
+    // LDS 4: Filter "STATEFUL_2" added back.
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds4Snapshot = statefulFilterProvider.getAllInstances();
+    // Filter "STATEFUL_2" should be treated as any other new filter name in an LDS update:
+    // a new instance should be created.
+    assertWithMessage("LDS 4: Expected a new filter instance for %s", STATEFUL_2)
+        .that(lds4Snapshot).hasSize(3);
+    StatefulFilter lds4Filter2 = lds4Snapshot.get(2);
+    assertThat(lds4Filter2.idx).isEqualTo(2);
+    assertThat(lds4Filter2).isNotSameInstanceAs(lds1Filter2);
+    assertThat(lds4Snapshot).containsAtLeastElementsIn(lds1Snapshot);
+    // Verify the shutdown state.
+    assertThat(lds1Filter1.isShutdown()).isFalse();
+    assertThat(lds1Filter2.isShutdown()).isTrue();
+    assertThat(lds4Filter2.isShutdown()).isFalse();
+  }
+
+  /**
+   * Verifies the lifecycle of HCM filter instances across RDS updates.
+   *
+   * <p>Filter instances:
+   *   1. Must have instantiated by the initial LDS/RDS.
+   *   2. Must be reused by all subsequent RDS updates.
+   *   3. Must be not shutdown (closed) by valid RDS updates.
+   */
+  @Test
+  public void filterState_survivesRds() {
+    StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+
+    // LDS 1.
+    xdsClient.deliverLdsUpdateForRdsNameWithFilters(RDS_RESOURCE_NAME,
+        filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    // RDS 1.
+    VirtualHost vhost1 = filterStateTestVhost();
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, vhost1);
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+    // Initial RDS update should not generate Filter instances.
+    ImmutableList<StatefulFilter> rds1Snapshot = statefulFilterProvider.getAllInstances();
+    // Verify that StatefulFilter with different filter names result in different Filter instances.
+    assertWithMessage("RDS 1: expected to create filter instances").that(rds1Snapshot).hasSize(2);
+    // Naming: lds<LDS#>Filter<name#>
+    StatefulFilter lds1Filter1 = rds1Snapshot.get(0);
+    StatefulFilter lds1Filter2 = rds1Snapshot.get(1);
+    assertThat(lds1Filter1).isNotSameInstanceAs(lds1Filter2);
+
+    // RDS 2: exactly the same as RDS 1.
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, vhost1);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> rds2Snapshot = statefulFilterProvider.getAllInstances();
+    // Neither should any subsequent RDS updates.
+    assertWithMessage("RDS 2: Expected Filter instances to be reused across RDS route updates")
+        .that(rds2Snapshot).isEqualTo(rds1Snapshot);
+
+    // RDS 3: Contains a per-route override for STATEFUL_1.
+    VirtualHost vhost3 = filterStateTestVhost(ImmutableMap.of(
+        STATEFUL_1, new StatefulFilter.Config("RDS3")
+    ));
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, vhost3);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> rds3Snapshot = statefulFilterProvider.getAllInstances();
+    // As with any other Route update, typed_per_filter_config overrides should not result in
+    // creating new filter instances.
+    assertWithMessage("RDS 3: Expected Filter instances to be reused on per-route filter overrides")
+        .that(rds3Snapshot).isEqualTo(rds1Snapshot);
+  }
+
+  /**
+   * Verifies a special case where an existing filter is has a different typeUrl in a subsequent
+   * LDS update.
+   *
+   * <p>Expectations:
+   *   1. The old filter instance must be shutdown.
+   *   2. A new filter instance must be created for the new filter with different typeUrl.
+   */
+  @Test
+  public void filterState_specialCase_sameNameDifferentTypeUrl() {
+    // Prepare filter registry with StatefulFilter of different typeUrl.
+    StatefulFilter.Provider statefulFilterProvider = new StatefulFilter.Provider();
+    String altTypeUrl = "type.googleapis.com/grpc.test.AltStatefulFilter";
+    StatefulFilter.Provider altStatefulFilterProvider = new StatefulFilter.Provider(altTypeUrl);
+    FilterRegistry filterRegistry = FilterRegistry.newRegistry()
+        .register(statefulFilterProvider, altStatefulFilterProvider, ROUTER_FILTER_PROVIDER);
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
+        syncContext, scheduler, xdsClientPoolFactory, mockRandom, filterRegistry, rawBootstrap,
+        metricRecorder, nameResolverArgs);
+    resolver.start(mockListener);
+
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
+
+    // LDS 1.
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds1Snapshot = statefulFilterProvider.getAllInstances();
+    ImmutableList<StatefulFilter> lds1SnapshotAlt = altStatefulFilterProvider.getAllInstances();
+    // Verify that StatefulFilter with different filter names result in different Filter instances.
+    assertWithMessage("LDS 1: expected to create filter instances").that(lds1Snapshot).hasSize(2);
+    // Naming: lds<LDS#>Filter<name#>
+    StatefulFilter lds1Filter1 = lds1Snapshot.get(0);
+    StatefulFilter lds1Filter2 = lds1Snapshot.get(1);
+    assertThat(lds1Filter1).isNotSameInstanceAs(lds1Filter2);
+    // Nothing in the alternative provider.
+    assertThat(lds1SnapshotAlt).isEmpty();
+
+    // LDS 2: Filter STATEFUL_2 present, but with a different typeUrl: altTypeUrl.
+    ImmutableList<NamedFilterConfig> filterConfigs = ImmutableList.of(
+        new NamedFilterConfig(STATEFUL_1, new StatefulFilter.Config(STATEFUL_1)),
+        new NamedFilterConfig(STATEFUL_2, new StatefulFilter.Config(STATEFUL_2, altTypeUrl)),
+        new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG)
+    );
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterConfigs);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds2Snapshot = statefulFilterProvider.getAllInstances();
+    ImmutableList<StatefulFilter> lds2SnapshotAlt = altStatefulFilterProvider.getAllInstances();
+    // Filter "STATEFUL_2" has different typeUrl, and should be treated as a new filter.
+    // No changes in the snapshot of normal stateful filters.
+    assertWithMessage("LDS 2: expected a new filter instance of different type")
+        .that(lds2Snapshot).isEqualTo(lds1Snapshot);
+    // A new filter instance is created by altStatefulFilterProvider.
+    assertWithMessage("LDS 2: expected a new filter instance for type %s", altTypeUrl)
+        .that(lds2SnapshotAlt).hasSize(1);
+    StatefulFilter lds2Filter2Alt = lds2SnapshotAlt.get(0);
+    assertThat(lds2Filter2Alt).isNotSameInstanceAs(lds1Filter2);
+    // Verify the shutdown state.
+    assertThat(lds1Filter1.isShutdown()).isFalse();
+    assertThat(lds1Filter2.isShutdown()).isTrue();
+    assertThat(lds2Filter2Alt.isShutdown()).isFalse();
+  }
+
+  /**
+   * Verifies that all filter instances are shutdown (closed) on LDS resource not found.
+   */
+  @Test
+  public void filterState_shutdown_onLdsNotFound() {
+    StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
+
+    // LDS 1.
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds1Snapshot = statefulFilterProvider.getAllInstances();
+    assertWithMessage("LDS 1: expected to create filter instances").that(lds1Snapshot).hasSize(2);
+    // Naming: lds<LDS#>Filter<name#>
+    StatefulFilter lds1Filter1 = lds1Snapshot.get(0);
+    StatefulFilter lds1Filter2 = lds1Snapshot.get(1);
+
+    // LDS 2: resource not found.
+    reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
+    xdsClient.deliverLdsResourceNotFound();
+    assertEmptyResolutionResult(expectedLdsResourceName);
+    // Verify shutdown.
+    assertThat(lds1Filter1.isShutdown()).isTrue();
+    assertThat(lds1Filter2.isShutdown()).isTrue();
+  }
+
+  @Test
+  public void filterState_noShutdown_onLdsDeletion() {
+    StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
+
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds1Snapshot = statefulFilterProvider.getAllInstances();
+    assertWithMessage("LDS 1: expected to create filter instances").that(lds1Snapshot).hasSize(2);
+    StatefulFilter lds1Filter1 = lds1Snapshot.get(0);
+    StatefulFilter lds1Filter2 = lds1Snapshot.get(1);
+
+    // LDS 2: Deliver a resource deletion, which is now an ambient error.
+    reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
+    xdsClient.deliverLdsResourceDeletion();
+
+    // With an ambient error, no new resolution should happen.
+    verify(mockListener, never()).onResult2(any());
+
+    // Verify that the filters are NOT shut down.
+    assertThat(lds1Filter1.isShutdown()).isFalse();
+    assertThat(lds1Filter2.isShutdown()).isFalse();
+  }
+
+  /**
+   * Verifies that all filter instances are shutdown (closed) on LDS ResourceWatcher shutdown.
+   */
+  @Test
+  public void filterState_shutdown_onResolverShutdown() {
+    StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
+
+    // LDS 1.
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds1Snapshot = statefulFilterProvider.getAllInstances();
+    assertWithMessage("LDS 1: expected to create filter instances").that(lds1Snapshot).hasSize(2);
+    // Naming: lds<LDS#>Filter<name#>
+    StatefulFilter lds1Filter1 = lds1Snapshot.get(0);
+    StatefulFilter lds1Filter2 = lds1Snapshot.get(1);
+
+    // Shutdown.
+    resolver.shutdown();
+    resolver = null;  // no need to shutdown again in the teardown.
+    // Verify shutdown.
+    assertThat(lds1Filter1.isShutdown()).isTrue();
+    assertThat(lds1Filter2.isShutdown()).isTrue();
+  }
+
+  /**
+   * Verifies that all filter instances are shutdown (closed) on RDS resource not found.
+   */
+  @Test
+  public void filterState_shutdown_onRdsNotFound() {
+    StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdateForRdsNameWithFilters(
+        RDS_RESOURCE_NAME,
+        filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    xdsClient.deliverRdsUpdate(
+        RDS_RESOURCE_NAME,
+        Collections.singletonList(filterStateTestVhost()));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+
+    ImmutableList<StatefulFilter> rds1Snapshot = statefulFilterProvider.getAllInstances();
+    assertWithMessage("RDS 1: Expected to create filter instances").that(rds1Snapshot).hasSize(2);
+    StatefulFilter rds1Filter1 = rds1Snapshot.get(0);
+    StatefulFilter rds1Filter2 = rds1Snapshot.get(1);
+    assertThat(rds1Filter1.isShutdown()).isFalse();
+    assertThat(rds1Filter2.isShutdown()).isFalse();
+
+    reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
+    xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);
+
+    assertEmptyResolutionResult(RDS_RESOURCE_NAME);
+    assertThat(rds1Filter1.isShutdown()).isTrue();
+    assertThat(rds1Filter2.isShutdown()).isTrue();
+  }
+
+  @Test
+  public void filterState_noShutdown_onRdsAmbientError() {
+    StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+
+    // LDS 1.
+    xdsClient.deliverLdsUpdateForRdsNameWithFilters(RDS_RESOURCE_NAME,
+        filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    // RDS 1: Standard vhost with a route.
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, filterStateTestVhost());
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> rds1Snapshot = statefulFilterProvider.getAllInstances();
+    assertWithMessage("RDS 1: expected to create filter instances").that(rds1Snapshot).hasSize(2);
+    // Naming: lds<LDS#>Filter<name#>
+    StatefulFilter lds1Filter1 = rds1Snapshot.get(0);
+    StatefulFilter lds1Filter2 = rds1Snapshot.get(1);
+
+    // RDS 2: RDS_RESOURCE_NAME not found.
+    reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
+    xdsClient.deliverRdsAmbientError(RDS_RESOURCE_NAME, Status.NOT_FOUND);
+    verify(mockListener, never()).onResult2(any());
+    assertThat(lds1Filter1.isShutdown()).isFalse();
+    assertThat(lds1Filter2.isShutdown()).isFalse();
+  }
+
+  private StatefulFilter.Provider filterStateTestSetupResolver() {
+    StatefulFilter.Provider statefulFilterProvider = new StatefulFilter.Provider();
+    FilterRegistry filterRegistry = FilterRegistry.newRegistry()
+        .register(statefulFilterProvider, ROUTER_FILTER_PROVIDER);
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
+        syncContext, scheduler, xdsClientPoolFactory, mockRandom, filterRegistry, rawBootstrap,
+        metricRecorder, nameResolverArgs);
+    resolver.start(mockListener);
+    return statefulFilterProvider;
+  }
+
+  private ImmutableList<NamedFilterConfig> filterStateTestConfigs(String... names) {
+    ImmutableList.Builder<NamedFilterConfig> result = ImmutableList.builder();
+    for (String name : names) {
+      result.add(new NamedFilterConfig(name, new StatefulFilter.Config(name)));
+    }
+    result.add(new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
+    return result.build();
+  }
+
+  private Route filterStateTestRoute(ImmutableMap<String, FilterConfig> perRouteOverrides) {
+    // Standard basic route for filterState tests.
+    return Route.forAction(
+        RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        RouteAction.forCluster(cluster1, NO_HASH_POLICIES, null, null, true),
+        perRouteOverrides);
+  }
+
+  private VirtualHost filterStateTestVhost() {
+    return filterStateTestVhost(NO_FILTER_OVERRIDES);
+  }
+
+  private VirtualHost filterStateTestVhost(ImmutableMap<String, FilterConfig> perRouteOverrides) {
+    return VirtualHost.create(
+        "stateful-vhost",
+        ImmutableList.of(expectedLdsResourceName),
+        ImmutableList.of(filterStateTestRoute(perRouteOverrides)),
+        NO_FILTER_OVERRIDES);
+  }
+
+  // End filter state tests.
+
   @SuppressWarnings("unchecked")
   private void assertEmptyResolutionResult(String resource) {
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
@@ -1270,6 +1765,13 @@ public class XdsNameResolverTest {
         newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     assertThat(configResult.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(configResult.getStatus().getDescription()).contains(resource);
+  }
+
+  private void assertClusterResolutionResult(CallInfo call, String expectedCluster) {
+    verify(mockListener, atLeast(1)).onResult2(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    assertCallSelectClusterResult(call, configSelector, expectedCluster, null);
   }
 
   private void assertCallSelectClusterResult(
@@ -1284,6 +1786,10 @@ public class XdsNameResolverTest {
     clientCall.start(new NoopClientCallListener<>(), new Metadata());
     assertThat(testCall.callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
         .isEqualTo("cluster:" + expectedCluster);
+    XdsConfig xdsConfig =
+        testCall.callOptions.getOption(XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY);
+    assertThat(xdsConfig).isNotNull();
+    assertThat(xdsConfig.getClusters()).containsKey(expectedCluster); // Without "cluster:" prefix
     @SuppressWarnings("unchecked")
     Map<String, ?> config = (Map<String, ?>) result.getConfig();
     if (expectedTimeoutSec != null) {
@@ -1340,14 +1846,21 @@ public class XdsNameResolverTest {
                     cluster2, Collections.emptyList(), TimeUnit.SECONDS.toNanos(15L),
                     null, false),
                 ImmutableMap.of())));
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
-    assertThat(result.getAttributes().get(InternalXdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
     return result.getAttributes().get(InternalConfigSelector.KEY);
+  }
+
+  private static void assertServiceConfigForLoadBalancingConfig(
+      List<String> clusters, ResolutionResult result) {
+    @SuppressWarnings("unchecked")
+    Map<String, ?> config = (Map<String, ?>) result.getServiceConfig().getConfig();
+    assertServiceConfigForLoadBalancingConfig(clusters, config);
   }
 
   /**
@@ -1417,8 +1930,9 @@ public class XdsNameResolverTest {
             ImmutableList.of(route1, route2, route3),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    createAndDeliverClusterUpdates(xdsClient, "cluster-foo", "cluster-bar", "cluster-baz");
 
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     String expectedServiceConfigJson =
         "{\n"
             + "  \"loadBalancingConfig\": [{\n"
@@ -1452,7 +1966,9 @@ public class XdsNameResolverTest {
             + "                \"lookupService\": \"rls.bigtable.google.com\"\n"
             + "              },\n"
             + "              \"childPolicy\": [\n"
-            + "                {\"cds_experimental\": {}}\n"
+            + "                {\"cds_experimental\": {\n"
+            + "                  \"is_dynamic\": true\n"
+            + "                }}\n"
             + "              ],\n"
             + "              \"childPolicyConfigTargetFieldName\": \"cluster\"\n"
             + "            }\n"
@@ -1490,7 +2006,7 @@ public class XdsNameResolverTest {
 
     // timeout and retry with empty retriable status codes
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
-            timeoutNano, retryPolicyWithEmptyStatusCodes))
+        timeoutNano, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
 
     // retry only
@@ -1512,7 +2028,6 @@ public class XdsNameResolverTest {
         (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(null, retryPolicy))
         .isEqualTo(expectedServiceConfig);
-
 
     // timeout and retry
     expectedServiceConfigJson = "{\n"
@@ -1544,7 +2059,7 @@ public class XdsNameResolverTest {
 
     // retry with emtry retriable status codes only
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
-            null, retryPolicyWithEmptyStatusCodes))
+        null, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
   }
 
@@ -1602,7 +2117,7 @@ public class XdsNameResolverTest {
         FaultAbort.forHeader(FaultConfig.FractionalPercent.perHundred(70)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     // no header abort key provided in metadata, rpc should succeed
@@ -1641,7 +2156,7 @@ public class XdsNameResolverTest {
         FaultAbort.forHeader(FaultConfig.FractionalPercent.perMillion(600_000)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1657,7 +2172,7 @@ public class XdsNameResolverTest {
         FaultAbort.forHeader(FaultConfig.FractionalPercent.perMillion(0)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1672,7 +2187,7 @@ public class XdsNameResolverTest {
             FaultConfig.FractionalPercent.perMillion(600_000)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(4)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1690,7 +2205,7 @@ public class XdsNameResolverTest {
             FaultConfig.FractionalPercent.perMillion(400_000)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(5)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1708,7 +2223,7 @@ public class XdsNameResolverTest {
     FaultConfig httpFilterFaultConfig = FaultConfig.create(
         FaultDelay.forHeader(FaultConfig.FractionalPercent.perHundred(70)), null, null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     // no header delay key provided in metadata, rpc should succeed immediately
@@ -1725,7 +2240,7 @@ public class XdsNameResolverTest {
     httpFilterFaultConfig = FaultConfig.create(
         FaultDelay.forHeader(FaultConfig.FractionalPercent.perMillion(600_000)), null, null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1736,7 +2251,7 @@ public class XdsNameResolverTest {
     httpFilterFaultConfig = FaultConfig.create(
         FaultDelay.forHeader(FaultConfig.FractionalPercent.perMillion(0)), null, null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1749,7 +2264,7 @@ public class XdsNameResolverTest {
         null,
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(4)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1762,7 +2277,7 @@ public class XdsNameResolverTest {
         null,
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(5)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1781,7 +2296,7 @@ public class XdsNameResolverTest {
         null,
         /* maxActiveFaults= */ 1);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
 
@@ -1811,7 +2326,7 @@ public class XdsNameResolverTest {
         null,
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
 
@@ -1827,7 +2342,7 @@ public class XdsNameResolverTest {
     assertThat(testCall).isNull();
     verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
         "Deadline exceeded after up to 5000 ns of fault-injected delay:"
-            + " Deadline CallOptions will be exceeded in 0.000004000s. "));
+        + " Deadline CallOptions was exceeded after 0.000004000s waiting for httpfault_filter"));
   }
 
   @Test
@@ -1843,7 +2358,7 @@ public class XdsNameResolverTest {
             FaultConfig.FractionalPercent.perMillion(1000_000)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     ClientCall.Listener<Void> observer = startNewCall(TestMethodDescriptors.voidMethod(),
@@ -1872,7 +2387,7 @@ public class XdsNameResolverTest {
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(
         cluster1, httpFilterFaultConfig, virtualHostFaultConfig, null, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     ClientCall.Listener<Void> observer = startNewCall(TestMethodDescriptors.voidMethod(),
@@ -1887,7 +2402,7 @@ public class XdsNameResolverTest {
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(
         cluster1, httpFilterFaultConfig, virtualHostFaultConfig, routeFaultConfig, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1904,7 +2419,7 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdateWithFaultInjection(
         cluster1, httpFilterFaultConfig, virtualHostFaultConfig, routeFaultConfig,
         weightedClusterFaultConfig);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -1933,7 +2448,7 @@ public class XdsNameResolverTest {
         FaultAbort.forStatus(Status.UNKNOWN, FaultConfig.FractionalPercent.perMillion(1000_000)),
         null);
     xdsClient.deliverRdsUpdateWithFaultInjection(RDS_RESOURCE_NAME, null, routeFaultConfig, null);
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     ClientCall.Listener<Void> observer = startNewCall(TestMethodDescriptors.voidMethod(),
@@ -1997,9 +2512,7 @@ public class XdsNameResolverTest {
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
     Set<String> targets = new HashSet<>();
     XdsClient xdsClient = new FakeXdsClient();
-
-    @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {}
+    ChannelConfigurator savedChannelConfigurator;
 
     @Override
     @Nullable
@@ -2008,9 +2521,28 @@ public class XdsNameResolverTest {
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
-        throws XdsInitializationException {
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
       targets.add(target);
+      return new ObjectPool<XdsClient>() {
+        @Override
+        public XdsClient getObject() {
+          return xdsClient;
+        }
+
+        @Override
+        public XdsClient returnObject(Object object) {
+          return null;
+        }
+      };
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
+        ChannelConfigurator channelConfigurator) {
+      targets.add(target);
+      this.savedChannelConfigurator = channelConfigurator;
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
@@ -2038,9 +2570,10 @@ public class XdsNameResolverTest {
   private class FakeXdsClient extends XdsClient {
     // Should never be subscribing to more than one LDS and RDS resource at any point of time.
     private String ldsResource;  // should always be AUTHORITY
-    private String rdsResource;
     private ResourceWatcher<LdsUpdate> ldsWatcher;
-    private ResourceWatcher<RdsUpdate> rdsWatcher;
+    private final Map<String, List<ResourceWatcher<RdsUpdate>>> rdsWatchers = new HashMap<>();
+    private final Map<String, List<ResourceWatcher<CdsUpdate>>> cdsWatchers = new HashMap<>();
+    private final Map<String, List<ResourceWatcher<EdsUpdate>>> edsWatchers = new HashMap<>();
 
     @Override
     public BootstrapInfo getBootstrapInfo() {
@@ -2050,9 +2583,9 @@ public class XdsNameResolverTest {
     @Override
     @SuppressWarnings("unchecked")
     public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-            String resourceName,
-            ResourceWatcher<T> watcher,
-            Executor syncContext) {
+        String resourceName,
+        ResourceWatcher<T> watcher,
+        Executor syncContext) {
 
       switch (resourceType.typeName()) {
         case "LDS":
@@ -2063,19 +2596,26 @@ public class XdsNameResolverTest {
           ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
           break;
         case "RDS":
-          assertThat(rdsResource).isNull();
-          assertThat(rdsWatcher).isNull();
-          rdsResource = resourceName;
-          rdsWatcher = (ResourceWatcher<RdsUpdate>) watcher;
+          rdsWatchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
+              .add((ResourceWatcher<RdsUpdate>) watcher);
+          break;
+        case "CDS":
+          cdsWatchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
+              .add((ResourceWatcher<CdsUpdate>) watcher);
+          break;
+        case "EDS":
+          edsWatchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
+              .add((ResourceWatcher<EdsUpdate>) watcher);
           break;
         default:
       }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                                  String resourceName,
-                                                                  ResourceWatcher<T> watcher) {
+        String resourceName,
+        ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case "LDS":
           assertThat(ldsResource).isNotNull();
@@ -2085,19 +2625,57 @@ public class XdsNameResolverTest {
           ldsWatcher = null;
           break;
         case "RDS":
-          assertThat(rdsResource).isNotNull();
-          assertThat(rdsWatcher).isNotNull();
-          rdsResource = null;
-          rdsWatcher = null;
+          assertThat(rdsWatchers).containsKey(resourceName);
+          assertThat(rdsWatchers.get(resourceName)).contains(watcher);
+          rdsWatchers.get(resourceName).remove((ResourceWatcher<RdsUpdate>) watcher);
+          if (rdsWatchers.get(resourceName).isEmpty()) {
+            rdsWatchers.remove(resourceName);
+          }
+          break;
+        case "CDS":
+          assertThat(cdsWatchers).containsKey(resourceName);
+          assertThat(cdsWatchers.get(resourceName)).contains(watcher);
+          cdsWatchers.get(resourceName).remove((ResourceWatcher<CdsUpdate>) watcher);
+          break;
+        case "EDS":
+          assertThat(edsWatchers).containsKey(resourceName);
+          assertThat(edsWatchers.get(resourceName)).contains(watcher);
+          edsWatchers.get(resourceName).remove((ResourceWatcher<EdsUpdate>) watcher);
           break;
         default:
       }
     }
 
-    void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
+    void deliverRdsAmbientError(String resourceName, Status status) {
+      if (!rdsWatchers.containsKey(resourceName)) {
+        return;
+      }
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            httpMaxStreamDurationNano, virtualHosts, null)));
+        List<ResourceWatcher<RdsUpdate>> resourceWatchers =
+            ImmutableList.copyOf(rdsWatchers.get(resourceName));
+        resourceWatchers.forEach(w -> w.onAmbientError(status));
+      });
+    }
+
+    void deliverLdsUpdateOnly(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
+      syncContext.execute(() -> {
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
+      });
+    }
+
+    void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
+      List<String> clusterNames = new ArrayList<>();
+      for (VirtualHost vh : virtualHosts) {
+        clusterNames.addAll(getClusterNames(vh.routes()));
+      }
+
+      syncContext.execute(() -> {
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
+        createAndDeliverClusterUpdates(this, clusterNames.toArray(new String[0]));
       });
     }
 
@@ -2106,9 +2684,23 @@ public class XdsNameResolverTest {
           VirtualHost.create(
               "virtual-host", Collections.singletonList(expectedLdsResourceName), routes,
               ImmutableMap.of());
+      List<String> clusterNames = getClusterNames(routes);
+
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            0L, Collections.singletonList(virtualHost), null)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), null));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
+        if (!clusterNames.isEmpty()) {
+          createAndDeliverClusterUpdates(this, clusterNames.toArray(new String[0]));
+        }
+      });
+    }
+
+    void deliverLdsUpdateWithFilters(VirtualHost vhost, List<NamedFilterConfig> filterConfigs) {
+      syncContext.execute(() -> {
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(vhost), filterConfigs));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
       });
     }
 
@@ -2155,8 +2747,10 @@ public class XdsNameResolverTest {
           Collections.singletonList(route),
           overrideConfig);
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            0L, Collections.singletonList(virtualHost), filterChain)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), filterChain));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
+        createAndDeliverClusterUpdates(this, cluster);
       });
     }
 
@@ -2170,30 +2764,70 @@ public class XdsNameResolverTest {
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-            0L, rdsName, filterChain)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0L, rdsName, filterChain));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
       });
     }
 
     void deliverLdsUpdateForRdsName(String rdsName) {
+      deliverLdsUpdateForRdsNameWithFilters(rdsName, null);
+    }
+
+    void deliverLdsUpdateForRdsNameWithFilters(
+        String rdsName,
+        @Nullable List<NamedFilterConfig> filterConfigs) {
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-            0, rdsName, null)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0, rdsName, filterConfigs));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
+      });
+    }
+
+    void deliverLdsResourceDeletion() {
+      Status status = Status.NOT_FOUND.withDescription(
+          "Resource not found: " + expectedLdsResourceName);
+      syncContext.execute(() -> {
+        ldsWatcher.onAmbientError(status);
       });
     }
 
     void deliverLdsResourceNotFound() {
+      Status notFoundStatus = Status.UNAVAILABLE.withDescription(
+          "Resource not found: " + expectedLdsResourceName);
       syncContext.execute(() -> {
-        ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
+        if (ldsWatcher != null) {
+          ldsWatcher.onResourceChanged(StatusOr.fromStatus(notFoundStatus));
+        }
       });
+    }
+
+    private List<String> getClusterNames(List<Route> routes) {
+      List<String> clusterNames = new ArrayList<>();
+      for (Route r : routes) {
+        if (r.routeAction() == null) {
+          continue;
+        }
+        String cluster = r.routeAction().cluster();
+        if (cluster != null) {
+          clusterNames.add(cluster);
+        } else {
+          List<ClusterWeight> weightedClusters = r.routeAction().weightedClusters();
+          if (weightedClusters == null) {
+            continue;
+          }
+          for (ClusterWeight wc : weightedClusters) {
+            clusterNames.add(wc.name());
+          }
+        }
+      }
+
+      return clusterNames;
     }
 
     void deliverRdsUpdateWithFaultInjection(
         String resourceName, @Nullable FaultConfig virtualHostFaultConfig,
         @Nullable FaultConfig routFaultConfig, @Nullable FaultConfig weightedClusterFaultConfig) {
-      if (!resourceName.equals(rdsResource)) {
-        return;
-      }
       ImmutableMap<String, FilterConfig> overrideConfig = weightedClusterFaultConfig == null
           ? ImmutableMap.of()
           : ImmutableMap.of(
@@ -2222,40 +2856,78 @@ public class XdsNameResolverTest {
           Collections.singletonList(expectedLdsResourceName),
           Collections.singletonList(route),
           overrideConfig);
-      syncContext.execute(() -> {
-        rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
-      });
+      deliverRdsUpdate(resourceName, virtualHost);
+      createAndDeliverClusterUpdates(this, cluster1);
     }
 
     void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
-      if (!resourceName.equals(rdsResource)) {
+      if (!rdsWatchers.containsKey(resourceName)) {
         return;
       }
       syncContext.execute(() -> {
-        rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
+        RdsUpdate update = new RdsUpdate(virtualHosts);
+        List<ResourceWatcher<RdsUpdate>> resourceWatchers =
+            ImmutableList.copyOf(rdsWatchers.get(resourceName));
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromValue(update)));
       });
     }
 
+    void deliverRdsUpdate(String resourceName, VirtualHost virtualHost) {
+      deliverRdsUpdate(resourceName, ImmutableList.of(virtualHost));
+    }
+
     void deliverRdsResourceNotFound(String resourceName) {
-      if (!resourceName.equals(rdsResource)) {
+      if (!rdsWatchers.containsKey(resourceName)) {
         return;
       }
       syncContext.execute(() -> {
-        rdsWatcher.onResourceDoesNotExist(rdsResource);
+        List<ResourceWatcher<RdsUpdate>> resourceWatchers =
+            ImmutableList.copyOf(rdsWatchers.get(resourceName));
+        Status status = Status.UNAVAILABLE.withDescription("Resource not found: " + resourceName);
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromStatus(status)));
       });
     }
+
+    private void deliverCdsUpdate(String clusterName, CdsUpdate update) {
+      if (!cdsWatchers.containsKey(clusterName)) {
+        return;
+      }
+      syncContext.execute(() -> {
+        List<ResourceWatcher<CdsUpdate>> resourceWatchers =
+            ImmutableList.copyOf(cdsWatchers.get(clusterName));
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromValue(update)));
+      });
+    }
+
+    private void deliverEdsUpdate(String name, EdsUpdate update) {
+      syncContext.execute(() -> {
+        if (!edsWatchers.containsKey(name)) {
+          return;
+        }
+        List<ResourceWatcher<EdsUpdate>> resourceWatchers =
+            ImmutableList.copyOf(edsWatchers.get(name));
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromValue(update)));
+      });
+    }
+
 
     void deliverError(final Status error) {
       if (ldsWatcher != null) {
         syncContext.execute(() -> {
-          ldsWatcher.onError(error);
+          ldsWatcher.onResourceChanged(StatusOr.fromStatus(error));
         });
       }
-      if (rdsWatcher != null) {
-        syncContext.execute(() -> {
-          rdsWatcher.onError(error);
-        });
-      }
+      syncContext.execute(() -> {
+        List<ResourceWatcher<RdsUpdate>> rdsCopy = rdsWatchers.values().stream()
+            .flatMap(List::stream).collect(java.util.stream.Collectors.toList());
+        List<ResourceWatcher<CdsUpdate>> cdsCopy = cdsWatchers.values().stream()
+            .flatMap(List::stream).collect(java.util.stream.Collectors.toList());
+        List<ResourceWatcher<EdsUpdate>> edsCopy = edsWatchers.values().stream()
+            .flatMap(List::stream).collect(java.util.stream.Collectors.toList());
+        rdsCopy.forEach(w -> w.onResourceChanged(StatusOr.fromStatus(error)));
+        cdsCopy.forEach(w -> w.onResourceChanged(StatusOr.fromStatus(error)));
+        edsCopy.forEach(w -> w.onResourceChanged(StatusOr.fromStatus(error)));
+      });
     }
   }
 
@@ -2321,5 +2993,109 @@ public class XdsNameResolverTest {
     void deliverErrorStatus() {
       listener.onClose(Status.UNAVAILABLE, new Metadata());
     }
+  }
+
+  @Test
+  public void start_passesChannelConfiguratorToClientPoolFactory() {
+    ChannelConfigurator channelConfigurator = builder -> { };
+
+    // Build NameResolver.Args containing the channel configurator
+    NameResolver.Args args = NameResolver.Args.newBuilder()
+        .setDefaultPort(8080)
+        .setProxyDetector(mock(ProxyDetector.class))
+        .setSynchronizationContext(syncContext)
+        .setServiceConfigParser(serviceConfigParser)
+        .setChannelLogger(mock(ChannelLogger.class))
+        .setChildChannelConfigurator(channelConfigurator)
+        .build();
+
+    XdsNameResolver resolver = new XdsNameResolver(
+        targetUri,
+        null, // targetAuthority (nullable)
+        AUTHORITY, // name
+        null, // overrideAuthority (nullable)
+        serviceConfigParser,
+        syncContext,
+        scheduler,
+        xdsClientPoolFactory,
+        mockRandom,
+        FilterRegistry.getDefaultRegistry(),
+        rawBootstrap,
+        metricRecorder,
+        args);
+
+    // Start the resolver
+    resolver.start(mockListener);
+
+    assertThat(xdsClientPoolFactory.savedChannelConfigurator).isSameInstanceAs(channelConfigurator);
+
+    resolver.shutdown();
+  }
+
+  private static class StringMarshaller implements MethodDescriptor.Marshaller<String> {
+    @Override
+    public InputStream stream(String value) {
+      return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public String parse(InputStream stream) {
+      try {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        int nRead;
+        byte[] data = new byte[1024];
+        while ((nRead = stream.read(data, 0, data.length)) != -1) {
+          buffer.write(data, 0, nRead);
+        }
+        buffer.flush();
+        return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  private static final MethodDescriptor<String, String> METHOD_SAY_HELLO =
+      MethodDescriptor.<String, String>newBuilder()
+          .setType(MethodDescriptor.MethodType.UNARY)
+          .setFullMethodName("test.TestService/SayHello")
+          .setRequestMarshaller(new StringMarshaller())
+          .setResponseMarshaller(new StringMarshaller())
+          .build();
+
+  @Test
+  public void rawMessageClientInterceptor_unaryRpc() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, new ServerCallHandler<String, String>() {
+          @Override
+          public ServerCall.Listener<String> startCall(
+              ServerCall<String, String> call, Metadata headers) {
+            call.request(1);
+            return new ServerCall.Listener<String>() {
+              @Override
+              public void onMessage(String message) {
+                call.sendHeaders(new Metadata());
+                call.sendMessage("Hello " + message);
+                call.close(Status.OK, new Metadata());
+              }
+            };
+          }
+        }).build();
+
+    grpcCleanup.register(InProcessServerBuilder.forName(serverName)
+        .directExecutor()
+        .addService(serviceDef)
+        .build()
+        .start());
+
+    Channel channel = grpcCleanup.register(InProcessChannelBuilder.forName(serverName)
+        .directExecutor()
+        .intercept(new XdsNameResolver.RawMessageClientInterceptor())
+        .build());
+
+    String response = ClientCalls.blockingUnaryCall(
+        channel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
+    assertThat(response).isEqualTo("Hello World");
   }
 }

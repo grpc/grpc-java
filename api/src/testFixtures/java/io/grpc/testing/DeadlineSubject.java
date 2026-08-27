@@ -24,9 +24,9 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import com.google.common.truth.ComparableSubject;
 import com.google.common.truth.FailureMetadata;
 import com.google.common.truth.Subject;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Deadline;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /** Propositions for {@link Deadline} subjects. */

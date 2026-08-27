@@ -17,11 +17,13 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.internal.CertificateUtils.createTrustManager;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
@@ -33,6 +35,8 @@ import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
@@ -72,7 +76,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;
@@ -81,8 +84,6 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.security.auth.x500.X500Principal;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
@@ -91,6 +92,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
 
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
+  private final ChannelCredentials channelCredentials;
   private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
 
@@ -116,17 +118,26 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
               CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
               CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
               CipherSuite.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-              CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+              CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+              CipherSuite.TLS_AES_128_GCM_SHA256,
+              CipherSuite.TLS_AES_256_GCM_SHA384,
+              CipherSuite.TLS_CHACHA20_POLY1305_SHA256)
+          .tlsVersions(TlsVersion.TLS_1_3, TlsVersion.TLS_1_2)
+          .supportsTlsExtensions(true)
+          .build();
 
-              // TLS 1.3 does not work so far. See issues:
-              // https://github.com/grpc/grpc-java/issues/7765
-              //
-              // TLS 1.3
-              //CipherSuite.TLS_AES_128_GCM_SHA256,
-              //CipherSuite.TLS_AES_256_GCM_SHA384,
-              //CipherSuite.TLS_CHACHA20_POLY1305_SHA256
-              )
-          .tlsVersions(/*TlsVersion.TLS_1_3,*/ TlsVersion.TLS_1_2)
+  // @VisibleForTesting
+  static final ConnectionSpec INTERNAL_LEGACY_CONNECTION_SPEC =
+      new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
+          .cipherSuites(
+              // The following items should be sync with Netty's Http2SecurityUtil.CIPHERS.
+              CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+              CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+              CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+              CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+              CipherSuite.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+              CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256)
+          .tlsVersions(TlsVersion.TLS_1_2)
           .supportsTlsExtensions(true)
           .build();
 
@@ -184,7 +195,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   private SSLSocketFactory sslSocketFactory;
   private final boolean freezeSecurityConfiguration;
   private HostnameVerifier hostnameVerifier;
-  private ConnectionSpec connectionSpec = INTERNAL_DEFAULT_CONNECTION_SPEC;
+  private ConnectionSpec connectionSpec = initialConnectionSpec();
   private NegotiationType negotiationType = NegotiationType.TLS;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
@@ -199,6 +210,12 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
    */
   private final boolean useGetForSafeMethods = false;
 
+  static ConnectionSpec initialConnectionSpec() {
+    return (OkHttpProtocolNegotiator.get() instanceof OkHttpProtocolNegotiator.AndroidNegotiator)
+        ? INTERNAL_DEFAULT_CONNECTION_SPEC
+        : INTERNAL_LEGACY_CONNECTION_SPEC;
+  }
+
   private OkHttpChannelBuilder(String host, int port) {
     this(GrpcUtil.authorityFromHostAndPort(host, port));
   }
@@ -208,18 +225,30 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
     this.freezeSecurityConfiguration = false;
+    this.channelCredentials = null;
   }
 
   OkHttpChannelBuilder(
       String target, ChannelCredentials channelCreds, CallCredentials callCreds,
       SSLSocketFactory factory) {
+    this(target, channelCreds, callCreds, factory, null, null);
+  }
+
+  OkHttpChannelBuilder(
+      String target, ChannelCredentials channelCreds, CallCredentials callCreds,
+      SSLSocketFactory factory,
+      NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
     managedChannelImplBuilder = new ManagedChannelImplBuilder(
         target, channelCreds, callCreds,
         new OkHttpChannelTransportFactoryBuilder(),
-        new OkHttpChannelDefaultPortProvider());
+        new OkHttpChannelDefaultPortProvider(),
+        nameResolverRegistry,
+        nameResolverProvider);
     this.sslSocketFactory = factory;
     this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
+    this.channelCredentials = channelCreds;
   }
 
   private final class OkHttpChannelTransportFactoryBuilder
@@ -536,7 +565,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         keepAliveWithoutCalls,
         maxInboundMetadataSize,
         transportTracerFactory,
-        useGetForSafeMethods);
+        useGetForSafeMethods,
+        channelCredentials);
   }
 
   OkHttpChannelBuilder disableCheckAuthority() {
@@ -584,6 +614,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         throw new RuntimeException("Unknown negotiation type: " + negotiationType);
     }
   }
+
+
 
   private static final EnumSet<TlsChannelCredentials.Feature> understoodTlsFeatures =
       EnumSet.of(
@@ -705,30 +737,10 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   static TrustManager[] createTrustManager(byte[] rootCerts) throws GeneralSecurityException {
     InputStream rootCertsStream = new ByteArrayInputStream(rootCerts);
     try {
-      return createTrustManager(rootCertsStream);
+      return io.grpc.internal.CertificateUtils.createTrustManager(rootCertsStream);
     } finally {
       GrpcUtil.closeQuietly(rootCertsStream);
     }
-  }
-
-  static TrustManager[] createTrustManager(InputStream rootCerts) throws GeneralSecurityException {
-    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-    try {
-      ks.load(null, null);
-    } catch (IOException ex) {
-      // Shouldn't really happen, as we're not loading any data.
-      throw new GeneralSecurityException(ex);
-    }
-    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
-    for (X509Certificate cert : certs) {
-      X500Principal principal = cert.getSubjectX500Principal();
-      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
-    }
-
-    TrustManagerFactory trustManagerFactory =
-        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-    trustManagerFactory.init(ks);
-    return trustManagerFactory.getTrustManagers();
   }
 
   static Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
@@ -799,6 +811,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     private final boolean keepAliveWithoutCalls;
     final int maxInboundMetadataSize;
     final boolean useGetForSafeMethods;
+    private final ChannelCredentials channelCredentials;
     private boolean closed;
 
     private OkHttpTransportFactory(
@@ -816,7 +829,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         boolean keepAliveWithoutCalls,
         int maxInboundMetadataSize,
         TransportTracer.Factory transportTracerFactory,
-        boolean useGetForSafeMethods) {
+        boolean useGetForSafeMethods,
+        ChannelCredentials channelCredentials) {
       this.executorPool = executorPool;
       this.executor = executorPool.getObject();
       this.scheduledExecutorServicePool = scheduledExecutorServicePool;
@@ -834,6 +848,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
       this.maxInboundMetadataSize = maxInboundMetadataSize;
       this.useGetForSafeMethods = useGetForSafeMethods;
+      this.channelCredentials = channelCredentials;
 
       this.transportTracerFactory =
           Preconditions.checkNotNull(transportTracerFactory, "transportTracerFactory");
@@ -861,7 +876,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
           options.getUserAgent(),
           options.getEagAttributes(),
           options.getHttpConnectProxiedSocketAddress(),
-          tooManyPingsRunnable);
+          tooManyPingsRunnable,
+          channelCredentials);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);
@@ -897,7 +913,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
           keepAliveWithoutCalls,
           maxInboundMetadataSize,
           transportTracerFactory,
-          useGetForSafeMethods);
+          useGetForSafeMethods,
+          channelCredentials);
       return new SwapChannelCredentialsResult(factory, result.callCredentials);
     }
 

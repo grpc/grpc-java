@@ -26,6 +26,10 @@ import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.Status.Code;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
+import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -33,16 +37,28 @@ import org.junit.runners.JUnit4;
 /** Tests for {@link FaultFilter}. */
 @RunWith(JUnit4.class)
 public class FaultFilterTest {
+  private static final FaultFilter.Provider FILTER_PROVIDER = new FaultFilter.Provider();
+
+  @Test
+  public void filterType_clientOnly() {
+    assertThat(FILTER_PROVIDER.isClientFilter()).isTrue();
+    assertThat(FILTER_PROVIDER.isServerFilter()).isFalse();
+  }
 
   @Test
   public void parseFaultAbort_convertHttpStatus() {
     Any rawConfig = Any.pack(
         HTTPFault.newBuilder().setAbort(FaultAbort.newBuilder().setHttpStatus(404)).build());
-    FaultConfig faultConfig = FaultFilter.INSTANCE.parseFilterConfig(rawConfig).config;
+    FaultConfig faultConfig = FILTER_PROVIDER.parseFilterConfig(
+            rawConfig, getFilterContext()).config;
+    assertThat(faultConfig.faultAbort()).isNotNull();
     assertThat(faultConfig.faultAbort().status().getCode())
         .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
+
     FaultConfig faultConfigOverride =
-        FaultFilter.INSTANCE.parseFilterConfigOverride(rawConfig).config;
+        FILTER_PROVIDER.parseFilterConfigOverride(
+                    rawConfig, getFilterContext()).config;
+    assertThat(faultConfigOverride.faultAbort()).isNotNull();
     assertThat(faultConfigOverride.faultAbort().status().getCode())
         .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
   }
@@ -54,7 +70,7 @@ public class FaultFilterTest {
             .setPercentage(FractionalPercent.newBuilder()
                 .setNumerator(20).setDenominator(DenominatorType.HUNDRED))
             .setHeaderAbort(HeaderAbort.getDefaultInstance()).build();
-    FaultConfig.FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).config;
+    FaultConfig.FaultAbort faultAbort = FaultFilter.Provider.parseFaultAbort(proto).config;
     assertThat(faultAbort.headerAbort()).isTrue();
     assertThat(faultAbort.percent().numerator()).isEqualTo(20);
     assertThat(faultAbort.percent().denominatorType())
@@ -68,7 +84,7 @@ public class FaultFilterTest {
             .setPercentage(FractionalPercent.newBuilder()
                 .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
             .setHttpStatus(400).build();
-    FaultConfig.FaultAbort res = FaultFilter.parseFaultAbort(proto).config;
+    FaultConfig.FaultAbort res = FaultFilter.Provider.parseFaultAbort(proto).config;
     assertThat(res.percent().numerator()).isEqualTo(100);
     assertThat(res.percent().denominatorType())
         .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.TEN_THOUSAND);
@@ -82,10 +98,23 @@ public class FaultFilterTest {
             .setPercentage(FractionalPercent.newBuilder()
                 .setNumerator(600).setDenominator(DenominatorType.MILLION))
             .setGrpcStatus(Code.DEADLINE_EXCEEDED.value()).build();
-    FaultConfig.FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).config;
+    FaultConfig.FaultAbort faultAbort = FaultFilter.Provider.parseFaultAbort(proto).config;
     assertThat(faultAbort.percent().numerator()).isEqualTo(600);
     assertThat(faultAbort.percent().denominatorType())
         .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.MILLION);
     assertThat(faultAbort.status().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+  }
+
+  private static Filter.FilterConfigParseContext getFilterContext() {
+    return Filter.FilterConfigParseContext.builder()
+        .bootstrapInfo(BootstrapInfo.builder()
+            .servers(Collections.singletonList(
+                ServerInfo.create(
+                    "test_target", Collections.emptyMap())))
+            .node(Node.newBuilder().build())
+            .build())
+        .serverInfo(ServerInfo.create(
+            "test_target", Collections.emptyMap(), false, true, false, false, null))
+        .build();
   }
 }

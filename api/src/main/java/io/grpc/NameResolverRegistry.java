@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,10 +29,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -125,8 +126,10 @@ public final class NameResolverRegistry {
     if (instance == null) {
       List<NameResolverProvider> providerList = ServiceProviders.loadAll(
           NameResolverProvider.class,
-          getHardCodedClasses(),
-          NameResolverProvider.class.getClassLoader(),
+          ServiceLoader
+            .load(NameResolverProvider.class, NameResolverProvider.class.getClassLoader())
+            .iterator(),
+          NameResolverRegistry::getHardCodedClasses,
           new NameResolverPriorityAccessor());
       if (providerList.isEmpty()) {
         logger.warning("No NameResolverProviders found via ServiceLoader, including for DNS. This "
@@ -166,6 +169,11 @@ public final class NameResolverRegistry {
     } catch (ClassNotFoundException e) {
       logger.log(Level.FINE, "Unable to find DNS NameResolver", e);
     }
+    try {
+      list.add(Class.forName("io.grpc.binder.internal.IntentNameResolverProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find IntentNameResolverProvider", e);
+    }
     return Collections.unmodifiableList(list);
   }
 
@@ -173,6 +181,13 @@ public final class NameResolverRegistry {
     @Override
     @Nullable
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+      NameResolverProvider provider = getProviderForScheme(targetUri.getScheme());
+      return provider == null ? null : provider.newNameResolver(targetUri, args);
+    }
+
+    @Override
+    @Nullable
+    public NameResolver newNameResolver(io.grpc.Uri targetUri, NameResolver.Args args) {
       NameResolverProvider provider = getProviderForScheme(targetUri.getScheme());
       return provider == null ? null : provider.newNameResolver(targetUri, args);
     }

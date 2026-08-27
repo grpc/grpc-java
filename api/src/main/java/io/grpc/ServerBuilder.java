@@ -45,11 +45,12 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   }
 
   /**
-   * Execute application code directly in the transport thread.
-   *
-   * <p>Depending on the underlying transport, using a direct executor may lead to substantial
-   * performance improvements. However, it also requires the application to not block under
+   * Execute application code directly in the transport thread. The application must not block under
    * any circumstances.
+   *
+   * <p>Depending on the underlying transport and the application code, using a direct executor may
+   * lead to 10s of µs latency reduction but causes a substantial performance degradation when
+   * misused.
    *
    * <p>Calling this method is semantically equivalent to calling {@link #executor(Executor)} and
    * passing in a direct executor. However, this is the preferred way as it may allow the transport
@@ -61,10 +62,11 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public abstract T directExecutor();
 
   /**
-   * Provides a custom executor.
+   * Set the default executor for service callbacks.
    *
    * <p>It's an optional parameter. If the user has not provided an executor when the server is
-   * built, the builder will use a static cached thread pool.
+   * built, the builder will use a static cached thread pool. Users are encouraged to specify their
+   * own executor that limits the number of threads.
    *
    * <p>The server won't take ownership of the given executor. It's caller's responsibility to
    * shut down the executor when it's desired.
@@ -85,11 +87,13 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * it switches over. But if calling {@link ServerCallExecutorSupplier} returns null, the server
    * call is still handled by the default {@link #executor(Executor)} as a fallback.
    *
+   * <p>If your {@code executorSupplier} runs quickly and always returns a non-{@code null}
+   * executor, then you may want to use {@link #directExecutor} to reduce latency.
+   *
    * @param executorSupplier the server call executor provider
    * @return this
    * @since 1.39.0
-   *
-   * */
+   */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8274")
   public T callExecutor(ServerCallExecutorSupplier executorSupplier) {
     return thisT();
@@ -434,6 +438,17 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @since 1.0.0
    */
   public abstract Server build();
+
+  /**
+   * Adds a metric sink to the server.
+   *
+   * @param metricSink the metric sink to add.
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12693")
+  public T addMetricSink(MetricSink metricSink) {
+    return thisT();
+  }
 
   /**
    * Returns the correctly typed version of the builder.

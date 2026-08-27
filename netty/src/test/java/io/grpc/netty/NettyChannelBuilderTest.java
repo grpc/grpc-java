@@ -19,12 +19,14 @@ package io.grpc.netty;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
@@ -35,22 +37,86 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.handler.ssl.SslContext;
+import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Arrays;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class NettyChannelBuilderTest {
 
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   private final SslContext noSslContext = null;
+
+  @Test
+  public void neverIndexMetadataKeyIsFluentAndAdditive() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+    Metadata.Key<String> key =
+        Metadata.Key.of("X-High-Cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<String> sameNormalizedKey =
+        Metadata.Key.of("x-high-cardinality", Metadata.ASCII_STRING_MARSHALLER);
+
+    assertThat(builder.neverIndexMetadataKey(key)).isSameInstanceAs(builder);
+    assertThat(builder.neverIndexMetadataKey(sameNormalizedKey)).isSameInstanceAs(builder);
+  }
+
+  @Test
+  public void neverIndexMetadataKeyRejectsNull() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> builder.neverIndexMetadataKey(null));
+
+    assertThat(exception).hasMessageThat().isEqualTo("key");
+  }
+
+  @Test
+  public void neverIndexMetadataKeysIsFluentAdditiveAndIgnoresDuplicates() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+    Metadata.Key<String> stringKey =
+        Metadata.Key.of("x-high-cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<String> duplicateStringKey =
+        Metadata.Key.of("X-High-Cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<byte[]> binaryKey =
+        Metadata.Key.of("trace-bin", Metadata.BINARY_BYTE_MARSHALLER);
+
+    assertThat(builder.neverIndexMetadataKey(stringKey)).isSameInstanceAs(builder);
+    assertThat(builder.neverIndexMetadataKeys(
+        Arrays.asList(stringKey, duplicateStringKey, binaryKey)))
+        .isSameInstanceAs(builder);
+  }
+
+  @Test
+  public void neverIndexMetadataKeysRejectsNullCollection() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> builder.neverIndexMetadataKeys(null));
+
+    assertThat(exception).hasMessageThat().isEqualTo("keys");
+  }
+
+  @Test
+  public void neverIndexMetadataKeysRejectsNullElementWithoutPartialMutation() throws Exception {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+    Metadata.Key<String> validKey =
+        Metadata.Key.of("valid-key", Metadata.ASCII_STRING_MARSHALLER);
+
+    NullPointerException exception = assertThrows(
+        NullPointerException.class,
+        () -> builder.neverIndexMetadataKeys(
+            Arrays.<Metadata.Key<?>>asList(validKey, null)));
+
+    assertThat(exception).hasMessageThat().isEqualTo("key");
+    Field field = NettyChannelBuilder.class.getDeclaredField("neverIndexedMetadataKeys");
+    field.setAccessible(true);
+    assertThat((Set<?>) field.get(builder)).isEmpty();
+  }
 
   private void shutdown(ManagedChannel mc) throws Exception {
     mc.shutdownNow();
@@ -107,10 +173,9 @@ public class NettyChannelBuilderTest {
   public void failOverrideInvalidAuthority() {
     NettyChannelBuilder builder = new NettyChannelBuilder(getTestSocketAddress());
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority:");
-
-    builder.overrideAuthority("[invalidauthority");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.overrideAuthority("[invalidauthority"));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [invalidauthority");
   }
 
   @Test
@@ -128,20 +193,18 @@ public class NettyChannelBuilderTest {
     NettyChannelBuilder builder = new NettyChannelBuilder(getTestSocketAddress())
         .disableCheckAuthority()
         .enableCheckAuthority();
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority:");
-    builder.overrideAuthority("[invalidauthority");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.overrideAuthority("[invalidauthority"));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [invalidauthority");
   }
 
   @Test
   public void failInvalidAuthority() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid host or port");
-
     @SuppressWarnings("AddressSelection") // We actually expect zero addresses!
-    Object unused =
-        NettyChannelBuilder.forAddress(new InetSocketAddress("invalid_authority", 1234));
+    InetSocketAddress address = new InetSocketAddress("invalid_authority", 1234);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> NettyChannelBuilder.forAddress(address));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid host or port: invalid_authority 1234");
   }
 
   @Test
@@ -155,10 +218,10 @@ public class NettyChannelBuilderTest {
     SslContext sslContext = mock(SslContext.class);
     NettyChannelBuilder builder = new NettyChannelBuilder(getTestSocketAddress());
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Server SSL context can not be used for client channel");
-
-    builder.sslContext(sslContext);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.sslContext(sslContext));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Server SSL context can not be used for client channel");
   }
 
   @Test
@@ -166,10 +229,10 @@ public class NettyChannelBuilderTest {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget(
         "fakeTarget", InsecureChannelCredentials.create());
 
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("Cannot change security when using ChannelCredentials");
-
-    builder.negotiationType(NegotiationType.TLS);
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        () -> builder.negotiationType(NegotiationType.TLS));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Cannot change security when using ChannelCredentials");
   }
 
   @Test
@@ -177,10 +240,10 @@ public class NettyChannelBuilderTest {
     NettyChannelBuilder builder = NettyChannelBuilder.forAddress(
         getTestSocketAddress(), InsecureChannelCredentials.create());
 
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("Cannot change security when using ChannelCredentials");
-
-    builder.negotiationType(NegotiationType.TLS);
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        () -> builder.negotiationType(NegotiationType.TLS));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Cannot change security when using ChannelCredentials");
   }
 
   @Test
@@ -205,10 +268,9 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void createProtocolNegotiatorByType_tlsWithNoContext() {
-    thrown.expect(NullPointerException.class);
-    NettyChannelBuilder.createProtocolNegotiatorByType(
-        NegotiationType.TLS,
-        noSslContext, null);
+    assertThrows(NullPointerException.class,
+        () -> NettyChannelBuilder.createProtocolNegotiatorByType(
+            NegotiationType.TLS, noSslContext, null));
   }
 
   @Test
@@ -245,38 +307,40 @@ public class NettyChannelBuilderTest {
   public void negativeKeepAliveTime() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("keepalive time must be positive");
-    builder.keepAliveTime(-1L, TimeUnit.HOURS);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.keepAliveTime(-1L, TimeUnit.HOURS));
+    assertThat(e).hasMessageThat().isEqualTo("keepalive time must be positive");
   }
 
   @Test
   public void negativeKeepAliveTimeout() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("keepalive timeout must be positive");
-    builder.keepAliveTimeout(-1L, TimeUnit.HOURS);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.keepAliveTimeout(-1L, TimeUnit.HOURS));
+    assertThat(e).hasMessageThat().isEqualTo("keepalive timeout must be positive");
   }
 
   @Test
   public void assertEventLoopAndChannelType_onlyGroupProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
     builder.eventLoopGroup(mock(EventLoopGroup.class));
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
-    builder.assertEventLoopAndChannelType();
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        builder::assertEventLoopAndChannelType);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Both EventLoopGroup and ChannelType should be provided or neither should be");
   }
 
   @Test
   public void assertEventLoopAndChannelType_onlyTypeProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
     builder.channelType(LocalChannel.class, LocalAddress.class);
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
-    builder.assertEventLoopAndChannelType();
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        builder::assertEventLoopAndChannelType);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Both EventLoopGroup and ChannelType should be provided or neither should be");
   }
 
   @Test
@@ -288,10 +352,11 @@ public class NettyChannelBuilderTest {
         return null;
       }
     });
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
-    builder.assertEventLoopAndChannelType();
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        builder::assertEventLoopAndChannelType);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Both EventLoopGroup and ChannelType should be provided or neither should be");
   }
 
   @Test

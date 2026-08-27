@@ -25,7 +25,9 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
+import java.util.AbstractMap;
 import java.util.Objects;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Enables Client or server side to initialize this object with the received {@link BaseTlsContext}
@@ -52,22 +54,24 @@ public final class SslContextProviderSupplier implements Closeable {
   }
 
   /** Updates SslContext via the passed callback. */
-  public synchronized void updateSslContext(final SslContextProvider.Callback callback) {
+  public synchronized void updateSslContext(
+      final SslContextProvider.Callback callback, boolean autoSniSanValidationDoesNotApply) {
     checkNotNull(callback, "callback");
     try {
       if (!shutdown) {
         if (sslContextProvider == null) {
-          sslContextProvider = getSslContextProvider();
+          sslContextProvider = getSslContextProvider(autoSniSanValidationDoesNotApply);
         }
       }
       // we want to increment the ref-count so call findOrCreate again...
-      final SslContextProvider toRelease = getSslContextProvider();
+      final SslContextProvider toRelease = getSslContextProvider(autoSniSanValidationDoesNotApply);
       toRelease.addCallback(
           new SslContextProvider.Callback(callback.getExecutor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext) {
-              callback.updateSslContext(sslContext);
+            public void updateSslContextAndExtendedX509TrustManager(
+                AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
+              callback.updateSslContextAndExtendedX509TrustManager(sslContextAndTm);
               releaseSslContextProvider(toRelease);
             }
 
@@ -95,10 +99,20 @@ public final class SslContextProviderSupplier implements Closeable {
     }
   }
 
-  private SslContextProvider getSslContextProvider() {
-    return tlsContext instanceof UpstreamTlsContext
-        ? tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext)
-        : tlsContextManager.findOrCreateServerSslContextProvider((DownstreamTlsContext) tlsContext);
+  private SslContextProvider getSslContextProvider(boolean autoSniSanValidationDoesNotApply) {
+    if (tlsContext instanceof UpstreamTlsContext) {
+      UpstreamTlsContext upstreamTlsContext = (UpstreamTlsContext) tlsContext;
+      if (autoSniSanValidationDoesNotApply && upstreamTlsContext.getAutoSniSanValidation()) {
+        upstreamTlsContext = new UpstreamTlsContext(
+            upstreamTlsContext.getCommonTlsContext(),
+            upstreamTlsContext.getSni(),
+            upstreamTlsContext.getAutoHostSni(),
+            false);
+      }
+      return tlsContextManager.findOrCreateClientSslContextProvider(upstreamTlsContext);
+    }
+    return tlsContextManager.findOrCreateServerSslContextProvider(
+        (DownstreamTlsContext) tlsContext);
   }
 
   @VisibleForTesting public boolean isShutdown() {

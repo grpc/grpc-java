@@ -1,15 +1,12 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.9.5'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
 
 repositories {
-    maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/maven2/"
-    }
     mavenCentral()
     mavenLocal()
 }
@@ -24,10 +21,10 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.70.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.25.5'
-def openTelemetryVersion = '1.40.0'
-def openTelemetryPrometheusVersion = '1.40.0-alpha'
+def grpcVersion = '1.85.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protocVersion = '3.25.8'
+def openTelemetryVersion = '1.64.0'
+def openTelemetryPrometheusVersion = '1.64.0-alpha'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
@@ -37,7 +34,6 @@ dependencies {
     implementation "io.opentelemetry:opentelemetry-sdk-metrics:${openTelemetryVersion}"
     implementation "io.opentelemetry:opentelemetry-exporter-logging:${openTelemetryVersion}"
     implementation "io.opentelemetry:opentelemetry-exporter-prometheus:${openTelemetryPrometheusVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 }
 

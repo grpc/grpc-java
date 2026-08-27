@@ -36,12 +36,16 @@ import io.grpc.Channel;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -83,7 +87,7 @@ public final class OrcaOobUtil {
    *       class WrrLoadbalancer extends LoadBalancer {
    *         private final Helper originHelper;  // the original Helper
    *
-   *         public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+   *         public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
    *           // listener implements the logic for WRR's usage of backend metrics.
    *           OrcaReportingHelper orcaHelper =
    *               OrcaOobUtil.newOrcaReportingHelper(originHelper);
@@ -234,6 +238,30 @@ public final class OrcaOobUtil {
     @Override
     protected Helper delegate() {
       return delegate;
+    }
+
+    @Override
+    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      delegate.updateBalancingState(newState, new OrcaOobPicker(newPicker));
+    }
+
+    @VisibleForTesting
+    static final class OrcaOobPicker extends SubchannelPicker {
+      final SubchannelPicker delegate;
+
+      OrcaOobPicker(SubchannelPicker delegate) {
+        this.delegate = delegate;
+      }
+
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        PickResult result = delegate.pickSubchannel(args);
+        Subchannel subchannel = result.getSubchannel();
+        if (subchannel instanceof SubchannelImpl) {
+          return result.copyWithSubchannel(((SubchannelImpl) subchannel).delegate());
+        }
+        return result;
+      }
     }
 
     @Override

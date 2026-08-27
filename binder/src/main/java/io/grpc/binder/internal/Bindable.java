@@ -16,10 +16,12 @@
 
 package io.grpc.binder.internal;
 
+import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
 import io.grpc.Status;
+import io.grpc.StatusException;
 
 /** An interface for managing a {@code Binder} connection. */
 interface Bindable {
@@ -46,12 +48,43 @@ interface Bindable {
   }
 
   /**
+   * Fetches details about the remote Service from PackageManager without binding to it.
+   *
+   * <p>Resolving an untrusted address before binding to it lets you screen out problematic servers
+   * before giving them a chance to run. However, note that the identity/existence of the resolved
+   * Service can change between the time this method returns and the time you actually bind/connect
+   * to it. For example, suppose the target package gets uninstalled or upgraded right after this
+   * method returns.
+   *
+   * <p>Compare with {@link #getConnectedServiceInfo()}, which can only be called after {@link
+   * Observer#onBound(IBinder)} but can be used to learn about the service you actually connected
+   * to.
+   */
+  @AnyThread
+  ServiceInfo resolve() throws StatusException;
+
+  /**
    * Attempt to bind with the remote service.
    *
    * <p>Calling this multiple times or after {@link #unbind()} has no effect.
    */
   @AnyThread
   void bind();
+
+  /**
+   * Asks PackageManager for details about the remote Service we *actually* connected to.
+   *
+   * <p>Can only be called after {@link Observer#onBound}.
+   *
+   * <p>Compare with {@link #resolve()}, which reports which service would be selected as of now but
+   * *without* connecting.
+   *
+   * @throws StatusException UNIMPLEMENTED if the connected service isn't found (an {@link
+   *     Observer#onUnbound} callback has likely already happened or is on its way!)
+   * @throws IllegalStateException if {@link Observer#onBound} has not "happened-before" this call
+   */
+  @AnyThread
+  ServiceInfo getConnectedServiceInfo() throws StatusException;
 
   /**
    * Unbind from the remote service if connected.

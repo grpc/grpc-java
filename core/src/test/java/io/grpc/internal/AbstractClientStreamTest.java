@@ -23,6 +23,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -57,7 +58,6 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -76,8 +76,6 @@ import org.mockito.stubbing.Answer;
 public class AbstractClientStreamTest {
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
   private final TransportTracer transportTracer = new TransportTracer();
@@ -136,9 +134,7 @@ public class AbstractClientStreamTest {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
     stream.start(listener);
-    thrown.expect(NullPointerException.class);
-
-    stream.cancel(null);
+    assertThrows(NullPointerException.class, () -> stream.cancel(null));
   }
 
   @Test
@@ -164,9 +160,7 @@ public class AbstractClientStreamTest {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
 
-    thrown.expect(NullPointerException.class);
-
-    stream.start(null);
+    assertThrows(NullPointerException.class, () -> stream.start(null));
   }
 
   @Test
@@ -174,9 +168,7 @@ public class AbstractClientStreamTest {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
     stream.start(mockListener);
-    thrown.expect(IllegalStateException.class);
-
-    stream.start(mockListener);
+    assertThrows(IllegalStateException.class, () -> stream.start(mockListener));
   }
 
   @Test
@@ -188,8 +180,7 @@ public class AbstractClientStreamTest {
 
     TransportState state = stream.transportState();
 
-    thrown.expect(NullPointerException.class);
-    state.inboundDataReceived(null);
+    assertThrows(NullPointerException.class, () -> state.inboundDataReceived(null));
   }
 
   @Test
@@ -212,8 +203,8 @@ public class AbstractClientStreamTest {
 
     TransportState state = stream.transportState();
 
-    thrown.expect(IllegalStateException.class);
-    state.inboundHeadersReceived(new Metadata());
+    Metadata headers = new Metadata();
+    assertThrows(IllegalStateException.class, () -> state.inboundHeadersReceived(headers));
   }
 
   @Test
@@ -472,6 +463,24 @@ public class AbstractClientStreamTest {
         .isLessThan(TimeUnit.SECONDS.toNanos(1));
     assertThat(headers.get(GrpcUtil.TIMEOUT_KEY).longValue())
         .isGreaterThan(TimeUnit.MILLISECONDS.toNanos(600));
+  }
+
+  @Test
+  public void setDeadline_thePastBecomesPositive() {
+    AbstractClientStream.Sink sink = mock(AbstractClientStream.Sink.class);
+    ClientStream stream = new BaseAbstractClientStream(
+        allocator, new BaseTransportState(statsTraceCtx, transportTracer), sink, statsTraceCtx,
+        transportTracer);
+
+    stream.setDeadline(Deadline.after(-1, TimeUnit.NANOSECONDS));
+    stream.start(mockListener);
+
+    ArgumentCaptor<Metadata> headersCaptor = ArgumentCaptor.forClass(Metadata.class);
+    verify(sink).writeHeaders(headersCaptor.capture(), ArgumentMatchers.<byte[]>any());
+
+    Metadata headers = headersCaptor.getValue();
+    assertThat(headers.get(Metadata.Key.of("grpc-timeout", Metadata.ASCII_STRING_MARSHALLER)))
+        .isEqualTo("1n");
   }
 
   @Test

@@ -28,7 +28,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Function;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.ByteStreams;
@@ -120,7 +119,6 @@ import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
-import org.HdrHistogram.Histogram;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -485,7 +483,7 @@ public abstract class AbstractInteropTest {
         blockingStub.unaryCall(expectCompressedRequest);
         fail("expected INVALID_ARGUMENT");
       } catch (StatusRuntimeException e) {
-        assertEquals(Status.INVALID_ARGUMENT.getCode(), e.getStatus().getCode());
+        assertCodeEquals(Status.Code.INVALID_ARGUMENT, e.getStatus());
       }
       assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.INVALID_ARGUMENT);
     }
@@ -654,7 +652,7 @@ public abstract class AbstractInteropTest {
       responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
       Throwable e = responseObserver.getError();
       assertNotNull("expected INVALID_ARGUMENT", e);
-      assertEquals(Status.INVALID_ARGUMENT.getCode(), Status.fromThrowable(e).getCode());
+      assertCodeEquals(Status.Code.INVALID_ARGUMENT, Status.fromThrowable(e));
     }
 
     // Start a new stream
@@ -803,8 +801,7 @@ public abstract class AbstractInteropTest {
     requestObserver.onError(new RuntimeException());
     responseObserver.awaitCompletion();
     assertEquals(Arrays.<StreamingInputCallResponse>asList(), responseObserver.getValues());
-    assertEquals(Status.Code.CANCELLED,
-        Status.fromThrowable(responseObserver.getError()).getCode());
+    assertCodeEquals(Status.Code.CANCELLED, Status.fromThrowable(responseObserver.getError()));
 
     if (metricsExpected()) {
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
@@ -841,8 +838,7 @@ public abstract class AbstractInteropTest {
     requestObserver.onError(new RuntimeException());
     responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
     assertEquals(1, responseObserver.getValues().size());
-    assertEquals(Status.Code.CANCELLED,
-                 Status.fromThrowable(responseObserver.getError()).getCode());
+    assertCodeEquals(Status.Code.CANCELLED, Status.fromThrowable(responseObserver.getError()));
 
     assertStatsTrace("grpc.testing.TestService/FullDuplexCall", Status.Code.CANCELLED);
   }
@@ -1109,7 +1105,7 @@ public abstract class AbstractInteropTest {
       stub.streamingOutputCall(request).next();
       fail("Expected deadline to be exceeded");
     } catch (StatusRuntimeException ex) {
-      assertEquals(Status.DEADLINE_EXCEEDED.getCode(), ex.getStatus().getCode());
+      assertCodeEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus());
       String desc = ex.getStatus().getDescription();
       assertTrue(desc,
           // There is a race between client and server-side deadline expiration.
@@ -1155,8 +1151,7 @@ public abstract class AbstractInteropTest {
         .withDeadlineAfter(30, TimeUnit.MILLISECONDS)
         .streamingOutputCall(request, recorder);
     recorder.awaitCompletion();
-    assertEquals(Status.DEADLINE_EXCEEDED.getCode(),
-        Status.fromThrowable(recorder.getError()).getCode());
+    assertCodeEquals(Status.Code.DEADLINE_EXCEEDED, Status.fromThrowable(recorder.getError()));
     if (metricsExpected()) {
       // Stream may not have been created when deadline is exceeded, thus we don't check tracer
       // stats.
@@ -1181,7 +1176,7 @@ public abstract class AbstractInteropTest {
           .emptyCall(Empty.getDefaultInstance());
       fail("Should have thrown");
     } catch (StatusRuntimeException ex) {
-      assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+      assertCodeEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus());
       assertThat(ex.getStatus().getDescription())
           .startsWith("ClientCall started after CallOptions deadline was exceeded");
     }
@@ -1214,7 +1209,7 @@ public abstract class AbstractInteropTest {
           .emptyCall(Empty.getDefaultInstance());
       fail("Should have thrown");
     } catch (StatusRuntimeException ex) {
-      assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+      assertCodeEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus());
       assertThat(ex.getStatus().getDescription())
           .startsWith("ClientCall started after CallOptions deadline was exceeded");
     }
@@ -1280,8 +1275,7 @@ public abstract class AbstractInteropTest {
       stub.streamingOutputCall(request).next();
       fail();
     } catch (StatusRuntimeException ex) {
-      Status s = ex.getStatus();
-      assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.RESOURCE_EXHAUSTED);
+      assertCodeEquals(Status.Code.RESOURCE_EXHAUSTED, ex.getStatus());
       assertThat(Throwables.getStackTraceAsString(ex)).contains("exceeds maximum");
     }
   }
@@ -1336,8 +1330,7 @@ public abstract class AbstractInteropTest {
       stub.streamingOutputCall(request).next();
       fail();
     } catch (StatusRuntimeException ex) {
-      Status s = ex.getStatus();
-      assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.CANCELLED);
+      assertCodeEquals(Status.Code.CANCELLED, ex.getStatus());
       assertThat(Throwables.getStackTraceAsString(ex)).contains("message too large");
     }
   }
@@ -1559,7 +1552,7 @@ public abstract class AbstractInteropTest {
       blockingStub.unaryCall(simpleRequest);
       fail();
     } catch (StatusRuntimeException e) {
-      assertEquals(Status.UNKNOWN.getCode(), e.getStatus().getCode());
+      assertCodeEquals(Status.Code.UNKNOWN, e.getStatus());
       assertEquals(errorMessage, e.getStatus().getDescription());
     }
     assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN);
@@ -1575,7 +1568,7 @@ public abstract class AbstractInteropTest {
         .isTrue();
     assertThat(responseObserver.getError()).isNotNull();
     Status status = Status.fromThrowable(responseObserver.getError());
-    assertEquals(Status.UNKNOWN.getCode(), status.getCode());
+    assertCodeEquals(Status.Code.UNKNOWN, status);
     assertEquals(errorMessage, status.getDescription());
     assertStatsTrace("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
   }
@@ -1595,7 +1588,7 @@ public abstract class AbstractInteropTest {
       blockingStub.unaryCall(simpleRequest);
       fail();
     } catch (StatusRuntimeException e) {
-      assertEquals(Status.UNKNOWN.getCode(), e.getStatus().getCode());
+      assertCodeEquals(Status.Code.UNKNOWN, e.getStatus());
       assertEquals(errorMessage, e.getStatus().getDescription());
     }
     assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN);
@@ -1608,7 +1601,7 @@ public abstract class AbstractInteropTest {
       blockingStub.unimplementedCall(Empty.getDefaultInstance());
       fail();
     } catch (StatusRuntimeException e) {
-      assertEquals(Status.UNIMPLEMENTED.getCode(), e.getStatus().getCode());
+      assertCodeEquals(Status.Code.UNIMPLEMENTED, e.getStatus());
     }
 
     assertClientStatsTrace("grpc.testing.TestService/UnimplementedCall",
@@ -1624,7 +1617,7 @@ public abstract class AbstractInteropTest {
       stub.unimplementedCall(Empty.getDefaultInstance());
       fail();
     } catch (StatusRuntimeException e) {
-      assertEquals(Status.UNIMPLEMENTED.getCode(), e.getStatus().getCode());
+      assertCodeEquals(Status.Code.UNIMPLEMENTED, e.getStatus());
     }
 
     assertStatsTrace("grpc.testing.UnimplementedService/UnimplementedCall",
@@ -1632,7 +1625,6 @@ public abstract class AbstractInteropTest {
   }
 
   /** Start a fullDuplexCall which the server will not respond, and verify the deadline expires. */
-  @SuppressWarnings("MissingFail")
   @Test
   public void timeoutOnSleepingServer() throws Exception {
     TestServiceGrpc.TestServiceStub stub =
@@ -1642,20 +1634,15 @@ public abstract class AbstractInteropTest {
     StreamObserver<StreamingOutputCallRequest> requestObserver
         = stub.fullDuplexCall(responseObserver);
 
-    StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
+    requestObserver.onNext(StreamingOutputCallRequest.newBuilder()
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[27182])))
-        .build();
-    try {
-      requestObserver.onNext(request);
-    } catch (IllegalStateException expected) {
-      // This can happen if the stream has already been terminated due to deadline exceeded.
-    }
+        .build());
 
     assertTrue(responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
     assertEquals(0, responseObserver.getValues().size());
-    assertEquals(Status.DEADLINE_EXCEEDED.getCode(),
-                 Status.fromThrowable(responseObserver.getError()).getCode());
+    assertCodeEquals(
+        Status.Code.DEADLINE_EXCEEDED, Status.fromThrowable(responseObserver.getError()));
 
     if (metricsExpected()) {
       // CensusStreamTracerModule record final status in the interceptor, thus is guaranteed to be
@@ -1679,234 +1666,6 @@ public abstract class AbstractInteropTest {
   public void getServerAddressAndLocalAddressFromClient() {
     assertNotNull(obtainRemoteServerAddr());
     assertNotNull(obtainLocalClientAddr());
-  }
-
-  private static class SoakIterationResult {
-    public SoakIterationResult(long latencyMs, Status status) {
-      this.latencyMs = latencyMs;
-      this.status = status;
-    }
-
-    public long getLatencyMs() {
-      return latencyMs;
-    }
-
-    public Status getStatus() {
-      return status;
-    }
-
-    private long latencyMs = -1;
-    private Status status = Status.OK;
-  }
-
-
-  private static class ThreadResults {
-    private int threadFailures = 0;
-    private int iterationsDone = 0;
-    private Histogram latencies = new Histogram(4);
-
-    public int getThreadFailures() {
-      return threadFailures;
-    }
-
-    public int getIterationsDone() {
-      return iterationsDone;
-    }
-
-    public Histogram getLatencies() {
-      return latencies;
-    }
-  }
-
-  private SoakIterationResult performOneSoakIteration(
-      TestServiceGrpc.TestServiceBlockingStub soakStub, int soakRequestSize, int soakResponseSize)
-      throws InterruptedException {
-    long startNs = System.nanoTime();
-    Status status = Status.OK;
-    try {
-      final SimpleRequest request =
-          SimpleRequest.newBuilder()
-              .setResponseSize(soakResponseSize)
-              .setPayload(
-                  Payload.newBuilder().setBody(ByteString.copyFrom(new byte[soakRequestSize])))
-              .build();
-      final SimpleResponse goldenResponse =
-          SimpleResponse.newBuilder()
-              .setPayload(
-                  Payload.newBuilder().setBody(ByteString.copyFrom(new byte[soakResponseSize])))
-              .build();
-      assertResponse(goldenResponse, soakStub.unaryCall(request));
-    } catch (StatusRuntimeException e) {
-      status = e.getStatus();
-    }
-    long elapsedNs = System.nanoTime() - startNs;
-    return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
-  }
-
-  /**
-   * Runs large unary RPCs in a loop with configurable failure thresholds
-   * and channel creation behavior.
-   */
-  public void performSoakTest(
-      String serverUri,
-      int soakIterations,
-      int maxFailures,
-      int maxAcceptablePerIterationLatencyMs,
-      int minTimeMsBetweenRpcs,
-      int overallTimeoutSeconds,
-      int soakRequestSize,
-      int soakResponseSize,
-      int numThreads,
-      Function<ManagedChannel, ManagedChannel> createNewChannel)
-      throws InterruptedException {
-    if (soakIterations % numThreads != 0) {
-      throw new IllegalArgumentException("soakIterations must be evenly divisible by numThreads.");
-    }
-    ManagedChannel sharedChannel = createChannel();
-    long startNs = System.nanoTime();
-    Thread[] threads = new Thread[numThreads];
-    int soakIterationsPerThread = soakIterations / numThreads;
-    List<ThreadResults> threadResultsList = new ArrayList<>(numThreads);
-    for (int i = 0; i < numThreads; i++) {
-      threadResultsList.add(new ThreadResults());
-    }
-    for (int threadInd = 0; threadInd < numThreads; threadInd++) {
-      final int currentThreadInd = threadInd;
-      threads[threadInd] = new Thread(() -> {
-        try {
-          executeSoakTestInThread(
-              soakIterationsPerThread,
-              startNs,
-              minTimeMsBetweenRpcs,
-              soakRequestSize,
-              soakResponseSize,
-              maxAcceptablePerIterationLatencyMs,
-              overallTimeoutSeconds,
-              serverUri,
-              threadResultsList.get(currentThreadInd),
-              sharedChannel,
-              createNewChannel);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          throw new RuntimeException("Thread interrupted: " + e.getMessage(), e);
-        }
-      });
-      threads[threadInd].start();
-    }
-    for (Thread thread : threads) {
-      thread.join();
-    }
-
-    int totalFailures = 0;
-    int iterationsDone = 0;
-    Histogram latencies = new Histogram(4);
-    for (ThreadResults threadResult :threadResultsList) {
-      totalFailures += threadResult.getThreadFailures();
-      iterationsDone += threadResult.getIterationsDone();
-      latencies.add(threadResult.getLatencies());
-    }
-    System.err.println(
-        String.format(
-            Locale.US,
-            "(server_uri: %s) soak test ran: %d / %d iterations. total failures: %d. "
-                + "p50: %d ms, p90: %d ms, p100: %d ms",
-            serverUri,
-            iterationsDone,
-            soakIterations,
-            totalFailures,
-            latencies.getValueAtPercentile(50),
-            latencies.getValueAtPercentile(90),
-            latencies.getValueAtPercentile(100)));
-    // check if we timed out
-    String timeoutErrorMessage =
-        String.format(
-            Locale.US,
-            "(server_uri: %s) soak test consumed all %d seconds of time and quit early, "
-                + "only having ran %d out of desired %d iterations.",
-            serverUri,
-            overallTimeoutSeconds,
-            iterationsDone,
-            soakIterations);
-    assertEquals(timeoutErrorMessage, iterationsDone, soakIterations);
-    // check if we had too many failures
-    String tooManyFailuresErrorMessage =
-        String.format(
-            Locale.US,
-            "(server_uri: %s) soak test total failures: %d exceeds max failures "
-                + "threshold: %d.",
-            serverUri, totalFailures, maxFailures);
-    assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
-    shutdownChannel(sharedChannel);
-  }
-
-  private void shutdownChannel(ManagedChannel channel) throws InterruptedException {
-    if (channel != null) {
-      channel.shutdownNow();
-      channel.awaitTermination(10, TimeUnit.SECONDS);
-    }
-  }
-
-  protected ManagedChannel createNewChannel(ManagedChannel currentChannel) {
-    try {
-      shutdownChannel(currentChannel);
-      return createChannel();
-    } catch (InterruptedException e) {
-      throw new RuntimeException("Interrupted while creating a new channel", e);
-    }
-  }
-
-  private void executeSoakTestInThread(
-      int soakIterationsPerThread,
-      long startNs,
-      int minTimeMsBetweenRpcs,
-      int soakRequestSize,
-      int soakResponseSize,
-      int maxAcceptablePerIterationLatencyMs,
-      int overallTimeoutSeconds,
-      String serverUri,
-      ThreadResults threadResults,
-      ManagedChannel sharedChannel,
-      Function<ManagedChannel, ManagedChannel> maybeCreateChannel) throws InterruptedException {
-    ManagedChannel currentChannel = sharedChannel;
-    for (int i = 0; i < soakIterationsPerThread; i++) {
-      if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
-        break;
-      }
-      long earliestNextStartNs = System.nanoTime()
-          + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
-
-      currentChannel = maybeCreateChannel.apply(currentChannel);
-      TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
-          .newBlockingStub(currentChannel)
-              .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-      SoakIterationResult result = performOneSoakIteration(currentStub,
-          soakRequestSize, soakResponseSize);
-      SocketAddress peer = clientCallCapture
-          .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
-      StringBuilder logStr = new StringBuilder(
-          String.format(
-              Locale.US,
-              "thread id: %d soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
-              Thread.currentThread().getId(),
-              i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
-      if (!result.getStatus().equals(Status.OK)) {
-        threadResults.threadFailures++;
-        logStr.append(String.format(" failed: %s", result.getStatus()));
-      } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
-        threadResults.threadFailures++;
-        logStr.append(
-            " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
-      } else {
-        logStr.append(" succeeded");
-      }
-      System.err.println(logStr.toString());
-      threadResults.iterationsDone++;
-      threadResults.getLatencies().recordValue(result.getLatencyMs());
-      long remainingNs = earliestNextStartNs - System.nanoTime();
-      if (remainingNs > 0) {
-        TimeUnit.NANOSECONDS.sleep(remainingNs);
-      }
-    }
   }
 
   private static void assertSuccess(StreamRecorder<?> recorder) {
@@ -2263,6 +2022,10 @@ public abstract class AbstractInteropTest {
     } else {
       assertEquals(expected.getBody(), actual.getBody());
     }
+  }
+
+  private static void assertCodeEquals(Status.Code expected, Status actual) {
+    assertWithMessage("Unexpected status: %s", actual).that(actual.getCode()).isEqualTo(expected);
   }
 
   /**

@@ -24,7 +24,9 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
+import com.google.common.primitives.UnsignedInts;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -40,6 +42,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -52,6 +55,7 @@ import javax.annotation.Nullable;
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   private static final Logger logger = Logger.getLogger(MultiChildLoadBalancer.class.getName());
+  private static final int OFFSET_SEED = new Random().nextInt();
   // Modify by replacing the list to release memory when no longer used.
   private List<ChildLbState> childLbStates = new ArrayList<>(0);
   private final Helper helper;
@@ -107,21 +111,22 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    */
   @Override
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    logger.log(Level.FINE, "Received resolution result: {0}", resolvedAddresses);
     try {
       resolvingAddresses = true;
 
       // process resolvedAddresses to update children
-      AcceptResolvedAddrRetVal acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
-        return acceptRetVal.status;
+      Map<Object, ResolvedAddresses> newChildAddresses = createChildAddressesMap(resolvedAddresses);
+
+      // Handle error case
+      if (newChildAddresses.isEmpty()) {
+        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+            "NameResolver returned no usable address. " + resolvedAddresses);
+        handleNameResolutionError(unavailableStatus);
+        return unavailableStatus;
       }
 
-      // Update the picker and our connectivity state
-      updateOverallBalancingState();
-
-      // shutdown removed children
-      shutdownRemoved(acceptRetVal.removedChildren);
-      return acceptRetVal.status;
+      return updateChildrenWithResolvedAddresses(newChildAddresses);
     } finally {
       resolvingAddresses = false;
     }
@@ -149,31 +154,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     childLbStates.clear();
   }
 
-  /**
-   *   This does the work to update the child map and calculate which children have been removed.
-   *   You must call {@link #updateOverallBalancingState} to update the picker
-   *   and call {@link #shutdownRemoved(List)} to shutdown the endpoints that have been removed.
-    */
-  protected final AcceptResolvedAddrRetVal acceptResolvedAddressesInternal(
-      ResolvedAddresses resolvedAddresses) {
-    logger.log(Level.FINE, "Received resolution result: {0}", resolvedAddresses);
-
-    Map<Object, ResolvedAddresses> newChildAddresses = createChildAddressesMap(resolvedAddresses);
-
-    // Handle error case
-    if (newChildAddresses.isEmpty()) {
-      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. " + resolvedAddresses);
-      handleNameResolutionError(unavailableStatus);
-      return new AcceptResolvedAddrRetVal(unavailableStatus, null);
-    }
-
-    List<ChildLbState> removed = updateChildrenWithResolvedAddresses(newChildAddresses);
-    return new AcceptResolvedAddrRetVal(Status.OK, removed);
-  }
-
-  /** Returns removed children. */
-  private List<ChildLbState> updateChildrenWithResolvedAddresses(
+  private Status updateChildrenWithResolvedAddresses(
       Map<Object, ResolvedAddresses> newChildAddresses) {
     // Create a map with the old values
     Map<Object, ChildLbState> oldStatesMap =
@@ -183,6 +164,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
 
     // Move ChildLbStates from the map to a new list (preserving the new map's order)
+    Status status = Status.OK;
     List<ChildLbState> newChildLbStates = new ArrayList<>(newChildAddresses.size());
     for (Map.Entry<Object, ResolvedAddresses> entry : newChildAddresses.entrySet()) {
       ChildLbState childLbState = oldStatesMap.remove(entry.getKey());
@@ -190,22 +172,43 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         childLbState = createChildLbState(entry.getKey());
       }
       newChildLbStates.add(childLbState);
-      if (entry.getValue() != null) {
-        childLbState.lb.handleResolvedAddresses(entry.getValue()); // update child LB
+    }
+    // Use a random start position for child updates to weakly "shuffle" connection creation order.
+    // The network will often add noise to the creation order, but this avoids giving earlier
+    // children a consistent head start.
+    for (ChildLbState childLbState : offsetIterable(newChildLbStates, OFFSET_SEED)) {
+      ResolvedAddresses addresses = newChildAddresses.get(childLbState.getKey());
+      if (addresses != null) {
+        // update child LB
+        Status newStatus = childLbState.lb.acceptResolvedAddresses(addresses);
+        if (!newStatus.isOk()) {
+          status = newStatus;
+        }
       }
     }
 
     childLbStates = newChildLbStates;
-    // Remaining entries in map are orphaned
-    return new ArrayList<>(oldStatesMap.values());
-  }
+    // Update the picker and our connectivity state
+    updateOverallBalancingState();
 
-  protected final void shutdownRemoved(List<ChildLbState> removedChildren) {
-    // Do shutdowns after updating picker to reduce the chance of failing an RPC by picking a
-    // subchannel that has been shutdown.
-    for (ChildLbState childLbState : removedChildren) {
+    // Remaining entries in map are orphaned
+    for (ChildLbState childLbState : oldStatesMap.values()) {
       childLbState.shutdown();
     }
+    return status;
+  }
+
+  @VisibleForTesting
+  static <T> Iterable<T> offsetIterable(Collection<T> c, int seed) {
+    int pos;
+    if (c.isEmpty()) {
+      pos = 0;
+    } else {
+      pos = UnsignedInts.remainder(seed, c.size());
+    }
+    return Iterables.concat(
+        Iterables.skip(c, pos),
+        Iterables.limit(c, pos));
   }
 
   @Nullable
@@ -265,6 +268,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     private ConnectivityState currentState;
     private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
+    @SuppressWarnings("this-escape")
+    // TODO(okshiva): Fix 'this-escape' from the constructor before making the API public.
     public ChildLbState(Object key, LoadBalancer.Factory policyFactory) {
       this.key = key;
       this.lb = policyFactory.newLoadBalancer(createChildHelper());
@@ -404,16 +409,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     @Override
     public String toString() {
       return addrs.toString();
-    }
-  }
-
-  protected static class AcceptResolvedAddrRetVal {
-    public final Status status;
-    public final List<ChildLbState> removedChildren;
-
-    public AcceptResolvedAddrRetVal(Status status, List<ChildLbState> removedChildren) {
-      this.status = status;
-      this.removedChildren = removedChildren;
     }
   }
 }

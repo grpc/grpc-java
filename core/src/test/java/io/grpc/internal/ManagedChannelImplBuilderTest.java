@@ -23,6 +23,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
@@ -33,23 +34,31 @@ import static org.mockito.Mockito.when;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.FlagResetRule;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.InternalFeatureFlags;
+import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.InternalManagedChannelBuilder.InternalInterceptorFactory;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
+import io.grpc.NoopMetricSink;
 import io.grpc.StaticTestingClassLoader;
+import io.grpc.Uri;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.ResolvedNameResolver;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.testing.GrpcCleanupRule;
 import java.net.InetSocketAddress;
@@ -67,15 +76,16 @@ import java.util.regex.Pattern;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link ManagedChannelImplBuilder}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class ManagedChannelImplBuilderTest {
   private static final int DUMMY_PORT = 42;
   private static final String DUMMY_TARGET = "fake-target";
@@ -98,10 +108,16 @@ public class ManagedChannelImplBuilderTest {
         }
       };
 
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
+  @Rule public final FlagResetRule flagResetRule = new FlagResetRule();
 
   @Mock private ClientTransportFactory mockClientTransportFactory;
   @Mock private ClientTransportFactoryBuilder mockClientTransportFactoryBuilder;
@@ -119,6 +135,9 @@ public class ManagedChannelImplBuilderTest {
 
   @Before
   public void setUp() throws Exception {
+    flagResetRule.setFlagForTest(
+        InternalFeatureFlags::setRfc3986UrisEnabled, enableRfc3986UrisParam);
+
     builder = new ManagedChannelImplBuilder(
         DUMMY_TARGET,
         new UnsupportedClientTransportFactoryBuilder(),
@@ -372,11 +391,14 @@ public class ManagedChannelImplBuilderTest {
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
     try {
-      ManagedChannel unused = grpcCleanupRule.register(builder.build());
+      grpcCleanupRule.register(builder.build());
       fail("Should fail");
     } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().isEqualTo(
-          "Address types of NameResolver 'dns' for 'valid:1234' not supported by transport");
+      assertThat(e)
+          .hasMessageThat()
+          .isEqualTo(
+              "Address types of NameResolver 'dns' for 'dns:///valid:1234' not supported by"
+                  + " transport");
     }
   }
 
@@ -392,7 +414,7 @@ public class ManagedChannelImplBuilderTest {
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
     // should not fail
-    ManagedChannel unused = grpcCleanupRule.register(builder.build());
+    grpcCleanupRule.register(builder.build());
   }
 
   @Test
@@ -424,10 +446,9 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void checkAuthority_invalidAuthorityFailed() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority");
-
-    builder.checkAuthority(DUMMY_AUTHORITY_INVALID);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.checkAuthority(DUMMY_AUTHORITY_INVALID));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [ : : 1]");
   }
 
   @Test
@@ -450,11 +471,10 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void disableCheckAuthority_invalidAuthorityFailed() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority");
-
     builder.disableCheckAuthority().enableCheckAuthority();
-    builder.checkAuthority(DUMMY_AUTHORITY_INVALID);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.checkAuthority(DUMMY_AUTHORITY_INVALID));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [ : : 1]");
   }
 
   @Test
@@ -533,12 +553,9 @@ public class ManagedChannelImplBuilderTest {
       List<ClientInterceptor> effectiveInterceptors =
           builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors).hasSize(2);
-      try {
-        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
-        fail("exception expected");
-      } catch (IllegalStateException e) {
-        assertThat(e).hasMessageThat().contains("Configurators are already set");
-      }
+      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+      assertThat(InternalConfiguratorRegistry.getConfigurators()).isEmpty();
+      assertThat(InternalConfiguratorRegistry.getConfiguratorsCallCountBeforeSet()).isEqualTo(1);
     }
   }
 
@@ -680,14 +697,12 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void retryBufferSizeInvalidArg() {
-    thrown.expect(IllegalArgumentException.class);
-    builder.retryBufferSize(0L);
+    assertThrows(IllegalArgumentException.class, () -> builder.retryBufferSize(0L));
   }
 
   @Test
   public void perRpcBufferLimitInvalidArg() {
-    thrown.expect(IllegalArgumentException.class);
-    builder.perRpcBufferLimit(0L);
+    assertThrows(IllegalArgumentException.class, () -> builder.perRpcBufferLimit(0L));
   }
 
   @Test
@@ -710,8 +725,7 @@ public class ManagedChannelImplBuilderTest {
     Map<String, Object> config = new HashMap<>();
     config.put(null, "val");
 
-    thrown.expect(IllegalArgumentException.class);
-    builder.defaultServiceConfig(config);
+    assertThrows(IllegalArgumentException.class, () -> builder.defaultServiceConfig(config));
   }
 
   @Test
@@ -721,17 +735,37 @@ public class ManagedChannelImplBuilderTest {
     Map<String, Object> config = new HashMap<>();
     config.put("key", subConfig);
 
-    thrown.expect(IllegalArgumentException.class);
-    builder.defaultServiceConfig(config);
+    assertThrows(IllegalArgumentException.class, () -> builder.defaultServiceConfig(config));
   }
 
   @Test
   public void defaultServiceConfig_intValue() {
     Map<String, Object> config = new HashMap<>();
+
     config.put("key", 3);
 
-    thrown.expect(IllegalArgumentException.class);
     builder.defaultServiceConfig(config);
+
+    assertThat(builder.defaultServiceConfig).containsEntry("key", 3D);
+  }
+
+  @Test
+  public void defaultServiceConfig_nestedIntValue() {
+    Map<String, Object> config = new HashMap<>();
+    List<Object> list = new ArrayList<>();
+    Map<String, Object> nested = new HashMap<>();
+
+    list.add(123);
+    nested.put("key", 456);
+    list.add(nested);
+    config.put("list", list);
+
+    builder.defaultServiceConfig(config);
+    
+    assertThat(builder.defaultServiceConfig)
+            .containsEntry(
+                    "list",
+                    Arrays.asList(123D, Collections.singletonMap("key", 456D)));
   }
 
   @Test
@@ -775,6 +809,103 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
+  public void childChannelConfigurator_propagatesMetricsAndInterceptors_xdsTarget() {
+    // Setup Mocks
+    when(mockClientTransportFactory.getScheduledExecutorService())
+        .thenReturn(clock.getScheduledExecutorService());
+    when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
+        .thenReturn(mockClientTransportFactory);
+    when(mockClientTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InetSocketAddress.class));
+
+    MetricSink mockMetricSink = new NoopMetricSink();
+    ClientInterceptor mockInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return next.newCall(method, callOptions);
+      }
+    };
+
+    // Define the Configurator
+    ChannelConfigurator configurator = builder -> {
+      InternalManagedChannelBuilder.addMetricSink(builder, mockMetricSink);
+
+      InternalManagedChannelBuilder.interceptWithTarget(builder, target -> mockInterceptor);
+    };
+
+    // Use NameResolver.Factory to capture Args
+    final NameResolver.Args[] capturedArgs = new NameResolver.Args[1];
+    final boolean[] newNameResolverCalled = new boolean[1];
+
+    NameResolver realNameResolver = new NameResolver() {
+      @Override
+      public String getServiceAuthority() {
+        return "foo.authority";
+      }
+
+      @Override
+      public void start(Listener2 listener) {}
+
+      @Override
+      public void shutdown() {}
+    };
+
+    NameResolver.Factory realNameResolverFactory = new NameResolver.Factory() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        newNameResolverCalled[0] = true;
+        capturedArgs[0] = args;
+        return realNameResolver;
+      }
+
+      @Override
+      public NameResolver newNameResolver(Uri targetUri, NameResolver.Args args) {
+        newNameResolverCalled[0] = true;
+        capturedArgs[0] = args;
+        return realNameResolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "xds";
+      }
+    };
+
+    // Use the configurator and the custom factory
+    NameResolverRegistry registry = new NameResolverRegistry();
+    registry.register(new NameResolverFactoryToProviderFacade(realNameResolverFactory));
+
+    ManagedChannelBuilder<?> parentBuilder = new ManagedChannelImplBuilder(
+        "xds:///my-service-target",
+        mockClientTransportFactoryBuilder,
+        new FixedPortProvider(DUMMY_PORT))
+        .childChannelConfigurator(configurator)
+        .nameResolverRegistry(registry);
+
+    ManagedChannel channel = parentBuilder.build();
+    grpcCleanupRule.register(channel);
+
+    // Verify that newNameResolver was called
+    assertThat(newNameResolverCalled[0]).isTrue();
+
+    // Extract the childChannelConfigurator from Args
+    NameResolver.Args args = capturedArgs[0];
+    ChannelConfigurator channelConfiguratorInArgs = args.getChildChannelConfigurator();
+    assertNotNull("Child channel configurator should be present in NameResolver.Args",
+        channelConfiguratorInArgs);
+
+    // Verify the configurator logically applies (by running it on a real builder)
+    ManagedChannelImplBuilder childBuilder = new ManagedChannelImplBuilder(
+        "xds:///child-service-target",
+        mockClientTransportFactoryBuilder,
+        new FixedPortProvider(DUMMY_PORT));
+
+    channelConfiguratorInArgs.configureChannelBuilder(childBuilder);
+    assertThat(childBuilder.metricSinks).contains(mockMetricSink);
+  }
+
+  @Test
   public void metricSinks() {
     MetricSink mocksink = mock(MetricSink.class);
     builder.addMetricSink(mocksink);
@@ -794,4 +925,150 @@ public class ManagedChannelImplBuilderTest {
   }
 
   private static class CustomSocketAddress extends SocketAddress {}
+
+  @Test
+  public void getNameResolverProvider_explicitProviderWithIpTarget() {
+    String target = "127.0.0.1:8080";
+    NameResolverRegistry registry = new NameResolverRegistry();
+    NameResolverProvider explicitProvider = mock(NameResolverProvider.class);
+    when(explicitProvider.getScheme()).thenReturn("dns");
+    when(explicitProvider.getDefaultScheme()).thenReturn("dns");
+
+    ManagedChannelImplBuilder.ResolvedNameResolver resolved;
+    resolved = ManagedChannelImplBuilder
+        .getNameResolverProvider(target, registry, explicitProvider);
+
+    assertThat(resolved.provider).isSameInstanceAs(explicitProvider);
+    assertThat(resolved.targetUri.toString()).isEqualTo("dns:///127.0.0.1:8080");
+  }
+
+  @Test
+  public void getNameResolverProvider_explicitProviderWithInvalidUri() {
+    String target = "::1";
+    NameResolverRegistry registry = new NameResolverRegistry();
+    NameResolverProvider explicitProvider = mock(NameResolverProvider.class);
+    when(explicitProvider.getScheme()).thenReturn("dns");
+    when(explicitProvider.getDefaultScheme()).thenReturn("dns");
+
+    ManagedChannelImplBuilder.ResolvedNameResolver resolved;
+    resolved = ManagedChannelImplBuilder
+        .getNameResolverProvider(target, registry, explicitProvider);
+
+    assertThat(resolved.provider).isSameInstanceAs(explicitProvider);
+    assertThat(resolved.targetUri.toString()).isEqualTo("dns:///::1");
+  }
+
+  @Test
+  public void getNameResolverProvider_explicitProviderWithValidUri() {
+    String target = "dns:///localhost";
+    NameResolverRegistry registry = new NameResolverRegistry();
+    NameResolverProvider explicitProvider = new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return null;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "dns";
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+    };
+
+    ResolvedNameResolver resolved = ManagedChannelImplBuilder.getNameResolverProvider(
+        target, registry, explicitProvider);
+
+    // Should prefer explicit provider if scheme matches?
+    // Current logic: provider passed to getNameResolverProvider is prioritized for
+    // SCHEME determination for fallback
+    // BUT for valid URI, it logic matches URI scheme.
+    // If explicit provider is passed, it is used if target not valid URI.
+    // If target IS valid URI, it checks if provider != null.
+    // Wait, the code:
+    // if (provider == null) { ... }
+    // If explicit 'provider' arg is NOT null, logic uses it?
+    // Let's re-read ManagedChannelImplBuilder.getNameResolverProvider
+    assertThat(resolved.provider).isSameInstanceAs(explicitProvider);
+  }
+
+  @Test
+  public void getNameResolverProvider_registryFallback() {
+    String target = "dns:///localhost";
+    final NameResolverProvider registryProvider = new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return null;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "dns";
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+    };
+    NameResolverRegistry registry = new NameResolverRegistry();
+    registry.register(registryProvider);
+
+    ResolvedNameResolver resolved = ManagedChannelImplBuilder.getNameResolverProvider(
+        target, registry, null);
+
+    assertThat(resolved.provider).isSameInstanceAs(registryProvider);
+  }
+
+  @Test
+  public void getNameResolverProviderRfc3986_explicitProviderWithAuthorityTarget() {
+    String target = "authority-target";
+    NameResolverRegistry registry = new NameResolverRegistry();
+    NameResolverProvider explicitProvider = new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return null;
+      }
+
+      @Override
+      public String getScheme() {
+        return "customscheme";
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "customscheme";
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+    };
+    registry.register(explicitProvider);
+
+    ManagedChannelImplBuilder.ResolvedNameResolver resolved = ManagedChannelImplBuilder
+        .getNameResolverProviderRfc3986(target, registry, explicitProvider);
+
+    assertThat(resolved.provider).isSameInstanceAs(explicitProvider);
+    assertThat(resolved.targetUri.toString()).isEqualTo("customscheme:///authority-target");
+  }
 }

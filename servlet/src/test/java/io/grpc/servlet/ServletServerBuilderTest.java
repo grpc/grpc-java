@@ -80,7 +80,7 @@ public class ServletServerBuilderTest {
     ServletAdapter servletAdapter = serverBuilder.buildServletAdapter();
     servletAdapter.doPost(request, response);
 
-    verify(asyncContext).setTimeout(1);
+    verify(asyncContext).setTimeout(1 + ServletAdapter.ASYNC_TIMEOUT_SAFETY_MARGIN);
 
     // The following just verifies that scheduler is populated to the transport.
     // It doesn't matter what tasks (such as handshake timeout and request deadline) are actually

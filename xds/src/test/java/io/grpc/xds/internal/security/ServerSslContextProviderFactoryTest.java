@@ -78,7 +78,7 @@ public class ServerSslContextProviderFactoryTest {
         serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderServerSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], false);
     // verify that bootstrapInfo is cached...
     sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
@@ -117,7 +117,7 @@ public class ServerSslContextProviderFactoryTest {
         serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderServerSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
   }
 
   @Test
@@ -144,7 +144,7 @@ public class ServerSslContextProviderFactoryTest {
             serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderServerSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
   }
 
   @Test
@@ -179,7 +179,7 @@ public class ServerSslContextProviderFactoryTest {
             serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderServerSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], false);
   }
 
   @Test
@@ -210,8 +210,8 @@ public class ServerSslContextProviderFactoryTest {
         serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderServerSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
-    verifyWatcher(sslContextProvider, watcherCaptor[1]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
+    verifyWatcher(sslContextProvider, watcherCaptor[1], true);
   }
 
   @Test
@@ -249,7 +249,7 @@ public class ServerSslContextProviderFactoryTest {
         serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderServerSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
-    verifyWatcher(sslContextProvider, watcherCaptor[1]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
+    verifyWatcher(sslContextProvider, watcherCaptor[1], true);
   }
 }

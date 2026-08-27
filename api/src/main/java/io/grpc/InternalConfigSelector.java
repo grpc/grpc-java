@@ -35,7 +35,7 @@ public abstract class InternalConfigSelector {
       = Attributes.Key.create("internal:io.grpc.config-selector");
 
   // Use PickSubchannelArgs for SelectConfigArgs for now. May change over time.
-  /** Selects the config for an PRC. */
+  /** Selects the config for an RPC. */
   public abstract Result selectConfig(LoadBalancer.PickSubchannelArgs args);
 
   public static final class Result {

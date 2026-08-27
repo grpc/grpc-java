@@ -69,13 +69,14 @@ final class CancelServerStreamCommand extends WriteQueue.AbstractQueuedCommand {
 
     CancelServerStreamCommand that = (CancelServerStreamCommand) o;
 
-    return Objects.equal(this.stream, that.stream)
-        && Objects.equal(this.reason, that.reason);
+    return this.stream.equals(that.stream)
+        && this.reason.equals(that.reason)
+        && this.peerNotify.equals(that.peerNotify);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(stream, reason);
+    return Objects.hashCode(stream, reason, peerNotify);
   }
 
   @Override
@@ -83,6 +84,7 @@ final class CancelServerStreamCommand extends WriteQueue.AbstractQueuedCommand {
     return MoreObjects.toStringHelper(this)
         .add("stream", stream)
         .add("reason", reason)
+        .add("peerNotify", peerNotify)
         .toString();
   }
 

@@ -22,10 +22,12 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.CallCredentials;
 import io.grpc.Internal;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import javax.annotation.Nullable;
 
 /**
@@ -63,17 +65,27 @@ public abstract class Bootstrapper {
 
     public abstract boolean isTrustedXdsServer();
 
+    public abstract boolean resourceTimerIsTransientError();
+
+    public abstract boolean failOnDataErrors();
+
+    @Nullable public abstract CallCredentials callCredentials();
+
     @VisibleForTesting
     public static ServerInfo create(String target, @Nullable Object implSpecificConfig) {
-      return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig, false, false);
+      return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
+          false, false, false, false, null);
     }
 
     @VisibleForTesting
     public static ServerInfo create(
-        String target, Object implSpecificConfig, boolean ignoreResourceDeletion,
-        boolean isTrustedXdsServer) {
+        String target, Object implSpecificConfig,
+        boolean ignoreResourceDeletion, boolean isTrustedXdsServer,
+        boolean resourceTimerIsTransientError, boolean failOnDataErrors,
+        @Nullable CallCredentials callCredentials) {
       return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
-          ignoreResourceDeletion, isTrustedXdsServer);
+          ignoreResourceDeletion, isTrustedXdsServer,
+          resourceTimerIsTransientError, failOnDataErrors, callCredentials);
     }
   }
 
@@ -198,11 +210,18 @@ public abstract class Bootstrapper {
      */
     public abstract ImmutableMap<String, AuthorityInfo> authorities();
 
+    /**
+     * Parsed configuration for implementation-specific extensions.
+     * Returns an opaque object containing the parsed configuration.
+     */
+    public abstract Optional<Object> implSpecificObject();
+
     @VisibleForTesting
     public static Builder builder() {
       return new AutoValue_Bootstrapper_BootstrapInfo.Builder()
           .clientDefaultListenerResourceNameTemplate("%s")
-          .authorities(ImmutableMap.<String, AuthorityInfo>of());
+          .authorities(ImmutableMap.<String, AuthorityInfo>of())
+          .implSpecificObject(Optional.empty());
     }
 
     @AutoValue.Builder
@@ -224,7 +243,10 @@ public abstract class Bootstrapper {
 
       public abstract Builder authorities(Map<String, AuthorityInfo> authorities);
 
+      public abstract Builder implSpecificObject(Optional<Object> implSpecificObject);
+
       public abstract BootstrapInfo build();
     }
   }
+
 }

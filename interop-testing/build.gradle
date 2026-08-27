@@ -31,7 +31,6 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-protobuf'),
             libraries.junit
-    compileOnly libraries.javax.annotation
     // TODO(sergiitk): replace with com.google.cloud:google-cloud-logging
     // Used instead of google-cloud-logging because it's failing
     // due to a circular dependency on grpc.

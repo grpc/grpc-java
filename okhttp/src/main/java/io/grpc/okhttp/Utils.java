@@ -17,6 +17,7 @@
 package io.grpc.okhttp;
 
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
@@ -29,7 +30,6 @@ import java.net.SocketException;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckReturnValue;
 
 /**
  * Common utility methods for OkHttp transport.

@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.client.LoadStatsManager2.isEnabledOrcaLrsPropagation;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -35,7 +36,6 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ObjectPool;
 import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
@@ -45,6 +45,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
@@ -52,12 +53,15 @@ import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.XdsInternalAttributes;
+import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
@@ -82,6 +86,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   private static final Attributes.Key<AtomicReference<ClusterLocality>> ATTR_CLUSTER_LOCALITY =
       Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocality");
+  @VisibleForTesting
+  static final Attributes.Key<String> ATTR_SUBCHANNEL_ADDRESS_NAME =
+      Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.addressName");
 
   private final XdsLogger logger;
   private final Helper helper;
@@ -90,7 +97,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private String cluster;
   @Nullable
   private String edsServiceName;
-  private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private ClusterDropStats dropStats;
@@ -113,13 +119,11 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
-    if (xdsClientPool == null) {
-      xdsClientPool = attributes.get(InternalXdsAttributes.XDS_CLIENT_POOL);
-      assert xdsClientPool != null;
-      xdsClient = xdsClientPool.getObject();
+    if (xdsClient == null) {
+      xdsClient = checkNotNull(attributes.get(io.grpc.xds.XdsAttributes.XDS_CLIENT), "xdsClient");
     }
     if (callCounterProvider == null) {
-      callCounterProvider = attributes.get(InternalXdsAttributes.CALL_COUNTER_PROVIDER);
+      callCounterProvider = attributes.get(io.grpc.xds.XdsAttributes.CALL_COUNTER_PROVIDER);
     }
 
     ClusterImplConfig config =
@@ -145,13 +149,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
     childLbHelper.updateFilterMetadata(config.filterMetadata);
+    childLbHelper.updateBackendMetricPropagation(config.backendMetricPropagation);
 
-    childSwitchLb.handleResolvedAddresses(
+    return childSwitchLb.acceptResolvedAddresses(
         resolvedAddresses.toBuilder()
-            .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(config.childConfig)
             .build());
-    return Status.OK;
   }
 
   @Override
@@ -183,9 +186,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         childLbHelper = null;
       }
     }
-    if (xdsClient != null) {
-      xdsClient = xdsClientPool.returnObject(xdsClient);
-    }
+    xdsClient = null;
   }
 
   /**
@@ -195,7 +196,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final class ClusterImplLbHelper extends ForwardingLoadBalancerHelper {
     private final AtomicLong inFlights;
     private ConnectivityState currentState = ConnectivityState.IDLE;
-    private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
+    private SubchannelPicker currentPicker = new FixedResultPicker(
+        PickResult.withNoResult("connecting", "cluster_impl: initializing"));
     private List<DropOverload> dropPolicies = Collections.emptyList();
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
     @Nullable
@@ -203,6 +205,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     private Map<String, Struct> filterMetadata = ImmutableMap.of();
     @Nullable
     private final ServerInfo lrsServerInfo;
+    @Nullable
+    private BackendMetricPropagation backendMetricPropagation;
 
     private ClusterImplLbHelper(AtomicLong inFlights, @Nullable ServerInfo lrsServerInfo) {
       this.inFlights = checkNotNull(inFlights, "inFlights");
@@ -236,50 +240,63 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           .set(ATTR_CLUSTER_LOCALITY, localityAtomicReference);
       if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", false)) {
         String hostname = args.getAddresses().get(0).getAttributes()
-            .get(InternalXdsAttributes.ATTR_ADDRESS_NAME);
+            .get(XdsInternalAttributes.ATTR_ADDRESS_NAME);
         if (hostname != null) {
-          attrsBuilder.set(InternalXdsAttributes.ATTR_ADDRESS_NAME, hostname);
+          attrsBuilder.set(ATTR_SUBCHANNEL_ADDRESS_NAME, hostname);
         }
       }
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrsBuilder.build()).build();
       final Subchannel subchannel = delegate().createSubchannel(args);
 
-      return new ForwardingSubchannel() {
-        @Override
-        public void start(SubchannelStateListener listener) {
-          delegate().start(new SubchannelStateListener() {
-            @Override
-            public void onSubchannelState(ConnectivityStateInfo newState) {
-              // Do nothing if LB has been shutdown
-              if (xdsClient != null && newState.getState().equals(ConnectivityState.READY)) {
-                // Get locality based on the connected address attributes
-                ClusterLocality updatedClusterLocality = createClusterLocalityFromAttributes(
-                    subchannel.getConnectedAddressAttributes());
-                ClusterLocality oldClusterLocality = localityAtomicReference
-                    .getAndSet(updatedClusterLocality);
-                oldClusterLocality.release();
+      return new ClusterImplSubchannel(subchannel, localityAtomicReference);
+    }
+
+    private final class ClusterImplSubchannel extends ForwardingSubchannel {
+      private final Subchannel delegate;
+      private final AtomicReference<ClusterLocality> localityAtomicReference;
+
+      private ClusterImplSubchannel(
+          Subchannel delegate, AtomicReference<ClusterLocality> localityAtomicReference) {
+        this.delegate = delegate;
+        this.localityAtomicReference = localityAtomicReference;
+      }
+
+      @Override
+      public void start(SubchannelStateListener listener) {
+        delegate().start(
+            new SubchannelStateListener() {
+              @Override
+              public void onSubchannelState(ConnectivityStateInfo newState) {
+                // Do nothing if LB has been shutdown
+                if (xdsClient != null && newState.getState().equals(ConnectivityState.READY)) {
+                  // Get locality based on the connected address attributes
+                  ClusterLocality updatedClusterLocality =
+                      createClusterLocalityFromAttributes(
+                          delegate.getConnectedAddressAttributes());
+                  ClusterLocality oldClusterLocality =
+                      localityAtomicReference.getAndSet(updatedClusterLocality);
+                  oldClusterLocality.release();
+                }
+                listener.onSubchannelState(newState);
               }
-              listener.onSubchannelState(newState);
-            }
-          });
-        }
+            });
+      }
 
-        @Override
-        public void shutdown() {
-          localityAtomicReference.get().release();
-          delegate().shutdown();
-        }
+      @Override
+      public void shutdown() {
+        localityAtomicReference.get().release();
+        delegate().shutdown();
+      }
 
-        @Override
-        public void updateAddresses(List<EquivalentAddressGroup> addresses) {
-          delegate().updateAddresses(withAdditionalAttributes(addresses));
-        }
+      @Override
+      public void updateAddresses(List<EquivalentAddressGroup> addresses) {
+        delegate().updateAddresses(withAdditionalAttributes(addresses));
+      }
 
-        @Override
-        protected Subchannel delegate() {
-          return subchannel;
-        }
-      };
+      @Override
+      protected Subchannel delegate() {
+        return delegate;
+      }
     }
 
     private List<EquivalentAddressGroup> withAdditionalAttributes(
@@ -287,10 +304,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> newAddresses = new ArrayList<>();
       for (EquivalentAddressGroup eag : addresses) {
         Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
-            InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
+            io.grpc.xds.XdsAttributes.ATTR_CLUSTER_NAME, cluster);
         if (sslContextProviderSupplier != null) {
           attrBuilder.set(
-              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+              SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
               sslContextProviderSupplier);
         }
         newAddresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
@@ -299,8 +316,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
 
     private ClusterLocality createClusterLocalityFromAttributes(Attributes addressAttributes) {
-      Locality locality = addressAttributes.get(InternalXdsAttributes.ATTR_LOCALITY);
-      String localityName = addressAttributes.get(InternalXdsAttributes.ATTR_LOCALITY_NAME);
+      Locality locality = addressAttributes.get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY);
+      String localityName = addressAttributes.get(EquivalentAddressGroup.ATTR_LOCALITY_NAME);
 
       // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
       // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
@@ -315,7 +332,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           (lrsServerInfo == null)
               ? null
               : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster,
-                  edsServiceName, locality);
+                  edsServiceName, locality, backendMetricPropagation);
 
       return new ClusterLocality(localityStats, localityName);
     }
@@ -365,6 +382,11 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       this.filterMetadata = ImmutableMap.copyOf(filterMetadata);
     }
 
+    private void updateBackendMetricPropagation(
+        @Nullable BackendMetricPropagation backendMetricPropagation) {
+      this.backendMetricPropagation = backendMetricPropagation;
+    }
+
     private class RequestLimitingSubchannelPicker extends SubchannelPicker {
       private final SubchannelPicker delegate;
       private final List<DropOverload> dropPolicies;
@@ -398,13 +420,19 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         }
         PickResult result = delegate.pickSubchannel(args);
         if (result.getStatus().isOk() && result.getSubchannel() != null) {
+          Subchannel subchannel = result.getSubchannel();
+          if (subchannel instanceof ClusterImplLbHelper.ClusterImplSubchannel) {
+            subchannel = ((ClusterImplLbHelper.ClusterImplSubchannel) subchannel).delegate();
+            result = result.copyWithSubchannel(subchannel);
+          }
           if (enableCircuitBreaking) {
             if (inFlights.get() >= maxConcurrentRequests) {
               if (dropStats != null) {
                 dropStats.recordDroppedRequest();
               }
               return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
-                  "Cluster max concurrent requests limit exceeded"));
+                  String.format(Locale.US, "Cluster max concurrent requests limit of %d exceeded",
+                      maxConcurrentRequests)));
             }
           }
           final AtomicReference<ClusterLocality> clusterLocality =
@@ -422,16 +450,14 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
                   stats, inFlights, result.getStreamTracerFactory());
               ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
                   .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
-              result = PickResult.withSubchannel(result.getSubchannel(),
-                  orcaTracerFactory);
+              result = result.copyWithStreamTracerFactory(orcaTracerFactory);
             }
           }
           if (args.getCallOptions().getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY) != null
               && args.getCallOptions().getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)) {
             result = PickResult.withSubchannel(result.getSubchannel(),
                 result.getStreamTracerFactory(),
-                result.getSubchannel().getAttributes().get(
-                    InternalXdsAttributes.ATTR_ADDRESS_NAME));
+                result.getSubchannel().getAttributes().get(ATTR_SUBCHANNEL_ADDRESS_NAME));
           }
         }
         return result;
@@ -498,11 +524,19 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
 
     /**
-     * Copies {@link MetricReport#getNamedMetrics()} to {@link ClusterLocalityStats} such that it is
-     * included in the snapshot for the LRS report sent to the LRS server.
+     * Copies ORCA metrics from {@link MetricReport} to {@link ClusterLocalityStats}
+     * such that they are included in the snapshot for the LRS report sent to the LRS server.
+     * This includes both top-level metrics (CPU, memory, application utilization) and named
+     * metrics, filtered according to the backend metric propagation configuration.
      */
     @Override
     public void onLoadReport(MetricReport report) {
+      if (isEnabledOrcaLrsPropagation) {
+        stats.recordTopLevelMetrics(
+            report.getCpuUtilization(),
+            report.getMemoryUtilization(),
+            report.getApplicationUtilization());
+      }
       stats.recordBackendLoadMetricStats(report.getNamedMetrics());
     }
   }

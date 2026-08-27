@@ -7,9 +7,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * Defines the Rate Limit Quota Service (RLQS).
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: envoy/service/rate_limit_quota/v3/rlqs.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class RateLimitQuotaServiceGrpc {
 
@@ -61,6 +58,21 @@ public final class RateLimitQuotaServiceGrpc {
         }
       };
     return RateLimitQuotaServiceStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static RateLimitQuotaServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<RateLimitQuotaServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<RateLimitQuotaServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public RateLimitQuotaServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new RateLimitQuotaServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return RateLimitQuotaServiceBlockingV2Stub.newStub(factory, channel);
   }
 
   /**
@@ -160,6 +172,39 @@ public final class RateLimitQuotaServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service RateLimitQuotaService.
+   * <pre>
+   * Defines the Rate Limit Quota Service (RLQS).
+   * </pre>
+   */
+  public static final class RateLimitQuotaServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<RateLimitQuotaServiceBlockingV2Stub> {
+    private RateLimitQuotaServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected RateLimitQuotaServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new RateLimitQuotaServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Main communication channel: the data plane sends usage reports to the RLQS server,
+     * and the server asynchronously responding with the assignments.
+     * </pre>
+     */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaUsageReports, io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaResponse>
+        streamRateLimitQuotas() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getStreamRateLimitQuotasMethod(), getCallOptions());
+    }
+  }
+
+  /**
+   * A stub to allow clients to do limited synchronous rpc calls to service RateLimitQuotaService.
    * <pre>
    * Defines the Rate Limit Quota Service (RLQS).
    * </pre>

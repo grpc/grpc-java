@@ -56,6 +56,9 @@ public class JettyTransportTest extends AbstractTransportTest {
 
 
   @Override
+  // RateControl is deprecated in Jetty 12 (used in grpc-servlet-jakarta) but still needed for
+  // compatibility with Jetty 10 (used in grpc-servlet).
+  @SuppressWarnings("removal")
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
     return new InternalServer() {
       final InternalServer delegate =
@@ -69,6 +72,7 @@ public class JettyTransportTest extends AbstractTransportTest {
                 listener.transportCreated(new ServletServerBuilder.ServerTransportImpl(scheduler));
         ServletAdapter adapter =
                 new ServletAdapter(serverTransportListener, streamTracerFactories,
+                        ServletAdapter.DEFAULT_METHOD_NAME_RESOLVER,
                         Integer.MAX_VALUE);
         GrpcServlet grpcServlet = new GrpcServlet(adapter);
 
@@ -76,9 +80,7 @@ public class JettyTransportTest extends AbstractTransportTest {
         ServerConnector sc = (ServerConnector) jettyServer.getConnectors()[0];
         HttpConfiguration httpConfiguration = new HttpConfiguration();
 
-        // Must be set for several tests to pass, so that the request handling can begin before
-        // content arrives.
-        httpConfiguration.setDelayDispatchUntilContent(false);
+        setDelayDispatchUntilContent(httpConfiguration);
 
         HTTP2CServerConnectionFactory factory =
                 new HTTP2CServerConnectionFactory(httpConfiguration);
@@ -132,6 +134,16 @@ public class JettyTransportTest extends AbstractTransportTest {
   protected InternalServer newServer(int port,
                                      List<ServerStreamTracer.Factory> streamTracerFactories) {
     return newServer(streamTracerFactories);
+  }
+
+  // The future default appears to be false as people are supposed to be migrate to
+  // EagerContentHandler, but the default is still true. Seems they messed up the migration
+  // process here by not flipping the default.
+  @SuppressWarnings("removal")
+  private static void setDelayDispatchUntilContent(HttpConfiguration httpConfiguration) {
+    // Must be set for several tests to pass, so that the request handling can begin before
+    // content arrives.
+    httpConfiguration.setDelayDispatchUntilContent(false);
   }
 
   @Override

@@ -59,7 +59,6 @@ import io.grpc.internal.testing.StatsTestUtils.MetricsRecord;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.testing.GrpcCleanupRule;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
@@ -111,7 +110,8 @@ public class RetryTest {
       mock(ClientCall.Listener.class, delegatesTo(testCallListener));
 
   private CountDownLatch backoffLatch = new CountDownLatch(1);
-  private final EventLoopGroup clientGroup = new DefaultEventLoopGroup(1) {
+  @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+  private final EventLoopGroup clientGroup = new io.netty.channel.DefaultEventLoopGroup(1) {
     @SuppressWarnings("FutureReturnValueIgnored")
     @Override
     public ScheduledFuture<?> schedule(
@@ -138,7 +138,8 @@ public class RetryTest {
           TimeUnit.NANOSECONDS);
     }
   };
-  private final EventLoopGroup serverGroup = new DefaultEventLoopGroup(1);
+  @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+  private final EventLoopGroup serverGroup = new io.netty.channel.DefaultEventLoopGroup(1);
   private final FakeStatsRecorder clientStatsRecorder = new FakeStatsRecorder();
   private final ClientInterceptor statsInterceptor =
       InternalCensusStatsAccessor.getClientInterceptor(
@@ -303,7 +304,7 @@ public class RetryTest {
     serverCall.close(
         Status.UNAVAILABLE.withDescription("original attempt failed"),
         new Metadata());
-    elapseBackoff(10, SECONDS);
+    elapseBackoff(12, SECONDS);
     // 2nd attempt received
     serverCall = serverCalls.poll(5, SECONDS);
     serverCall.request(2);
@@ -348,7 +349,7 @@ public class RetryTest {
         Status.UNAVAILABLE.withDescription("original attempt failed"),
         new Metadata());
     assertRpcStatusRecorded(Status.Code.UNAVAILABLE, 1000, 1);
-    elapseBackoff(10, SECONDS);
+    elapseBackoff(12, SECONDS);
     assertRpcStartedRecorded();
     assertOutboundMessageRecorded();
     serverCall = serverCalls.poll(5, SECONDS);
@@ -366,7 +367,7 @@ public class RetryTest {
     call.request(1);
     assertInboundMessageRecorded();
     assertInboundWireSizeRecorded(1);
-    assertRpcStatusRecorded(Status.Code.OK, 12000, 2);
+    assertRpcStatusRecorded(Status.Code.OK, 14000, 2);
     assertRetryStatsRecorded(1, 0, 0);
   }
 
@@ -418,7 +419,7 @@ public class RetryTest {
         Status.UNAVAILABLE.withDescription("original attempt failed"),
         new Metadata());
     assertRpcStatusRecorded(Code.UNAVAILABLE, 5000, 1);
-    elapseBackoff(10, SECONDS);
+    elapseBackoff(12, SECONDS);
     assertRpcStartedRecorded();
     assertOutboundMessageRecorded();
     serverCall = serverCalls.poll(5, SECONDS);
@@ -431,7 +432,7 @@ public class RetryTest {
     streamClosedLatch.countDown();
     // The call listener is closed.
     verify(mockCallListener, timeout(5000)).onClose(any(Status.class), any(Metadata.class));
-    assertRpcStatusRecorded(Code.CANCELLED, 17_000, 1);
+    assertRpcStatusRecorded(Code.CANCELLED, 19_000, 1);
     assertRetryStatsRecorded(1, 0, 0);
   }
 

@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
@@ -27,13 +28,16 @@ import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.TaskCloseable;
 import java.io.InputStream;
-import javax.annotation.concurrent.GuardedBy;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * The stream and stream state as used by the application. Must only be called from the sending
  * application thread.
  */
 public abstract class AbstractStream implements Stream {
+  private static final Logger log = Logger.getLogger(AbstractStream.class.getName());
+
   /** The framer to use for sending messages. */
   protected abstract Framer framer();
 
@@ -159,20 +163,21 @@ public abstract class AbstractStream implements Stream {
     @GuardedBy("onReadyLock")
     private int onReadyThreshold;
 
+    @SuppressWarnings("this-escape")
     protected TransportState(
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer) {
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
       this.transportTracer = checkNotNull(transportTracer, "transportTracer");
-      rawDeframer = new MessageDeframer(
+      this.rawDeframer = new MessageDeframer(
           this,
           Codec.Identity.NONE,
           maxMessageSize,
           statsTraceCtx,
           transportTracer);
       // TODO(#7168): use MigratingThreadDeframer when enabling retry doesn't break.
-      deframer = rawDeframer;
+      deframer = this.rawDeframer;
       onReadyThreshold = DEFAULT_ONREADY_THRESHOLD;
     }
 
@@ -371,6 +376,12 @@ public abstract class AbstractStream implements Stream {
       boolean doNotify;
       synchronized (onReadyLock) {
         doNotify = isReady();
+        if (!doNotify && log.isLoggable(Level.FINEST)) {
+          log.log(Level.FINEST,
+              "Stream not ready so skip notifying listener.\n"
+                  + "details: allocated/deallocated:{0}/{3}, sent queued: {1}, ready thresh: {2}",
+              new Object[] {allocated, numSentBytesQueued, onReadyThreshold, deallocated});
+        }
       }
       if (doNotify) {
         listener().onReady();

@@ -7,9 +7,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * A DynamicService
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: io/grpc/reflection/testing/dynamic_reflection_test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class DynamicServiceGrpc {
 
@@ -61,6 +58,21 @@ public final class DynamicServiceGrpc {
         }
       };
     return DynamicServiceStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static DynamicServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<DynamicServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<DynamicServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public DynamicServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new DynamicServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return DynamicServiceBlockingV2Stub.newStub(factory, channel);
   }
 
   /**
@@ -158,6 +170,36 @@ public final class DynamicServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service DynamicService.
+   * <pre>
+   * A DynamicService
+   * </pre>
+   */
+  public static final class DynamicServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<DynamicServiceBlockingV2Stub> {
+    private DynamicServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected DynamicServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new DynamicServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * A method
+     * </pre>
+     */
+    public io.grpc.reflection.testing.DynamicReply method(io.grpc.reflection.testing.DynamicRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
+          getChannel(), getMethodMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do limited synchronous rpc calls to service DynamicService.
    * <pre>
    * A DynamicService
    * </pre>

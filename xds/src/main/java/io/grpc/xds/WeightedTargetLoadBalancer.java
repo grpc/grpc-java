@@ -87,8 +87,9 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       }
     }
     targets = newTargets;
+    Status status = Status.OK;
     for (String targetName : targets.keySet()) {
-      childBalancers.get(targetName).handleResolvedAddresses(
+      Status newStatus = childBalancers.get(targetName).acceptResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), targetName))
               .setLoadBalancingPolicyConfig(targets.get(targetName).childConfig)
@@ -96,6 +97,9 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
                 .set(CHILD_NAME, targetName)
                 .build())
               .build());
+      if (!newStatus.isOk()) {
+        status = newStatus;
+      }
     }
 
     // Cleanup removed targets.
@@ -108,7 +112,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     childBalancers.keySet().retainAll(targets.keySet());
     childHelpers.keySet().retainAll(targets.keySet());
     updateOverallBalancingState();
-    return Status.OK;
+    return status;
   }
 
   @Override
@@ -124,6 +128,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return true;
   }
@@ -159,7 +165,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       if (overallState == TRANSIENT_FAILURE) {
         picker = new WeightedRandomPicker(errorPickers);
       } else {
-        picker = new FixedResultPicker(PickResult.withNoResult());
+        picker = new FixedResultPicker(
+            PickResult.withNoResult("connecting", "weighted_target: connecting"));
       }
     } else {
       picker = new WeightedRandomPicker(childPickers);
@@ -191,7 +198,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   private final class ChildHelper extends ForwardingLoadBalancerHelper {
     String name;
     ConnectivityState currentState = CONNECTING;
-    SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
+    SubchannelPicker currentPicker = new FixedResultPicker(
+        PickResult.withNoResult("connecting", "weighted_target: initializing"));
 
     private ChildHelper(String name) {
       this.name = name;

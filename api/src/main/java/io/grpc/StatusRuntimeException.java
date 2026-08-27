@@ -26,7 +26,9 @@ import javax.annotation.Nullable;
 public class StatusRuntimeException extends RuntimeException {
 
   private static final long serialVersionUID = 1950934672280720624L;
+  @SuppressWarnings("serial")   // https://github.com/grpc/grpc-java/issues/1913
   private final Status status;
+  @SuppressWarnings("serial")
   private final Metadata trailers;
 
   /**
@@ -45,12 +47,7 @@ public class StatusRuntimeException extends RuntimeException {
    * @since 1.0.0
    */
   public StatusRuntimeException(Status status, @Nullable Metadata trailers) {
-    this(status, trailers, /*fillInStackTrace=*/ true);
-  }
-
-  StatusRuntimeException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
-    super(Status.formatThrowableMessage(status), status.getCause(),
-            /* enable suppressions */ true, /* writableStackTrace */ fillInStackTrace);
+    super(Status.formatThrowableMessage(status), status.getCause());
     this.status = status;
     this.trailers = trailers;
   }

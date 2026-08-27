@@ -19,6 +19,7 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -30,7 +31,6 @@ import io.perfmark.TaskCloseable;
 import java.io.IOException;
 import java.net.Socket;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.Sink;
 import okio.Timeout;

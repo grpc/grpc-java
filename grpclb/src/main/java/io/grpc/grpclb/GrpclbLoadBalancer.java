@@ -154,6 +154,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return true;
   }

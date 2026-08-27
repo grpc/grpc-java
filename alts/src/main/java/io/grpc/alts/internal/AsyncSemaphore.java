@@ -16,12 +16,12 @@
 
 package io.grpc.alts.internal;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import java.util.LinkedList;
 import java.util.Queue;
-import javax.annotation.concurrent.GuardedBy;
 
 /** Provides a semaphore primitive, without blocking waiting on permits. */
 final class AsyncSemaphore {

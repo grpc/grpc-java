@@ -20,28 +20,38 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.CharStreams;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
+import io.grpc.ChannelConfigurator;
+import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
+import io.grpc.QueryParams;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.Uri;
 import io.grpc.alts.InternalCheckGcpEnvironment;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.xds.InternalGrpcBootstrapperImpl;
+import io.grpc.xds.InternalSharedXdsClientPoolProvider;
+import io.grpc.xds.InternalSharedXdsClientPoolProvider.XdsClientResult;
+import io.grpc.xds.XdsNameResolverProvider;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsInitializationException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -63,53 +73,71 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   static final String C2P_AUTHORITY = "traffic-director-c2p.xds.googleapis.com";
   @VisibleForTesting
   static boolean isOnGcp = InternalCheckGcpEnvironment.isOnGcp();
-  @VisibleForTesting
-  static boolean xdsBootstrapProvided =
-      System.getenv("GRPC_XDS_BOOTSTRAP") != null
-          || System.getProperty("io.grpc.xds.bootstrap") != null
-          || System.getenv("GRPC_XDS_BOOTSTRAP_CONFIG") != null
-          || System.getProperty("io.grpc.xds.bootstrapConfig") != null;
-  @VisibleForTesting
-  static boolean enableFederation =
-      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
-          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
 
   private static final String serverUriOverride =
       System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
 
-  private HttpConnectionProvider httpConnectionProvider = HttpConnectionFactory.INSTANCE;
+  @GuardedBy("GoogleCloudToProdNameResolver.class")
+  private static BootstrapInfo bootstrapInfo;
+  private static HttpConnectionProvider httpConnectionProvider = HttpConnectionFactory.INSTANCE;
+  private static int c2pId = new Random().nextInt();
+
+  private static synchronized BootstrapInfo getBootstrapInfo(boolean isForcedXds)
+      throws XdsInitializationException, IOException {
+    if (bootstrapInfo != null) {
+      return bootstrapInfo;
+    }
+    BootstrapInfo newInfo;
+    if (isForcedXds) {
+      newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
+          generateBootstrap("", true));
+    } else {
+      newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
+          generateBootstrap(
+              queryZoneMetadata(METADATA_URL_ZONE),
+              queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6)));
+    }
+    // Avoid setting global when testing
+    if (httpConnectionProvider == HttpConnectionFactory.INSTANCE) {
+      bootstrapInfo = newInfo;
+    }
+    return newInfo;
+  }
+
   private final String authority;
   private final SynchronizationContext syncContext;
   private final Resource<Executor> executorResource;
-  private final BootstrapSetter bootstrapSetter;
+  private final String target;
+  private final MetricRecorder metricRecorder;
+  private final ChannelConfigurator channelConfigurator;
   private final NameResolver delegate;
-  private final Random rand;
   private final boolean usingExecutorResource;
-  // It's not possible to use both PSM and DirectPath C2P in the same application.
-  // Delegate to DNS if user-provided bootstrap is found.
-  private final String schemeOverride =
-      !isOnGcp
-      || (xdsBootstrapProvided && !enableFederation)
-      ? "dns" : "xds";
+  private final boolean forceXds;
+  private final String schemeOverride;
+  private XdsClientResult xdsClientPool;
+  private XdsClient xdsClient;
   private Executor executor;
   private Listener2 listener;
   private boolean succeeded;
   private boolean resolving;
   private boolean shutdown;
 
-  GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
-      BootstrapSetter bootstrapSetter) {
-    this(targetUri, args, executorResource, new Random(), bootstrapSetter,
+  GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource) {
+    this(targetUri, args, executorResource,
         NameResolverRegistry.getDefaultRegistry().asFactory());
   }
 
+  // TODO(jdcormie): Remove after io.grpc.Uri migration.
   @VisibleForTesting
   GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
-      Random rand, BootstrapSetter bootstrapSetter, NameResolver.Factory nameResolverFactory) {
+      NameResolver.Factory nameResolverFactory) {
     this.executorResource = checkNotNull(executorResource, "executorResource");
-    this.bootstrapSetter = checkNotNull(bootstrapSetter, "bootstrapSetter");
-    this.rand = checkNotNull(rand, "rand");
     String targetPath = checkNotNull(checkNotNull(targetUri, "targetUri").getPath(), "targetPath");
+    Uri grpcUri = Uri.create(targetUri.toString());
+    QueryParams queryParams = QueryParams.fromRawQuery(grpcUri.getRawQuery());
+    this.forceXds = checkForceXds(queryParams);
+    this.schemeOverride = (forceXds || isOnGcp) ? "xds" : "dns";
+
     Preconditions.checkArgument(
         targetPath.startsWith("/"),
         "the path component (%s) of the target (%s) must start with '/'",
@@ -117,12 +145,70 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         targetUri);
     authority = GrpcUtil.checkAuthority(targetPath.substring(1));
     syncContext = checkNotNull(args, "args").getSynchronizationContext();
-    targetUri = overrideUriScheme(targetUri, schemeOverride);
-    if (schemeOverride.equals("xds") && enableFederation) {
-      targetUri = overrideUriAuthority(targetUri, C2P_AUTHORITY);
+
+    Uri.Builder modifiedTargetBuilder = grpcUri.toBuilder().setScheme(schemeOverride);
+    modifiedTargetBuilder.setRawQuery(null);
+    if (schemeOverride.equals("xds")) {
+      modifiedTargetBuilder.setRawAuthority(C2P_AUTHORITY);
     }
+    targetUri = URI.create(modifiedTargetBuilder.build().toString());
+
+    if (schemeOverride.equals("xds")) {
+      args = args.toBuilder()
+          .setArg(XdsNameResolverProvider.XDS_CLIENT_SUPPLIER, () -> xdsClient)
+          .build();
+    }
+    target = targetUri.toString();
+    metricRecorder = args.getMetricRecorder();
+    channelConfigurator = args.getChildChannelConfigurator();
     delegate = checkNotNull(nameResolverFactory, "nameResolverFactory").newNameResolver(
         targetUri, args);
+    executor = args.getOffloadExecutor();
+    usingExecutorResource = executor == null;
+  }
+
+  GoogleCloudToProdNameResolver(Uri targetUri, Args args, Resource<Executor> executorResource) {
+    this(targetUri, args, executorResource, NameResolverRegistry.getDefaultRegistry().asFactory());
+  }
+
+  @VisibleForTesting
+  GoogleCloudToProdNameResolver(
+      Uri targetUri,
+      Args args,
+      Resource<Executor> executorResource,
+      NameResolver.Factory nameResolverFactory) {
+    this.executorResource = checkNotNull(executorResource, "executorResource");
+    QueryParams queryParams = QueryParams.fromRawQuery(targetUri.getRawQuery());
+    this.forceXds = checkForceXds(queryParams);
+    this.schemeOverride = (forceXds || isOnGcp) ? "xds" : "dns";
+
+    Preconditions.checkArgument(
+        targetUri.isPathAbsolute(),
+        "the path component of the target (%s) must start with '/'",
+        targetUri);
+    List<String> pathSegments = targetUri.getPathSegments();
+    Preconditions.checkArgument(
+        pathSegments.size() == 1,
+        "the path component of the target (%s) must have exactly one segment",
+        targetUri);
+    authority = GrpcUtil.checkAuthority(pathSegments.get(0));
+    syncContext = checkNotNull(args, "args").getSynchronizationContext();
+    Uri.Builder modifiedTargetBuilder = targetUri.toBuilder().setScheme(schemeOverride);
+    modifiedTargetBuilder.setRawQuery(null);
+
+    if (schemeOverride.equals("xds")) {
+      modifiedTargetBuilder.setRawAuthority(C2P_AUTHORITY);
+      args =
+          args.toBuilder()
+              .setArg(XdsNameResolverProvider.XDS_CLIENT_SUPPLIER, () -> xdsClient)
+              .build();
+    }
+    targetUri = modifiedTargetBuilder.build();
+    target = targetUri.toString();
+    metricRecorder = args.getMetricRecorder();
+    channelConfigurator = args.getChildChannelConfigurator();
+    delegate =
+        checkNotNull(nameResolverFactory, "nameResolverFactory").newNameResolver(targetUri, args);
     executor = args.getOffloadExecutor();
     usingExecutorResource = executor == null;
   }
@@ -150,7 +236,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
 
     resolving = true;
     if (logger.isLoggable(Level.FINE)) {
-      logger.fine("resolve with schemaOverride = " + schemeOverride);
+      logger.log(Level.FINE, "start with schemaOverride = {0}", schemeOverride);
     }
 
     if (schemeOverride.equals("dns")) {
@@ -168,28 +254,28 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     class Resolve implements Runnable {
       @Override
       public void run() {
-        ImmutableMap<String, ?> rawBootstrap = null;
+        BootstrapInfo bootstrapInfo = null;
         try {
-          // User provided bootstrap configs are only supported with federation. If federation is
-          // not enabled or there is no user provided config, we set a custom bootstrap override.
-          // Otherwise, we don't set the override, which will allow a user provided bootstrap config
-          // to take effect.
-          if (!enableFederation || !xdsBootstrapProvided) {
-            rawBootstrap = generateBootstrap(queryZoneMetadata(METADATA_URL_ZONE),
-                queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6));
-          }
+          bootstrapInfo = getBootstrapInfo(forceXds);
         } catch (IOException e) {
           listener.onError(
               Status.INTERNAL.withDescription("Unable to get metadata").withCause(e));
+        } catch (XdsInitializationException e) {
+          listener.onError(
+              Status.INTERNAL.withDescription("Unable to create c2p bootstrap").withCause(e));
+        } catch (Throwable t) {
+          listener.onError(
+              Status.INTERNAL.withDescription("Unexpected error creating c2p bootstrap")
+              .withCause(t));
         } finally {
-          final ImmutableMap<String, ?> finalRawBootstrap = rawBootstrap;
+          final BootstrapInfo finalBootstrapInfo = bootstrapInfo;
           syncContext.execute(new Runnable() {
             @Override
             public void run() {
-              if (!shutdown) {
-                if (finalRawBootstrap != null) {
-                  bootstrapSetter.setBootstrap(finalRawBootstrap);
-                }
+              if (!shutdown && finalBootstrapInfo != null) {
+                xdsClientPool = InternalSharedXdsClientPoolProvider.getOrCreate(
+                    target, finalBootstrapInfo, metricRecorder, null, channelConfigurator);
+                xdsClient = xdsClientPool.getObject();
                 delegate.start(listener);
                 succeeded = true;
               }
@@ -203,9 +289,11 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     executor.execute(new Resolve());
   }
 
-  private ImmutableMap<String, ?> generateBootstrap(String zone, boolean supportIpv6) {
+  private static ImmutableMap<String, ?> generateBootstrap(
+      String zone, boolean supportIpv6) {
     ImmutableMap.Builder<String, Object> nodeBuilder = ImmutableMap.builder();
-    nodeBuilder.put("id", "C2P-" + (rand.nextInt() & Integer.MAX_VALUE));
+    String nodeIdPrefix = isOnGcp ? "C2P-" : "C2P-non-gcp-";
+    nodeBuilder.put("id", nodeIdPrefix + (c2pId & Integer.MAX_VALUE));
     if (!zone.isEmpty()) {
       nodeBuilder.put("locality", ImmutableMap.of("zone", zone));
     }
@@ -250,12 +338,15 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     if (delegate != null) {
       delegate.shutdown();
     }
+    if (xdsClient != null) {
+      xdsClient = xdsClientPool.returnObject(xdsClient);
+    }
     if (executor != null && usingExecutorResource) {
       executor = SharedResourceHolder.release(executorResource, executor);
     }
   }
 
-  private String queryZoneMetadata(String url) throws IOException {
+  private static String queryZoneMetadata(String url) throws IOException {
     HttpURLConnection con = null;
     String respBody;
     try {
@@ -275,7 +366,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     return index == -1 ? "" : respBody.substring(index + 1);
   }
 
-  private boolean queryIpv6SupportMetadata(String url) throws IOException {
+  private static boolean queryIpv6SupportMetadata(String url) throws IOException {
     HttpURLConnection con = null;
     try {
       con = httpConnectionProvider.createConnection(url);
@@ -294,29 +385,29 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  void setHttpConnectionProvider(HttpConnectionProvider httpConnectionProvider) {
-    this.httpConnectionProvider = httpConnectionProvider;
+  static void setHttpConnectionProvider(HttpConnectionProvider httpConnectionProvider) {
+    if (httpConnectionProvider == null) {
+      GoogleCloudToProdNameResolver.httpConnectionProvider = HttpConnectionFactory.INSTANCE;
+    } else {
+      GoogleCloudToProdNameResolver.httpConnectionProvider = httpConnectionProvider;
+    }
   }
 
-  private static URI overrideUriScheme(URI uri, String scheme) {
-    URI res;
-    try {
-      res = new URI(scheme, uri.getAuthority(), uri.getPath(), uri.getQuery(), uri.getFragment());
-    } catch (URISyntaxException ex) {
-      throw new IllegalArgumentException("Invalid scheme: " + scheme, ex);
-    }
-    return res;
+  @VisibleForTesting
+  static void setC2pId(int c2pId) {
+    GoogleCloudToProdNameResolver.c2pId = c2pId;
   }
 
-  private static URI overrideUriAuthority(URI uri, String authority) {
-    URI res;
-    try {
-      res = new URI(uri.getScheme(), authority, uri.getPath(), uri.getQuery(), uri.getFragment());
-    } catch (URISyntaxException ex) {
-      throw new IllegalArgumentException("Invalid authority: " + authority, ex);
+  private static boolean checkForceXds(QueryParams params) {
+    for (QueryParams.Entry entry : params.asList()) {
+      if ("force-xds".equals(entry.getKey())) {
+        return true;
+      }
     }
-    return res;
+    return false;
   }
+
+
 
   private enum HttpConnectionFactory implements HttpConnectionProvider {
     INSTANCE;
@@ -334,9 +425,5 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   @VisibleForTesting
   interface HttpConnectionProvider {
     HttpURLConnection createConnection(String url) throws IOException;
-  }
-
-  public interface BootstrapSetter {
-    void setBootstrap(Map<String, ?> bootstrap);
   }
 }

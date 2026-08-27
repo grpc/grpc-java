@@ -1105,6 +1105,32 @@ public class ClientCallImplTest {
     assertEquals(attrs, call.getAttributes());
   }
 
+  @Test
+  public void onCloseExceptionCaughtAndLogged() {
+    DelayedExecutor executor = new DelayedExecutor();
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        executor,
+        baseCallOptions,
+        clientStreamProvider,
+        deadlineCancellationExecutor,
+        channelCallTracer, configSelector);
+
+    call.start(callListener, new Metadata());
+    verify(stream).start(listenerArgumentCaptor.capture());
+    final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
+    streamListener.headersRead(new Metadata());
+
+    doThrow(new RuntimeException("Exception thrown by onClose() in ClientCall")).when(callListener)
+        .onClose(any(Status.class), any(Metadata.class));
+
+    Status status = Status.RESOURCE_EXHAUSTED.withDescription("simulated");
+    streamListener.closed(status, PROCESSED, new Metadata());
+    executor.release();
+
+    verify(callListener).onClose(same(status), any(Metadata.class));
+  }
+
   private static final class DelayedExecutor implements Executor {
     private final BlockingQueue<Runnable> commands = new LinkedBlockingQueue<>();
 

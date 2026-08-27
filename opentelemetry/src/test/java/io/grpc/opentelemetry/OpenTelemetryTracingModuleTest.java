@@ -17,12 +17,15 @@
 package io.grpc.opentelemetry;
 
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -39,10 +42,18 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ConnectivityState;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.KnownLength;
+import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.NoopServerCall;
 import io.grpc.Server;
 import io.grpc.ServerCall;
@@ -52,18 +63,25 @@ import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.opentelemetry.OpenTelemetryTracingModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.GrpcServerRule;
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
+import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.SpanId;
 import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.TraceFlags;
 import io.opentelemetry.api.trace.TraceId;
+import io.opentelemetry.api.trace.TraceState;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.api.trace.TracerBuilder;
 import io.opentelemetry.api.trace.TracerProvider;
@@ -76,9 +94,16 @@ import io.opentelemetry.sdk.trace.data.EventData;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -177,6 +202,7 @@ public class OpenTelemetryTracingModuleTest {
 
   @Before
   public void setUp() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
     tracerRule = openTelemetryRule.getOpenTelemetry().getTracer(
         OpenTelemetryConstants.INSTRUMENTATION_SCOPE);
     TracerProvider mockTracerProvider = mock(TracerProvider.class);
@@ -190,6 +216,11 @@ public class OpenTelemetryTracingModuleTest {
     when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan);
     when(mockSpanBuilder.setParent(any())).thenReturn(mockSpanBuilder);
     when(mockTracer.spanBuilder(any())).thenReturn(mockSpanBuilder);
+  }
+
+  @After
+  public void tearDown() {
+    System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
   }
 
   // Use mock instead of OpenTelemetryRule to verify inOrder and propagator.
@@ -231,7 +262,7 @@ public class OpenTelemetryTracingModuleTest {
     List<String> events = eventNameCaptor.getAllValues();
     List<io.opentelemetry.api.common.Attributes> attributes = attributesCaptor.getAllValues();
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         events.get(0));
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -241,7 +272,7 @@ public class OpenTelemetryTracingModuleTest {
         attributes.get(0));
 
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         events.get(1));
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -313,7 +344,7 @@ public class OpenTelemetryTracingModuleTest {
     assertTrue(clientSpanEvents.get(0).getAttributes().isEmpty());
 
     assertEquals(
-        "Inbound message received" ,
+        "Inbound message" ,
         clientSpanEvents.get(1).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -323,7 +354,7 @@ public class OpenTelemetryTracingModuleTest {
         clientSpanEvents.get(1).getAttributes());
 
     assertEquals(
-        "Inbound message received" ,
+        "Inbound message" ,
         clientSpanEvents.get(2).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -342,7 +373,7 @@ public class OpenTelemetryTracingModuleTest {
     assertTrue(clientSpanEvents.get(0).getAttributes().isEmpty());
 
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         attemptSpanEvents.get(1).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -352,7 +383,7 @@ public class OpenTelemetryTracingModuleTest {
         attemptSpanEvents.get(1).getAttributes());
 
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         attemptSpanEvents.get(2).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -372,6 +403,220 @@ public class OpenTelemetryTracingModuleTest {
         attemptSpanEvents.get(3).getAttributes());
 
     assertEquals(attemptSpanData.hasEnded(), true);
+  }
+
+  @Test
+  public void clientAttemptDelayTracing_reasonChangedInvariant() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+    ClientStreamTracer clientStreamTracer =
+        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    clientStreamTracer.recordAttemptDelayStart("connecting", "reason1");
+    clientStreamTracer.recordAttemptDelayReasonChanged("reason2");
+    clientStreamTracer.recordAttemptDelayStart("connecting", "reason3");
+    clientStreamTracer.recordAttemptDelayEnd();
+    clientStreamTracer.streamClosed(Status.OK);
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    assertEquals(3, spans.size());
+    SpanData delaySpanData = spans.get(0);
+
+    assertEquals("Attempt Delay", delaySpanData.getName());
+    assertEquals("connecting", delaySpanData.getAttributes().get(
+        AttributeKey.stringKey("grpc.delay_type")));
+    assertEquals(3, delaySpanData.getEvents().size());
+
+    EventData event1 = delaySpanData.getEvents().get(0);
+    assertEquals("Delay state transition", event1.getName());
+    assertEquals("connecting", event1.getAttributes().get(
+        AttributeKey.stringKey("grpc.delay_type")));
+    assertEquals("reason1", event1.getAttributes().get(
+        AttributeKey.stringKey("grpc.delay_reason")));
+
+    EventData event2 = delaySpanData.getEvents().get(1);
+    assertEquals("Delay state transition", event2.getName());
+    assertEquals("connecting", event2.getAttributes().get(
+        AttributeKey.stringKey("grpc.delay_type")));
+    assertEquals("reason2", event2.getAttributes().get(
+        AttributeKey.stringKey("grpc.delay_reason")));
+
+    EventData event3 = delaySpanData.getEvents().get(2);
+    assertEquals("Delay state transition", event3.getName());
+    assertEquals("connecting", event3.getAttributes().get(
+        AttributeKey.stringKey("grpc.delay_type")));
+    assertEquals("reason3", event3.getAttributes().get(
+        AttributeKey.stringKey("grpc.delay_reason")));
+  }
+
+  @Test
+  public void clientAttemptDelayTracing_endToEnd_inProcessTransport() throws Exception {
+    final CountDownLatch latch = new CountDownLatch(1);
+    LoadBalancerProvider slowLbProvider = new LoadBalancerProvider() {
+      @Override
+      public boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      public int getPriority() {
+        return 5;
+      }
+
+      @Override
+      public String getPolicyName() {
+        return "slow_connecting_policy";
+      }
+
+      @Override
+      public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+        return new LoadBalancer() {
+          @Override
+          public Status acceptResolvedAddresses(LoadBalancer.ResolvedAddresses resolvedAddresses) {
+            helper.updateBalancingState(ConnectivityState.CONNECTING, new SubchannelPicker() {
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                latch.countDown();
+                return PickResult.withNoResult("connecting",
+                    "Simulated slow TLS handshake with backend");
+              }
+            });
+            return Status.OK;
+          }
+
+          @Override
+          public void handleNameResolutionError(Status error) {}
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+    LoadBalancerRegistry.getDefaultRegistry().register(slowLbProvider);
+
+    NameResolverProvider customResolverProvider = new NameResolverProvider() {
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "inproce2e";
+      }
+
+      @Override
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(InProcessSocketAddress.class);
+      }
+
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return new NameResolver() {
+          @Override
+          public String getServiceAuthority() {
+            return "inproce2e";
+          }
+
+          @Override
+          public void start(Listener2 listener) {
+            listener.onResult(ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromValue(Collections.singletonList(
+                    new EquivalentAddressGroup(new InProcessSocketAddress("test-e2e")))))
+                .build());
+          }
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+    NameResolverRegistry.getDefaultRegistry().register(customResolverProvider);
+
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(openTelemetryRule.getOpenTelemetry())
+        .enableTracing(true)
+        .build();
+
+    InProcessChannelBuilder channelBuilder =
+        InProcessChannelBuilder.forTarget("inproce2e:///test-e2e")
+            .defaultLoadBalancingPolicy("slow_connecting_policy");
+    grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+    ManagedChannel channel = channelBuilder.build();
+    try {
+      ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
+      call.start(new ClientCall.Listener<String>() {}, new Metadata());
+      call.request(1);
+
+      latch.await(5, TimeUnit.SECONDS);
+      call.cancel("End test delay segment", null);
+    } finally {
+      channel.shutdownNow();
+      channel.awaitTermination(5, TimeUnit.SECONDS);
+      LoadBalancerRegistry.getDefaultRegistry().deregister(slowLbProvider);
+      NameResolverRegistry.getDefaultRegistry().deregister(customResolverProvider);
+    }
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    SpanData delaySpanData = null;
+    for (SpanData s : spans) {
+      if ("Attempt Delay".equals(s.getName())) {
+        delaySpanData = s;
+        break;
+      }
+    }
+    assertNotNull(delaySpanData);
+    assertEquals("connecting",
+        delaySpanData.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+
+    boolean foundTransition = false;
+    for (EventData event : delaySpanData.getEvents()) {
+      if ("Delay state transition".equals(event.getName())
+          && "Simulated slow TLS handshake with backend".equals(
+              event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))) {
+        foundTransition = true;
+        break;
+      }
+    }
+    assertTrue(foundTransition);
+  }
+
+  @Test
+  public void clientAttemptDelayStart_featureFlagDisabled_zeroChildSpans() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "false");
+    try {
+      OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+          openTelemetryRule.getOpenTelemetry());
+      Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+      CallAttemptsTracerFactory callTracer =
+          tracingModule.newClientCallTracer(clientSpan, method);
+      ClientStreamTracer clientStreamTracer =
+          callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+      clientStreamTracer.recordAttemptDelayStart("connecting", "attempting to connect");
+      clientStreamTracer.recordAttemptDelayEnd();
+      clientStreamTracer.streamClosed(Status.OK);
+      callTracer.callEnded(Status.OK);
+      clientSpan.end();
+
+      List<SpanData> spans = openTelemetryRule.getSpans();
+      assertEquals(2, spans.size());
+      for (SpanData span : spans) {
+        assertTrue(!span.getName().equals("Attempt Delay"));
+      }
+    } finally {
+      System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    }
   }
 
   @Test
@@ -518,7 +763,7 @@ public class OpenTelemetryTracingModuleTest {
     List<EventData> events = spans.get(0).getEvents();
     assertEquals(events.size(), 4);
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         events.get(0).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -529,7 +774,7 @@ public class OpenTelemetryTracingModuleTest {
         events.get(0).getAttributes());
 
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         events.get(1).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -549,7 +794,7 @@ public class OpenTelemetryTracingModuleTest {
         events.get(2).getAttributes());
 
     assertEquals(
-        "Inbound message received" ,
+        "Inbound message" ,
         events.get(3).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -748,6 +993,115 @@ public class OpenTelemetryTracingModuleTest {
     } finally {
       context.detach(previous);
     }
+  }
+
+  /**
+   * Tests that baggage from the initial context is propagated
+   * to the context active during the next handler's execution.
+   */
+  @Test
+  public void testBaggageIsPropagatedToHandlerContext() {
+    // 1. ARRANGE
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    ServerInterceptor interceptor = tracingModule.getServerSpanPropagationInterceptor();
+
+    // Create mocks for the gRPC call chain
+    @SuppressWarnings("unchecked")
+    ServerCallHandler<String, String> mockHandler = mock(ServerCallHandler.class);
+    @SuppressWarnings("unchecked")
+    ServerCall.Listener<String> mockListener = mock(ServerCall.Listener.class);
+    ServerCall<String, String> mockCall = new NoopServerCall<>();
+    Metadata mockHeaders = new Metadata();
+
+    // Create a non-null Span (required to pass the first 'if' check)
+    Span testSpan = Span.wrap(
+        SpanContext.create("time-period", "star-wars",
+            TraceFlags.getSampled(), TraceState.getDefault()));
+
+    // Create the test Baggage
+    Baggage testBaggage = Baggage.builder().put("best-bot", "R2D2").build();
+
+    // Create the initial gRPC context that the interceptor will read from
+    io.grpc.Context initialGrpcContext = io.grpc.Context.current()
+        .withValue(tracingModule.otelSpan, testSpan)
+        .withValue(BAGGAGE_KEY, testBaggage);
+
+    // This AtomicReference will capture the Baggage from *within* the handler
+    final AtomicReference<Baggage> capturedBaggage = new AtomicReference<>();
+
+    // Stub the handler to capture the *current* context when it's called
+    doAnswer(invocation -> {
+      // Baggage.current() gets baggage from io.opentelemetry.context.Context.current()
+      capturedBaggage.set(Baggage.current());
+      return mockListener;
+    }).when(mockHandler).startCall(any(), any());
+
+    // 2. ACT
+    // Run the interceptCall method within the prepared context
+    io.grpc.Context previous = initialGrpcContext.attach();
+    try {
+      interceptor.interceptCall(mockCall, mockHeaders, mockHandler);
+    } finally {
+      initialGrpcContext.detach(previous);
+    }
+
+    // 3. ASSERT
+    // Verify the next handler was called
+    verify(mockHandler).startCall(same(mockCall), same(mockHeaders));
+
+    // Check the baggage that was captured
+    assertNotNull("Baggage should not be null in handler context", capturedBaggage.get());
+    assertEquals("Baggage was not correctly propagated to the handler's context",
+        "R2D2", capturedBaggage.get().getEntryValue("best-bot"));
+  }
+
+  /**
+   * Tests that the interceptor proceeds correctly if baggage is null or empty.
+   */
+  @Test
+  public void testNullBaggageIsHandledGracefully() {
+    // 1. ARRANGE
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    ServerInterceptor interceptor = tracingModule.getServerSpanPropagationInterceptor();
+
+    @SuppressWarnings("unchecked")
+    ServerCallHandler<String, String> mockHandler = mock(ServerCallHandler.class);
+    @SuppressWarnings("unchecked")
+    ServerCall.Listener<String> mockListener = mock(ServerCall.Listener.class);
+    ServerCall<String, String> mockCall = new NoopServerCall<>();
+    Metadata mockHeaders = new Metadata();
+
+    Span testSpan = Span.getInvalid(); // A non-null span
+
+    // No baggage is set in the context
+    io.grpc.Context initialGrpcContext = io.grpc.Context.current()
+        .withValue(tracingModule.otelSpan, testSpan);
+
+    final AtomicReference<Baggage> capturedBaggage = new AtomicReference<>();
+
+    // Stub the handler to capture the *current* context when it's called
+    doAnswer(invocation -> {
+      // Baggage.current() gets baggage from io.opentelemetry.context.Context.current()
+      capturedBaggage.set(Baggage.current());
+      return mockListener;
+    }).when(mockHandler).startCall(any(), any());
+
+    // 2. ACT
+    io.grpc.Context previous = initialGrpcContext.attach();
+    try {
+      interceptor.interceptCall(mockCall, mockHeaders, mockHandler);
+    } finally {
+      initialGrpcContext.detach(previous);
+    }
+
+    // 3. ASSERT
+    verify(mockHandler).startCall(same(mockCall), same(mockHeaders));
+
+    // Baggage should be null in the downstream context
+    assertEquals("Baggage should be empty when not provided",
+        Baggage.empty(), capturedBaggage.get());
   }
 
   @Test

@@ -61,13 +61,74 @@ public class RlsProtoConvertersTest {
     Converter<RlsProtoData.RouteLookupRequest, RouteLookupRequest> converter =
         new RouteLookupRequestConverter().reverse();
     RlsProtoData.RouteLookupRequest requestObject =
-        RlsProtoData.RouteLookupRequest.create(ImmutableMap.of("key1", "val1"));
+        RlsProtoData.RouteLookupRequest.create(ImmutableMap.of("key1", "val1"),
+            RlsProtoData.RouteLookupRequest.Reason.REASON_MISS);
 
     RouteLookupRequest proto = converter.convert(requestObject);
 
     assertThat(proto.getTargetType()).isEqualTo("grpc");
     assertThat(proto.getKeyMapMap()).containsExactly("key1", "val1");
+    assertThat(proto.getReason()).isEqualTo(RouteLookupRequest.Reason.REASON_MISS);
   }
+
+  @Test
+  public void convert_toRequestProto_staleHeaderData() {
+    Converter<RouteLookupRequest, RlsProtoData.RouteLookupRequest> converter =
+        new RouteLookupRequestConverter();
+
+    // Non-null value
+    RouteLookupRequest protoWithStaleHeader = RouteLookupRequest.newBuilder()
+        .putKeyMap("key1", "val1")
+        .setStaleHeaderData("stale-header-v1")
+        .build();
+    RlsProtoData.RouteLookupRequest objectWithStaleHeader =
+        converter.convert(protoWithStaleHeader);
+    assertThat(objectWithStaleHeader.staleHeaderData()).isEqualTo("stale-header-v1");
+
+    // Null value (unset)
+    RouteLookupRequest protoUnset = RouteLookupRequest.newBuilder()
+        .putKeyMap("key1", "val1")
+        .build();
+    RlsProtoData.RouteLookupRequest objectUnset = converter.convert(protoUnset);
+    assertThat(objectUnset.staleHeaderData()).isNull();
+
+    // Empty string
+    RouteLookupRequest protoEmpty = RouteLookupRequest.newBuilder()
+        .putKeyMap("key1", "val1")
+        .setStaleHeaderData("")
+        .build();
+    RlsProtoData.RouteLookupRequest objectEmpty = converter.convert(protoEmpty);
+    assertThat(objectEmpty.staleHeaderData()).isNull();
+  }
+
+  @Test
+  public void convert_toRequestObject_staleHeaderData() {
+    Converter<RlsProtoData.RouteLookupRequest, RouteLookupRequest> converter =
+        new RouteLookupRequestConverter().reverse();
+
+    // Non-null value
+    RlsProtoData.RouteLookupRequest objectWithStaleHeader =
+        RlsProtoData.RouteLookupRequest.create(
+            ImmutableMap.of("key1", "val1"),
+            RlsProtoData.RouteLookupRequest.Reason.REASON_STALE,
+            "stale-header-v1");
+    RouteLookupRequest protoWithStaleHeader = converter.convert(objectWithStaleHeader);
+    assertThat(protoWithStaleHeader.getStaleHeaderData()).isEqualTo("stale-header-v1");
+    assertThat(protoWithStaleHeader.getReason())
+        .isEqualTo(RouteLookupRequest.Reason.REASON_STALE);
+
+    // Null value
+    RlsProtoData.RouteLookupRequest objectNull =
+        RlsProtoData.RouteLookupRequest.create(
+            ImmutableMap.of("key1", "val1"),
+            RlsProtoData.RouteLookupRequest.Reason.REASON_MISS,
+            null);
+    RouteLookupRequest protoNull = converter.convert(objectNull);
+    assertThat(protoNull.getStaleHeaderData()).isEmpty();
+    assertThat(protoNull.getReason())
+        .isEqualTo(RouteLookupRequest.Reason.REASON_MISS);
+  }
+
 
   @Test
   public void convert_toResponseProto() {
@@ -467,6 +528,124 @@ public class RlsProtoConvertersTest {
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("to specify staleAge, must have maxAge");
     }
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_doNotClampMaxAgeIfStaleAgeIsSet() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeybuilders\": [\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service1\",\n"
+        + "          \"method\": \"create\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"id\","
+        + "          \"names\": [\"X-Google-Id\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"maxAge\": \"350s\",\n"
+        + "  \"staleAge\": \"310s\",\n"
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfig expectedConfig =
+        RouteLookupConfig.builder()
+            .grpcKeybuilders(ImmutableList.of(
+                GrpcKeyBuilder.create(
+                    ImmutableList.of(Name.create("service1", "create")),
+                    ImmutableList.of(
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                        NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
+                    ExtraKeys.DEFAULT,
+                    ImmutableMap.<String, String>of())))
+            .lookupService("service1")
+            .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+            .maxAgeInNanos(TimeUnit.SECONDS.toNanos(350)) // Should not be clamped
+            .staleAgeInNanos(TimeUnit.SECONDS.toNanos(300)) // Should be clamped to max 300s
+            .cacheSizeBytes(1000)
+            .defaultTarget("us_east_1.cloudbigtable.googleapis.com")
+            .build();
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    RouteLookupConfig converted = converter.convert(parsedJson);
+    assertThat(converted).isEqualTo(expectedConfig);
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_clampMaxAgeIfStaleAgeMissing() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeybuilders\": [\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service1\",\n"
+        + "          \"method\": \"create\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"id\","
+        + "          \"names\": [\"X-Google-Id\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"maxAge\": \"350s\",\n" // Exceeds 5m limit
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfig expectedConfig =
+        RouteLookupConfig.builder()
+            .grpcKeybuilders(ImmutableList.of(
+                GrpcKeyBuilder.create(
+                    ImmutableList.of(Name.create("service1", "create")),
+                    ImmutableList.of(
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                        NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
+                    ExtraKeys.DEFAULT,
+                    ImmutableMap.<String, String>of())))
+            .lookupService("service1")
+            .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+            // Should be clamped to 300s (5m) because staleAge is missing
+            .maxAgeInNanos(TimeUnit.MINUTES.toNanos(5))
+            .staleAgeInNanos(TimeUnit.MINUTES.toNanos(5))
+            .cacheSizeBytes(1000)
+            .defaultTarget("us_east_1.cloudbigtable.googleapis.com")
+            .build();
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    RouteLookupConfig converted = converter.convert(parsedJson);
+    assertThat(converted).isEqualTo(expectedConfig);
   }
 
   @Test

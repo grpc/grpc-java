@@ -34,14 +34,17 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
@@ -61,6 +64,7 @@ import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -68,7 +72,8 @@ import javax.annotation.Nullable;
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
-class NettyClientTransport implements ConnectionClientTransport {
+class NettyClientTransport implements ConnectionClientTransport,
+    ClientKeepAlivePinger.TransportWithDisconnectReason {
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -81,6 +86,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final AsciiString userAgent;
   private final boolean autoFlowControl;
   private final int flowControlWindow;
+  private final Set<AsciiString> neverIndexedMetadataKeys;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   private final int softLimitHeaderListSize;
@@ -105,6 +111,8 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
+  private final MetricRecorder metricRecorder;
+
 
   NettyClientTransport(
       SocketAddress address,
@@ -114,6 +122,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       ProtocolNegotiator negotiator,
       boolean autoFlowControl,
       int flowControlWindow,
+      Set<AsciiString> neverIndexedMetadataKeys,
       int maxMessageSize,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
@@ -128,6 +137,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       LocalSocketPicker localSocketPicker,
       ChannelLogger channelLogger,
       boolean useGetForSafeMethods,
+      MetricRecorder metricRecorder,
       Ticker ticker) {
 
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
@@ -138,6 +148,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
     this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
+    this.neverIndexedMetadataKeys =
+        Preconditions.checkNotNull(neverIndexedMetadataKeys, "neverIndexedMetadataKeys");
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
     this.softLimitHeaderListSize = softLimitHeaderListSize;
@@ -155,6 +167,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.logId = InternalLogId.allocate(getClass(), remoteAddress.toString());
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
     this.useGetForSafeMethods = useGetForSafeMethods;
+    this.metricRecorder = metricRecorder;
     this.ticker = Preconditions.checkNotNull(ticker, "ticker");
   }
 
@@ -164,7 +177,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       executor.execute(new Runnable() {
         @Override
         public void run() {
-          callback.onFailure(statusExplainingWhyTheChannelIsNull.asException());
+          callback.onFailure(statusExplainingWhyTheChannelIsNull);
         }
       });
       return;
@@ -176,7 +189,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
           Status s = statusFromFailedFuture(future);
-          Http2Ping.notifyFailed(callback, executor, s.asException());
+          Http2Ping.notifyFailed(callback, executor, s);
         }
       }
     };
@@ -230,8 +243,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     EventLoop eventLoop = group.next();
     if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
       keepAliveManager = new KeepAliveManager(
-          new ClientKeepAlivePinger(this), eventLoop, keepAliveTimeNanos, keepAliveTimeoutNanos,
-          keepAliveWithoutCalls);
+          new ClientKeepAlivePinger(this), eventLoop, keepAliveTimeNanos,
+          keepAliveTimeoutNanos, keepAliveWithoutCalls);
     }
 
     handler = NettyClientHandler.newHandler(
@@ -239,6 +252,7 @@ class NettyClientTransport implements ConnectionClientTransport {
             keepAliveManager,
             autoFlowControl,
             flowControlWindow,
+            neverIndexedMetadataKeys,
             maxHeaderListSize,
             softLimitHeaderListSize,
             GrpcUtil.STOPWATCH_SUPPLIER,
@@ -247,7 +261,8 @@ class NettyClientTransport implements ConnectionClientTransport {
             eagAttributes,
             authorityString,
             channelLogger,
-            ticker);
+            ticker,
+            metricRecorder);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
@@ -290,7 +305,8 @@ class NettyClientTransport implements ConnectionClientTransport {
           // could use GlobalEventExecutor (which is what regFuture would use for notifying
           // listeners in this case), but avoiding on-demand thread creation in an error case seems
           // a good idea and is probably clearer threading.
-          lifecycleManager.notifyTerminated(statusExplainingWhyTheChannelIsNull);
+          lifecycleManager.notifyTerminated(statusExplainingWhyTheChannelIsNull,
+              SimpleDisconnectError.UNKNOWN);
         }
       };
     }
@@ -322,7 +338,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         if (!future.isSuccess()) {
           // Need to notify of this failure, because NettyClientHandler may not have been added to
           // the pipeline before the error occurred.
-          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
+          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()),
+              SimpleDisconnectError.UNKNOWN);
         }
       }
     });
@@ -356,12 +373,17 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public void shutdownNow(final Status reason) {
+    shutdownNow(reason, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
+  }
+
+  @Override
+  public void shutdownNow(final Status reason, DisconnectError disconnectError) {
     // Notifying of termination is automatically done when the channel closes.
     if (channel != null && channel.isOpen()) {
       handler.getWriteQueue().enqueue(new Runnable() {
         @Override
         public void run() {
-          lifecycleManager.notifyShutdown(reason);
+          lifecycleManager.notifyShutdown(reason, disconnectError);
           channel.write(new ForcefulCloseCommand(reason));
         }
       }, true);

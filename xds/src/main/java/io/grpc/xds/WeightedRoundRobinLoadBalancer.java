@@ -40,6 +40,8 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.util.MultiChildLoadBalancer;
+import io.grpc.xds.internal.MetricReportUtils;
+import io.grpc.xds.internal.MetricReportUtils.ParsedMetricName;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
@@ -48,6 +50,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.OptionalDouble;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -102,32 +106,45 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
   private final long infTime;
   private final Ticker ticker;
   private String locality = "";
-  private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
+  private String backendService = "";
+  private SubchannelPicker currentPicker = new FixedResultPicker(
+      PickResult.withNoResult("connecting", "weighted_round_robin: initializing"));
 
   // The metric instruments are only registered once and shared by all instances of this LB.
   static {
     MetricInstrumentRegistry metricInstrumentRegistry
         = MetricInstrumentRegistry.getDefaultRegistry();
-    RR_FALLBACK_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.wrr.rr_fallback",
+    RR_FALLBACK_COUNTER = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.wrr.rr_fallback",
         "EXPERIMENTAL. Number of scheduler updates in which there were not enough endpoints "
             + "with valid weight, which caused the WRR policy to fall back to RR behavior",
-        "{update}", Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"),
+        "{update}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
         false);
     ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER = metricInstrumentRegistry.registerLongCounter(
-        "grpc.lb.wrr.endpoint_weight_not_yet_usable", "EXPERIMENTAL. Number of endpoints "
-            + "from each scheduler update that don't yet have usable weight information",
-        "{endpoint}", Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"),
+        "grpc.lb.wrr.endpoint_weight_not_yet_usable",
+        "EXPERIMENTAL. Number of endpoints from each scheduler update that don't yet have usable "
+            + "weight information",
+        "{endpoint}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
         false);
     ENDPOINT_WEIGHT_STALE_COUNTER = metricInstrumentRegistry.registerLongCounter(
         "grpc.lb.wrr.endpoint_weight_stale",
         "EXPERIMENTAL. Number of endpoints from each scheduler update whose latest weight is "
-            + "older than the expiration period", "{endpoint}", Lists.newArrayList("grpc.target"),
-        Lists.newArrayList("grpc.lb.locality"), false);
+            + "older than the expiration period",
+        "{endpoint}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
+        false);
     ENDPOINT_WEIGHTS_HISTOGRAM = metricInstrumentRegistry.registerDoubleHistogram(
         "grpc.lb.wrr.endpoint_weights",
         "EXPERIMENTAL. The histogram buckets will be endpoint weight ranges.",
-        "{weight}", Lists.newArrayList(), Lists.newArrayList("grpc.target"),
-        Lists.newArrayList("grpc.lb.locality"),
+        "{weight}",
+        Lists.newArrayList(),
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
         false);
   }
 
@@ -168,33 +185,26 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
     } else {
       this.locality = "";
     }
-    config =
-            (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    AcceptResolvedAddrRetVal acceptRetVal;
-    try {
-      resolvingAddresses = true;
-      acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
-        return acceptRetVal.status;
-      }
-
-      if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
-        weightUpdateTimer.cancel();
-      }
-      updateWeightTask.run();
-
-      createAndApplyOrcaListeners();
-
-      // Must update channel picker before return so that new RPCs will not be routed to deleted
-      // clusters and resolver can remove them in service config.
-      updateOverallBalancingState();
-
-      shutdownRemoved(acceptRetVal.removedChildren);
-    } finally {
-      resolvingAddresses = false;
+    String backendService
+        = resolvedAddresses.getAttributes().get(NameResolver.ATTR_BACKEND_SERVICE);
+    if (backendService != null) {
+      this.backendService = backendService;
+    } else {
+      this.backendService = "";
     }
+    config =
+        (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
 
-    return acceptRetVal.status;
+    if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
+      weightUpdateTimer.cancel();
+    }
+    updateWeightTask.run();
+
+    Status status = super.acceptResolvedAddresses(resolvedAddresses);
+
+    createAndApplyOrcaListeners();
+
+    return status;
   }
 
   /**
@@ -218,7 +228,9 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
       if (isConnecting) {
         updateBalancingState(
-            ConnectivityState.CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+            ConnectivityState.CONNECTING,
+            new FixedResultPicker(
+                PickResult.withNoResult("connecting", "weighted_round_robin: connecting")));
       } else {
         updateBalancingState(
             ConnectivityState.TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));
@@ -230,7 +242,8 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
   private SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
     WeightedRoundRobinPicker picker = new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
-        config.enableOobLoadReport, config.errorUtilizationPenalty, sequence);
+        config.enableOobLoadReport, config.errorUtilizationPenalty, sequence,
+        config.parsedMetricNamesForComputingUtilization);
     updateWeight(picker);
     return picker;
   }
@@ -246,7 +259,7 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       helper.getMetricRecorder()
           .recordDoubleHistogram(ENDPOINT_WEIGHTS_HISTOGRAM, newWeight,
               ImmutableList.of(helper.getChannelTarget()),
-              ImmutableList.of(locality));
+              ImmutableList.of(locality, backendService));
       newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
     }
 
@@ -254,18 +267,19 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       helper.getMetricRecorder()
           .addLongCounter(ENDPOINT_WEIGHT_STALE_COUNTER, staleEndpoints.get(),
               ImmutableList.of(helper.getChannelTarget()),
-              ImmutableList.of(locality));
+              ImmutableList.of(locality, backendService));
     }
     if (notYetUsableEndpoints.get() > 0) {
       helper.getMetricRecorder()
           .addLongCounter(ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER, notYetUsableEndpoints.get(),
-              ImmutableList.of(helper.getChannelTarget()), ImmutableList.of(locality));
+              ImmutableList.of(helper.getChannelTarget()),
+              ImmutableList.of(locality, backendService));
     }
     boolean weightsEffective = picker.updateWeight(newWeights);
     if (!weightsEffective) {
       helper.getMetricRecorder()
           .addLongCounter(RR_FALLBACK_COUNTER, 1, ImmutableList.of(helper.getChannelTarget()),
-              ImmutableList.of(locality));
+              ImmutableList.of(locality, backendService));
     }
   }
 
@@ -318,12 +332,16 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       subchannels.add(wrrSubchannel);
     }
 
-    public OrcaReportListener getOrCreateOrcaListener(float errorUtilizationPenalty) {
+    public OrcaReportListener getOrCreateOrcaListener(float errorUtilizationPenalty,
+        ImmutableList<ParsedMetricName> parsedMetricNamesForComputingUtilization) {
       if (orcaReportListener != null
-          && orcaReportListener.errorUtilizationPenalty == errorUtilizationPenalty) {
+          && orcaReportListener.errorUtilizationPenalty == errorUtilizationPenalty
+          && orcaReportListener.parsedMetricNamesForComputingUtilization
+              .equals(parsedMetricNamesForComputingUtilization)) {
         return orcaReportListener;
       }
-      orcaReportListener = new OrcaReportListener(errorUtilizationPenalty);
+      orcaReportListener =
+          new OrcaReportListener(errorUtilizationPenalty, parsedMetricNamesForComputingUtilization);
       return orcaReportListener;
     }
 
@@ -348,18 +366,19 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
     final class OrcaReportListener implements OrcaPerRequestReportListener, OrcaOobReportListener {
       private final float errorUtilizationPenalty;
+      private final ImmutableList<ParsedMetricName> parsedMetricNamesForComputingUtilization;
 
-      OrcaReportListener(float errorUtilizationPenalty) {
+      OrcaReportListener(float errorUtilizationPenalty,
+          ImmutableList<ParsedMetricName> parsedMetricNamesForComputingUtilization) {
         this.errorUtilizationPenalty = errorUtilizationPenalty;
+        this.parsedMetricNamesForComputingUtilization = parsedMetricNamesForComputingUtilization;
       }
 
       @Override
       public void onLoadReport(MetricReport report) {
+        double utilization = getUtilization(report);
+
         double newWeight = 0;
-        // Prefer application utilization and fallback to CPU utilization if unset.
-        double utilization =
-            report.getApplicationUtilization() > 0 ? report.getApplicationUtilization()
-                : report.getCpuUtilization();
         if (utilization > 0 && report.getQps() > 0) {
           double penalty = 0;
           if (report.getEps() > 0 && errorUtilizationPenalty > 0) {
@@ -375,6 +394,44 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
         }
         lastUpdated = ticker.nanoTime();
         weight = newWeight;
+      }
+
+      /**
+       * Returns the utilization value computed from the specified metric names. If the custom
+       * metrics are present and valid, the maximum of the custom metrics is returned. Otherwise,
+       * if application utilization is > 0, it is returned. If neither are present, the CPU
+       * utilization is returned.
+       */
+      private double getUtilization(MetricReport report) {
+        OptionalDouble customUtil = getCustomMetricUtilization(report);
+        if (customUtil.isPresent()) {
+          return customUtil.getAsDouble();
+        }
+        double appUtil = report.getApplicationUtilization();
+        if (appUtil > 0) {
+          return appUtil;
+        }
+        return report.getCpuUtilization();
+      }
+
+      /**
+       * Returns the maximum utilization value among the parsed metric names.
+       * Returns OptionalDouble.empty() if NONE of the specified metrics are present in the report,
+       * or if all present metrics are NaN or non positive.
+       */
+      private OptionalDouble getCustomMetricUtilization(MetricReport report) {
+        OptionalDouble max = OptionalDouble.empty();
+        for (int i = 0; i < parsedMetricNamesForComputingUtilization.size(); i++) {
+          OptionalDouble opt = MetricReportUtils.getMetricValue(report,
+              parsedMetricNamesForComputingUtilization.get(i));
+          if (opt.isPresent()) {
+            double d = opt.getAsDouble();
+            if (!Double.isNaN(d) && d > 0 && (!max.isPresent() || d > max.getAsDouble())) {
+              max = opt;
+            }
+          }
+        }
+        return max;
       }
     }
   }
@@ -396,10 +453,10 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       for (WrrSubchannel weightedSubchannel : wChild.subchannels) {
         if (config.enableOobLoadReport) {
           OrcaOobUtil.setListener(weightedSubchannel,
-              wChild.getOrCreateOrcaListener(config.errorUtilizationPenalty),
+              wChild.getOrCreateOrcaListener(config.errorUtilizationPenalty,
+                      config.parsedMetricNamesForComputingUtilization),
               OrcaOobUtil.OrcaReportingConfig.newBuilder()
-                  .setReportInterval(config.oobReportingPeriodNanos, TimeUnit.NANOSECONDS)
-                  .build());
+                  .setReportInterval(config.oobReportingPeriodNanos, TimeUnit.NANOSECONDS).build());
         } else {
           OrcaOobUtil.setListener(weightedSubchannel, null, null);
         }
@@ -466,7 +523,8 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
     private volatile StaticStrideScheduler scheduler;
 
     WeightedRoundRobinPicker(List<ChildLbState> children, boolean enableOobLoadReport,
-        float errorUtilizationPenalty, AtomicInteger sequence) {
+        float errorUtilizationPenalty, AtomicInteger sequence,
+        ImmutableList<ParsedMetricName> parsedMetricNamesForComputingUtilization) {
       checkNotNull(children, "children");
       Preconditions.checkArgument(!children.isEmpty(), "empty child list");
       this.children = children;
@@ -475,7 +533,8 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       for (ChildLbState child : children) {
         WeightedChildLbState wChild = (WeightedChildLbState) child;
         pickers.add(wChild.getCurrentPicker());
-        reportListeners.add(wChild.getOrCreateOrcaListener(errorUtilizationPenalty));
+        reportListeners.add(wChild.getOrCreateOrcaListener(errorUtilizationPenalty,
+            parsedMetricNamesForComputingUtilization));
       }
       this.pickers = pickers;
       this.reportListeners = reportListeners;
@@ -501,12 +560,15 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       if (subchannel == null) {
         return pickResult;
       }
+      
+      subchannel = ((WrrSubchannel) subchannel).delegate();
       if (!enableOobLoadReport) {
-        return PickResult.withSubchannel(subchannel,
-            OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
-                reportListeners.get(pick)));
+        return pickResult.copyWithSubchannel(subchannel)
+            .copyWithStreamTracerFactory(
+                OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
+                    reportListeners.get(pick)));
       } else {
-        return PickResult.withSubchannel(subchannel);
+        return pickResult.copyWithSubchannel(subchannel);
       }
     }
 
@@ -713,32 +775,83 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
     final long oobReportingPeriodNanos;
     final long weightUpdatePeriodNanos;
     final float errorUtilizationPenalty;
+    final ImmutableList<ParsedMetricName> parsedMetricNamesForComputingUtilization;
 
     public static Builder newBuilder() {
       return new Builder();
     }
 
     private WeightedRoundRobinLoadBalancerConfig(long blackoutPeriodNanos,
-                                                 long weightExpirationPeriodNanos,
-                                                 boolean enableOobLoadReport,
-                                                 long oobReportingPeriodNanos,
-                                                 long weightUpdatePeriodNanos,
-                                                 float errorUtilizationPenalty) {
+        long weightExpirationPeriodNanos, boolean enableOobLoadReport, long oobReportingPeriodNanos,
+        long weightUpdatePeriodNanos, float errorUtilizationPenalty,
+        ImmutableList<String> metricNamesForComputingUtilization) {
       this.blackoutPeriodNanos = blackoutPeriodNanos;
       this.weightExpirationPeriodNanos = weightExpirationPeriodNanos;
       this.enableOobLoadReport = enableOobLoadReport;
       this.oobReportingPeriodNanos = oobReportingPeriodNanos;
       this.weightUpdatePeriodNanos = weightUpdatePeriodNanos;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
+
+      ImmutableList.Builder<ParsedMetricName> builder = ImmutableList.builder();
+      if (metricNamesForComputingUtilization != null) {
+        for (int i = 0; i < metricNamesForComputingUtilization.size(); i++) {
+          String metricName = metricNamesForComputingUtilization.get(i);
+          ParsedMetricName parsed = MetricReportUtils.ParsedMetricName.parse(metricName);
+          if (parsed.getMetricType() != MetricReportUtils.MetricType.INVALID) {
+            builder.add(parsed);
+          } else {
+            log.log(Level.FINE, "Invalid custom metric name configured and ignored: " + metricName);
+          }
+        }
+      }
+      this.parsedMetricNamesForComputingUtilization = builder.build();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof WeightedRoundRobinLoadBalancerConfig)) {
+        return false;
+      }
+      WeightedRoundRobinLoadBalancerConfig that = (WeightedRoundRobinLoadBalancerConfig) o;
+      return this.blackoutPeriodNanos == that.blackoutPeriodNanos
+          && this.weightExpirationPeriodNanos == that.weightExpirationPeriodNanos
+          && this.enableOobLoadReport == that.enableOobLoadReport
+          && this.oobReportingPeriodNanos == that.oobReportingPeriodNanos
+          && this.weightUpdatePeriodNanos == that.weightUpdatePeriodNanos
+          // Float.compare considers NaNs equal
+          && Float.compare(this.errorUtilizationPenalty, that.errorUtilizationPenalty) == 0
+          && Objects.equals(this.parsedMetricNamesForComputingUtilization,
+              that.parsedMetricNamesForComputingUtilization);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(blackoutPeriodNanos, weightExpirationPeriodNanos, enableOobLoadReport,
+          oobReportingPeriodNanos, weightUpdatePeriodNanos, errorUtilizationPenalty,
+          parsedMetricNamesForComputingUtilization);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("blackoutPeriodNanos", blackoutPeriodNanos)
+          .add("weightExpirationPeriodNanos", weightExpirationPeriodNanos)
+          .add("enableOobLoadReport", enableOobLoadReport)
+          .add("oobReportingPeriodNanos", oobReportingPeriodNanos)
+          .add("weightUpdatePeriodNanos", weightUpdatePeriodNanos)
+          .add("errorUtilizationPenalty", errorUtilizationPenalty)
+          .add("parsedMetricNamesForComputingUtilization", parsedMetricNamesForComputingUtilization)
+          .toString();
     }
 
     static final class Builder {
       long blackoutPeriodNanos = 10_000_000_000L; // 10s
-      long weightExpirationPeriodNanos = 180_000_000_000L; //3min
+      long weightExpirationPeriodNanos = 180_000_000_000L; // 3min
       boolean enableOobLoadReport = false;
       long oobReportingPeriodNanos = 10_000_000_000L; // 10s
       long weightUpdatePeriodNanos = 1_000_000_000L; // 1s
       float errorUtilizationPenalty = 1.0F;
+      ImmutableList<String> metricNamesForComputingUtilization = ImmutableList.of();
 
       private Builder() {
 
@@ -776,10 +889,17 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
         return this;
       }
 
+      Builder setMetricNamesForComputingUtilization(
+          List<String> metricNamesForComputingUtilization) {
+        this.metricNamesForComputingUtilization =
+            ImmutableList.copyOf(metricNamesForComputingUtilization);
+        return this;
+      }
+
       WeightedRoundRobinLoadBalancerConfig build() {
         return new WeightedRoundRobinLoadBalancerConfig(blackoutPeriodNanos,
-                weightExpirationPeriodNanos, enableOobLoadReport, oobReportingPeriodNanos,
-                weightUpdatePeriodNanos, errorUtilizationPenalty);
+            weightExpirationPeriodNanos, enableOobLoadReport, oobReportingPeriodNanos,
+            weightUpdatePeriodNanos, errorUtilizationPenalty, metricNamesForComputingUtilization);
       }
     }
   }

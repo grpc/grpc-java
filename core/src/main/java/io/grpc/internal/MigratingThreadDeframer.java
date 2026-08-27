@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Decompressor;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
@@ -26,7 +27,6 @@ import java.io.Closeable;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Queue;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A deframer that moves decoding between the transport and app threads based on which is more

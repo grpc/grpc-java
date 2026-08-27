@@ -4,9 +4,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 
 /**
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: grpc/testing/services.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class ReportQpsScenarioServiceGrpc {
 
@@ -58,6 +55,21 @@ public final class ReportQpsScenarioServiceGrpc {
         }
       };
     return ReportQpsScenarioServiceStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static ReportQpsScenarioServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public ReportQpsScenarioServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReportQpsScenarioServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return ReportQpsScenarioServiceBlockingV2Stub.newStub(factory, channel);
   }
 
   /**
@@ -146,6 +158,33 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service ReportQpsScenarioService.
+   */
+  public static final class ReportQpsScenarioServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingV2Stub> {
+    private ReportQpsScenarioServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected ReportQpsScenarioServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new ReportQpsScenarioServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Report results of a QPS test benchmark scenario.
+     * </pre>
+     */
+    public io.grpc.benchmarks.proto.Control.Void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
+          getChannel(), getReportScenarioMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do limited synchronous rpc calls to service ReportQpsScenarioService.
    */
   public static final class ReportQpsScenarioServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingStub> {

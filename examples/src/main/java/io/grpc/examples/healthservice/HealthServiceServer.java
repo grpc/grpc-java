@@ -94,7 +94,7 @@ public class HealthServiceServer {
   }
 
   private class GreeterImpl extends GreeterGrpc.GreeterImplBase {
-    boolean isServing = true;
+    private volatile boolean isServing = true;
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
@@ -134,7 +134,7 @@ public class HealthServiceServer {
     }
 
     private boolean isNameLongEnough(HelloRequest req) {
-      return isServing && req.getName().length() >= 5;
+      return req.getName().length() >= 5;
     }
   }
 }

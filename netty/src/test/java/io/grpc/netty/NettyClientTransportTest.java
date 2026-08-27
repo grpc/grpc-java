@@ -37,6 +37,8 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Optional;
@@ -44,6 +46,7 @@ import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
@@ -53,13 +56,16 @@ import io.grpc.InternalChannelz;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
@@ -74,6 +80,7 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
 import io.grpc.testing.TlsTesting;
+import io.grpc.util.CertificateUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
@@ -83,24 +90,29 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPromise;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.local.LocalChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannelConfig;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import io.netty.util.ReferenceCountUtil;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -114,6 +126,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509ExtendedTrustManager;
+import javax.net.ssl.X509TrustManager;
+import javax.security.auth.x500.X500Principal;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -128,10 +146,14 @@ import org.mockito.junit.MockitoRule;
  * Tests for {@link NettyClientTransport}.
  */
 @RunWith(JUnit4.class)
+@IgnoreJRERequirement
 public class NettyClientTransportTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final SslContext SSL_CONTEXT = createSslContext();
+
+  @SuppressWarnings("InlineMeInliner") // Requires Java 11
+  private static final String LONG_STRING_OF_A = Strings.repeat("a", 128);
 
   @Mock
   private ManagedClientTransport.Listener clientTransportListener;
@@ -139,7 +161,8 @@ public class NettyClientTransportTest {
   private final List<NettyClientTransport> transports = new ArrayList<>();
   private final LinkedBlockingQueue<Attributes> serverTransportAttributesList =
       new LinkedBlockingQueue<>();
-  private final NioEventLoopGroup group = new NioEventLoopGroup(1);
+  @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+  private final EventLoopGroup group = new io.netty.channel.nio.NioEventLoopGroup(1);
   private final EchoServerListener serverListener = new EchoServerListener();
   private final InternalChannelz channelz = new InternalChannelz();
   private Runnable tooManyPingsRunnable = new Runnable() {
@@ -187,6 +210,7 @@ public class NettyClientTransportTest {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     // Send a single RPC and wait for the response.
     new Rpc(transport).halfClose().waitForResponse();
@@ -199,36 +223,38 @@ public class NettyClientTransportTest {
   }
 
   @Test
-  public void setSoLingerChannelOption() throws IOException {
+  public void setSoLingerChannelOption() throws IOException, GeneralSecurityException {
     startServer();
     Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
     // set SO_LINGER option
     int soLinger = 123;
     channelOptions.put(ChannelOption.SO_LINGER, soLinger);
-    NettyClientTransport transport =
-        new NettyClientTransport(
-            address,
-            new ReflectiveChannelFactory<>(NioSocketChannel.class),
-            channelOptions,
-            group,
-            newNegotiator(),
-            false,
-            DEFAULT_WINDOW_SIZE,
-            DEFAULT_MAX_MESSAGE_SIZE,
-            GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-            GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-            KEEPALIVE_TIME_NANOS_DISABLED,
-            1L,
-            false,
-            authority,
-            null /* user agent */,
-            tooManyPingsRunnable,
-            new TransportTracer(),
-            Attributes.EMPTY,
-            new SocketPicker(),
-            new FakeChannelLogger(),
-            false,
-            Ticker.systemTicker());
+    NettyClientTransport transport = new NettyClientTransport(
+        address,
+        new ReflectiveChannelFactory<>(NioSocketChannel.class),
+        channelOptions,
+        group,
+        newNegotiator(),
+        false,
+        DEFAULT_WINDOW_SIZE,
+        Collections.<AsciiString>emptySet(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        KEEPALIVE_TIME_NANOS_DISABLED,
+        1L,
+        false,
+        authority,
+        null /* user agent */,
+        tooManyPingsRunnable,
+        new TransportTracer(),
+        Attributes.EMPTY,
+        new SocketPicker(),
+        new FakeChannelLogger(),
+        false,
+        new MetricRecorder() {
+        },
+        Ticker.systemTicker());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -244,6 +270,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(newNegotiator(),
         DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     new Rpc(transport, new Metadata()).halfClose().waitForResponse();
 
@@ -261,6 +288,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(newNegotiator(),
         1, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null, true);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     try {
       // Send a single RPC and wait for the response.
@@ -287,6 +315,7 @@ public class NettyClientTransportTest {
       NettyClientTransport transport = newTransport(negotiator);
       callMeMaybe(transport.start(clientTransportListener));
     }
+    verify(clientTransportListener, timeout(5000).times(2)).transportReady();
 
     // Send a single RPC on each transport.
     final List<Rpc> rpcs = new ArrayList<>(transports.size());
@@ -316,6 +345,7 @@ public class NettyClientTransportTest {
             failureStatus.asRuntimeException());
       }
     });
+    verify(clientTransportListener, timeout(5000)).transportTerminated();
 
     Rpc rpc = new Rpc(transport).halfClose();
     try {
@@ -346,9 +376,10 @@ public class NettyClientTransportTest {
         .trustManager(caCert)
         .keyManager(clientCert, clientKey)
         .build();
-    ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext);
+    ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, null);
     final NettyClientTransport transport = newTransport(negotiator);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportTerminated();
 
     Rpc rpc = new Rpc(transport).halfClose();
     try {
@@ -378,6 +409,7 @@ public class NettyClientTransportTest {
     callMeMaybe(transport.start(clientTransportListener));
     final Status failureStatus = Status.UNAVAILABLE.withDescription("oh noes!");
     transport.channel().pipeline().fireExceptionCaught(failureStatus.asRuntimeException());
+    verify(clientTransportListener, timeout(5000)).transportTerminated();
 
     Rpc rpc = new Rpc(transport).halfClose();
     try {
@@ -409,6 +441,7 @@ public class NettyClientTransportTest {
         }
       }
     });
+    verify(clientTransportListener, timeout(5000)).transportTerminated();
 
     Rpc rpc = new Rpc(transport).halfClose();
     try {
@@ -428,6 +461,7 @@ public class NettyClientTransportTest {
 
     NettyClientTransport transport = newTransport(newNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     // Send a dummy RPC in order to ensure that the updated SETTINGS_MAX_CONCURRENT_STREAMS
     // has been received by the remote endpoint.
@@ -472,30 +506,32 @@ public class NettyClientTransportTest {
   public void failingToConstructChannelShouldFailGracefully() throws Exception {
     address = TestUtils.testServerAddress(new InetSocketAddress(12345));
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
-    NettyClientTransport transport =
-        new NettyClientTransport(
-            address,
-            new ReflectiveChannelFactory<>(CantConstructChannel.class),
-            new HashMap<ChannelOption<?>, Object>(),
-            group,
-            newNegotiator(),
-            false,
-            DEFAULT_WINDOW_SIZE,
-            DEFAULT_MAX_MESSAGE_SIZE,
-            GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-            GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-            KEEPALIVE_TIME_NANOS_DISABLED,
-            1,
-            false,
-            authority,
-            null,
-            tooManyPingsRunnable,
-            new TransportTracer(),
-            Attributes.EMPTY,
-            new SocketPicker(),
-            new FakeChannelLogger(),
-            false,
-            Ticker.systemTicker());
+    NettyClientTransport transport = new NettyClientTransport(
+        address,
+        new ReflectiveChannelFactory<>(CantConstructChannel.class),
+        new HashMap<ChannelOption<?>, Object>(),
+        group,
+        newNegotiator(),
+        false,
+        DEFAULT_WINDOW_SIZE,
+        Collections.<AsciiString>emptySet(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        KEEPALIVE_TIME_NANOS_DISABLED,
+        1,
+        false,
+        authority,
+        null,
+        tooManyPingsRunnable,
+        new TransportTracer(),
+        Attributes.EMPTY,
+        new SocketPicker(),
+        new FakeChannelLogger(),
+        false,
+        new MetricRecorder() {
+        },
+        Ticker.systemTicker());
     transports.add(transport);
 
     // Should not throw
@@ -521,8 +557,8 @@ public class NettyClientTransportTest {
       }
 
       @Override
-      public void onFailure(Throwable cause) {
-        pingResult.setException(cause);
+      public void onFailure(Status cause) {
+        pingResult.setException(cause.asException());
       }
     };
     transport.ping(pingCallback, clock.getScheduledExecutorService());
@@ -556,7 +592,8 @@ public class NettyClientTransportTest {
   @Test
   public void channelFactoryShouldNNotSetSocketOptionKeepAlive() throws Exception {
     startServer();
-    DefaultEventLoopGroup group = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup group = new io.netty.channel.DefaultEventLoopGroup(1);
     try {
       NettyClientTransport transport = newTransport(newNegotiator(),
           DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,
@@ -576,9 +613,14 @@ public class NettyClientTransportTest {
   public void maxHeaderListSizeShouldBeEnforcedOnClient() throws Exception {
     startServer();
 
+    // We want the header list size limit to be half-way close to the RPC's header size, otherwise
+    // Netty will kill the connection instead of just the stream. While we can kill the connection,
+    // we want to make sure there's a more graceful failure first. We don't want a cliff where if an
+    // app adds one byte suddenly RPCs kill the connection.
     NettyClientTransport transport =
-        newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE, 1, null, true);
+        newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE, 75, null, true);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     try {
       // Send a single RPC and wait for the response.
@@ -586,19 +628,22 @@ public class NettyClientTransportTest {
       fail("The stream should have been failed due to client received header exceeds header list"
           + " size limit!");
     } catch (Exception e) {
-      Throwable rootCause = getRootCause(e);
-      Status status = ((StatusException) rootCause).getStatus();
+      Status status = ((StatusException) e.getCause()).getStatus();
       assertEquals(Status.Code.INTERNAL, status.getCode());
-      assertEquals("RST_STREAM closed stream. HTTP/2 error code: PROTOCOL_ERROR",
-          status.getDescription());
+      if (status.getCause() instanceof Http2Exception.StreamException) {
+        // Netty 4.1.135+ stream-level error that is generated by the client.
+        assertThat(status.getCause()).hasMessageThat()
+            .contains("Header size exceeded max allowed size");
+      } else {
+        // Older Netty failed the stream on the the server-side.
+        assertEquals("RST_STREAM closed stream. HTTP/2 error code: PROTOCOL_ERROR",
+            status.getDescription());
+      }
     }
   }
 
   @Test
   public void huffmanCodingShouldNotBePerformed() throws Exception {
-    @SuppressWarnings("InlineMeInliner") // Requires Java 11
-    String longStringOfA = Strings.repeat("a", 128);
-
     negotiator = ProtocolNegotiators.serverPlaintext();
     startServer();
 
@@ -609,9 +654,10 @@ public class NettyClientTransportTest {
 
     Metadata headers = new Metadata();
     headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-        longStringOfA);
+        LONG_STRING_OF_A);
 
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     AtomicBoolean foundExpectedHeaderBytes = new AtomicBoolean(false);
 
@@ -620,7 +666,7 @@ public class NettyClientTransportTest {
       public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
           throws Exception {
         if (msg instanceof ByteBuf) {
-          if (((ByteBuf) msg).toString(StandardCharsets.UTF_8).contains(longStringOfA)) {
+          if (((ByteBuf) msg).toString(StandardCharsets.UTF_8).contains(LONG_STRING_OF_A)) {
             foundExpectedHeaderBytes.set(true);
           }
         }
@@ -636,11 +682,53 @@ public class NettyClientTransportTest {
   }
 
   @Test
+  public void huffmanCodingShouldNotBePerformedOnServer() throws Exception {
+    negotiator = ProtocolNegotiators.serverPlaintext();
+
+    Metadata responseHeaders = new Metadata();
+    responseHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+        LONG_STRING_OF_A);
+
+    startServer(new EchoServerListener(responseHeaders));
+
+    NettyClientTransport transport = newTransport(ProtocolNegotiators.plaintext(),
+        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null, false,
+        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+        new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
+
+    callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
+
+    AtomicBoolean foundExpectedHeaderBytes = new AtomicBoolean(false);
+
+    // Add a handler to the client pipeline to inspect server's response
+    transport.channel().pipeline().addFirst(new ChannelDuplexHandler() {
+      @Override
+      public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        if (msg instanceof ByteBuf) {
+          String data = ((ByteBuf) msg).toString(StandardCharsets.UTF_8);
+          if (data.contains(LONG_STRING_OF_A)) {
+            foundExpectedHeaderBytes.set(true);
+          }
+        }
+        super.channelRead(ctx, msg);
+      }
+    });
+
+    new Rpc(transport).halfClose().waitForResponse();
+
+    if (!foundExpectedHeaderBytes.get()) {
+      fail("expected to find UTF-8 encoded 'a's in the response header sent by the server");
+    }
+  }
+
+  @Test
   public void maxHeaderListSizeShouldBeEnforcedOnServer() throws Exception {
     startServer(100, 1);
 
     NettyClientTransport transport = newTransport(newNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     try {
       // Send a single RPC and wait for the response.
@@ -685,6 +773,7 @@ public class NettyClientTransportTest {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
     Rpc rpc = new Rpc(transport).halfClose();
     rpc.waitForResponse();
 
@@ -703,6 +792,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, true /* keep alive */);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
     Rpc rpc = new Rpc(transport).halfClose();
     rpc.waitForResponse();
 
@@ -715,6 +805,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, false /* keep alive */);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
     Rpc rpc = new Rpc(transport).halfClose();
     rpc.waitForResponse();
 
@@ -803,11 +894,12 @@ public class NettyClientTransportTest {
         .keyManager(clientCert, clientKey)
         .build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool,
-        Optional.absent());
+        Optional.absent(), null, null);
     // after starting the client, the Executor in the client pool should be used
     assertEquals(true, clientExecutorPool.isInUse());
     final NettyClientTransport transport = newTransport(negotiator);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
     Rpc rpc = new Rpc(transport).halfClose();
     rpc.waitForResponse();
     // closing the negotiators should return the executors back to pool, and release the resource
@@ -817,6 +909,179 @@ public class NettyClientTransportTest {
     assertEquals(false, serverExecutorPool.isInUse());
   }
 
+  /**
+   * This test tests the case of TlsCredentials passed to ProtocolNegotiators not having an instance
+   * of X509ExtendedTrustManager (this is not testable in ProtocolNegotiatorsTest without creating
+   * accessors for the internal state of negotiator whether it has a X509ExtendedTrustManager,
+   * hence the need to test it in this class instead). To establish a successful handshake we create
+   * a fake X509TrustManager not implementing X509ExtendedTrustManager but wraps the real
+   * X509ExtendedTrustManager.
+   */
+  @Test
+  public void authorityOverrideInCallOptions_noX509ExtendedTrustManager_newStreamCreationFails()
+          throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
+          TimeoutException {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      startServer();
+      InputStream caCert = TlsTesting.loadCert("ca.pem");
+      X509TrustManager x509ExtendedTrustManager =
+              (X509TrustManager) getX509ExtendedTrustManager(caCert);
+      ProtocolNegotiators.FromChannelCredentialsResult result =
+              ProtocolNegotiators.from(TlsChannelCredentials.newBuilder()
+                      .trustManager(new FakeTrustManager(x509ExtendedTrustManager)).build());
+      NettyClientTransport transport = newTransport(result.negotiator.newNegotiator());
+      SettableFuture<Void> connected = SettableFuture.create();
+      FakeClientTransportListener fakeClientTransportListener =
+              new FakeClientTransportListener(connected);
+      callMeMaybe(transport.start(fakeClientTransportListener));
+      connected.get(10, TimeUnit.SECONDS);
+      assertThat(fakeClientTransportListener.isConnected()).isTrue();
+
+      Rpc rpc = new Rpc(transport, new Metadata(), "foo.test.google.in");
+      try {
+        rpc.waitForClose();
+        fail("Expected exception in starting stream");
+      } catch (ExecutionException ex) {
+        Status status = ((StatusException) ex.getCause()).getStatus();
+        assertThat(status.getDescription()).isEqualTo("Can't allow authority override in rpc "
+                + "when X509ExtendedTrustManager is not available");
+        assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
+      }
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
+  public void authorityOverrideInCallOptions_doesntMatchServerPeerHost_newStreamCreationFails()
+          throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
+          TimeoutException {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      startServer();
+      NettyClientTransport transport = newTransport(newNegotiator());
+      SettableFuture<Void> connected = SettableFuture.create();
+      FakeClientTransportListener fakeClientTransportListener =
+              new FakeClientTransportListener(connected);
+      callMeMaybe(transport.start(fakeClientTransportListener));
+      connected.get(10, TimeUnit.SECONDS);
+      assertThat(fakeClientTransportListener.isConnected()).isTrue();
+
+      Rpc rpc = new Rpc(transport, new Metadata(), "foo.test.google.in");
+      try {
+        rpc.waitForClose();
+        fail("Expected exception in starting stream");
+      } catch (ExecutionException ex) {
+        Status status = ((StatusException) ex.getCause()).getStatus();
+        assertThat(status.getDescription()).isEqualTo("Peer hostname verification during rpc "
+                + "failed for authority 'foo.test.google.in'");
+        assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
+        assertThat(((InvocationTargetException) ex.getCause().getCause()).getTargetException())
+                .isInstanceOf(CertificateException.class);
+        assertThat(((InvocationTargetException) ex.getCause().getCause()).getTargetException()
+                .getMessage()).isEqualTo(
+                "No subject alternative DNS name matching foo.test.google.in found.");
+      }
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
+  public void authorityOverrideInCallOptions_matchesServerPeerHost_newStreamCreationSucceeds()
+          throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
+          TimeoutException {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      startServer();
+      NettyClientTransport transport = newTransport(newNegotiator());
+      SettableFuture<Void> connected = SettableFuture.create();
+      FakeClientTransportListener fakeClientTransportListener =
+              new FakeClientTransportListener(connected);
+      callMeMaybe(transport.start(fakeClientTransportListener));
+      connected.get(10, TimeUnit.SECONDS);
+      assertThat(fakeClientTransportListener.isConnected()).isTrue();
+
+      new Rpc(transport, new Metadata(), "foo.test.google.fr").waitForResponse();
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  // Without removing the port number part that {@link X509AuthorityVerifier} does, there will be a
+  // java.security.cert.CertificateException: Illegal given domain name: foo.test.google.fr:12345
+  @Test
+  public void authorityOverrideInCallOptions_portNumberInAuthority_isStrippedForPeerVerification()
+      throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
+      TimeoutException {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      startServer();
+      NettyClientTransport transport = newTransport(newNegotiator());
+      SettableFuture<Void> connected = SettableFuture.create();
+      FakeClientTransportListener fakeClientTransportListener =
+          new FakeClientTransportListener(connected);
+      callMeMaybe(transport.start(fakeClientTransportListener));
+      connected.get(10, TimeUnit.SECONDS);
+      assertThat(fakeClientTransportListener.isConnected()).isTrue();
+
+      new Rpc(transport, new Metadata(), "foo.test.google.fr:12345").waitForResponse();
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
+  public void authorityOverrideInCallOptions_portNumberAndIpv6_isStrippedForPeerVerification()
+      throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
+      TimeoutException {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      startServer();
+      NettyClientTransport transport = newTransport(newNegotiator());
+      SettableFuture<Void> connected = SettableFuture.create();
+      FakeClientTransportListener fakeClientTransportListener =
+          new FakeClientTransportListener(connected);
+      callMeMaybe(transport.start(fakeClientTransportListener));
+      connected.get(10, TimeUnit.SECONDS);
+      assertThat(fakeClientTransportListener.isConnected()).isTrue();
+
+      new Rpc(transport, new Metadata(), "[2001:db8:3333:4444:5555:6666:1.2.3.4]:12345")
+          .waitForResponse();
+    } catch (ExecutionException ex) {
+      Status status = ((StatusException) ex.getCause()).getStatus();
+      assertThat(status.getDescription()).isEqualTo("Peer hostname verification during rpc "
+          + "failed for authority '[2001:db8:3333:4444:5555:6666:1.2.3.4]:12345'");
+      assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(((InvocationTargetException) ex.getCause().getCause()).getTargetException())
+          .isInstanceOf(CertificateException.class);
+      // Port number is removed by {@link X509AuthorityVerifier}.
+      assertThat(((InvocationTargetException) ex.getCause().getCause()).getTargetException()
+          .getMessage()).isEqualTo(
+          "No subject alternative names matching IP address 2001:db8:3333:4444:5555:6666:1.2.3.4 "
+              + "found");
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
+  public void authorityOverrideInCallOptions_notMatches_flagDisabled_createsStream()
+          throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
+          TimeoutException {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator());
+    SettableFuture<Void> connected = SettableFuture.create();
+    FakeClientTransportListener fakeClientTransportListener =
+            new FakeClientTransportListener(connected);
+    callMeMaybe(transport.start(fakeClientTransportListener));
+    connected.get(10, TimeUnit.SECONDS);
+    assertThat(fakeClientTransportListener.isConnected()).isTrue();
+
+    new Rpc(transport, new Metadata(), "foo.test.google.in").waitForResponse();
+  }
+
   private Throwable getRootCause(Throwable t) {
     if (t.getCause() == null) {
       return t;
@@ -824,10 +1089,37 @@ public class NettyClientTransportTest {
     return getRootCause(t.getCause());
   }
 
-  private ProtocolNegotiator newNegotiator() throws IOException {
+  private ProtocolNegotiator newNegotiator() throws IOException, GeneralSecurityException {
     InputStream caCert = TlsTesting.loadCert("ca.pem");
     SslContext clientContext = GrpcSslContexts.forClient().trustManager(caCert).build();
-    return ProtocolNegotiators.tls(clientContext);
+    return ProtocolNegotiators.tls(clientContext,
+        (X509TrustManager) getX509ExtendedTrustManager(TlsTesting.loadCert("ca.pem")));
+  }
+
+  private static TrustManager getX509ExtendedTrustManager(InputStream rootCerts)
+      throws GeneralSecurityException {
+    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+    try {
+      ks.load(null, null);
+    } catch (IOException ex) {
+      // Shouldn't really happen, as we're not loading any data.
+      throw new GeneralSecurityException(ex);
+    }
+    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
+    for (X509Certificate cert : certs) {
+      X500Principal principal = cert.getSubjectX500Principal();
+      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    }
+
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    trustManagerFactory.init(ks);
+    for (TrustManager trustManager : trustManagerFactory.getTrustManagers()) {
+      if (trustManager instanceof X509ExtendedTrustManager) {
+        return trustManager;
+      }
+    }
+    return null;
   }
 
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator) {
@@ -849,30 +1141,32 @@ public class NettyClientTransportTest {
     if (!enableKeepAlive) {
       keepAliveTimeNano = KEEPALIVE_TIME_NANOS_DISABLED;
     }
-    NettyClientTransport transport =
-        new NettyClientTransport(
-            address,
-            channelFactory,
-            new HashMap<ChannelOption<?>, Object>(),
-            group,
-            negotiator,
-            false,
-            DEFAULT_WINDOW_SIZE,
-            maxMsgSize,
-            maxHeaderListSize,
-            maxHeaderListSize,
-            keepAliveTimeNano,
-            keepAliveTimeoutNano,
-            false,
-            authority,
-            userAgent,
-            tooManyPingsRunnable,
-            new TransportTracer(),
-            eagAttributes,
-            new SocketPicker(),
-            new FakeChannelLogger(),
-            false,
-            Ticker.systemTicker());
+    NettyClientTransport transport = new NettyClientTransport(
+        address,
+        channelFactory,
+        new HashMap<ChannelOption<?>, Object>(),
+        group,
+        negotiator,
+        false,
+        DEFAULT_WINDOW_SIZE,
+        Collections.<AsciiString>emptySet(),
+        maxMsgSize,
+        maxHeaderListSize,
+        maxHeaderListSize,
+        keepAliveTimeNano,
+        keepAliveTimeoutNano,
+        false,
+        authority,
+        userAgent,
+        tooManyPingsRunnable,
+        new TransportTracer(),
+        eagAttributes,
+        new SocketPicker(),
+        new FakeChannelLogger(),
+        false,
+        new MetricRecorder() {
+        },
+        Ticker.systemTicker());
     transports.add(transport);
     return transport;
   }
@@ -881,36 +1175,46 @@ public class NettyClientTransportTest {
     startServer(100, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
   }
 
+  private void startServer(ServerListener serverListener) throws IOException {
+    startServer(100, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, serverListener);
+  }
+
   private void startServer(int maxStreamsPerConnection, int maxHeaderListSize) throws IOException {
-    server =
-        new NettyServer(
-            TestUtils.testServerAddresses(new InetSocketAddress(0)),
-            new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
-            new HashMap<ChannelOption<?>, Object>(),
-            new HashMap<ChannelOption<?>, Object>(),
-            new FixedObjectPool<>(group),
-            new FixedObjectPool<>(group),
-            false,
-            negotiator,
-            Collections.<ServerStreamTracer.Factory>emptyList(),
-            TransportTracer.getDefaultFactory(),
-            maxStreamsPerConnection,
-            false,
-            DEFAULT_WINDOW_SIZE,
-            DEFAULT_MAX_MESSAGE_SIZE,
-            maxHeaderListSize,
-            maxHeaderListSize,
-            DEFAULT_SERVER_KEEPALIVE_TIME_NANOS,
-            DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
-            MAX_CONNECTION_IDLE_NANOS_DISABLED,
-            MAX_CONNECTION_AGE_NANOS_DISABLED,
-            MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE,
-            true,
-            0,
-            MAX_RST_COUNT_DISABLED,
-            0,
-            Attributes.EMPTY,
-            channelz);
+    startServer(maxStreamsPerConnection, maxHeaderListSize, serverListener);
+  }
+
+  private void startServer(int maxStreamsPerConnection, int maxHeaderListSize,
+      ServerListener serverListener) throws IOException {
+    server = new NettyServer(
+        TestUtils.testServerAddresses(new InetSocketAddress(0)),
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
+        new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
+        new FixedObjectPool<>(group),
+        new FixedObjectPool<>(group),
+        false,
+        negotiator,
+        Collections.<ServerStreamTracer.Factory>emptyList(),
+        TransportTracer.getDefaultFactory(),
+        maxStreamsPerConnection,
+        false,
+        DEFAULT_WINDOW_SIZE,
+        Collections.<AsciiString>emptySet(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        maxHeaderListSize,
+        maxHeaderListSize,
+        DEFAULT_SERVER_KEEPALIVE_TIME_NANOS,
+        DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
+        MAX_CONNECTION_IDLE_NANOS_DISABLED,
+        MAX_CONNECTION_AGE_NANOS_DISABLED,
+        MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE,
+        true,
+        0,
+        MAX_RST_COUNT_DISABLED,
+        0,
+        Attributes.EMPTY,
+        channelz,
+        new MetricRecorder() {});
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
@@ -946,13 +1250,20 @@ public class NettyClientTransportTest {
     final TestClientStreamListener listener = new TestClientStreamListener();
 
     Rpc(NettyClientTransport transport) {
-      this(transport, new Metadata());
+      this(transport, new Metadata(), null);
     }
 
     Rpc(NettyClientTransport transport, Metadata headers) {
+      this(transport, headers, null);
+    }
+
+    Rpc(NettyClientTransport transport, Metadata headers, String authorityOverride) {
       stream = transport.newStream(
           METHOD, headers, CallOptions.DEFAULT,
           new ClientStreamTracer[]{ new ClientStreamTracer() {} });
+      if (authorityOverride != null) {
+        stream.setAuthority(authorityOverride);
+      }
       stream.start(listener);
       stream.request(1);
       stream.writeMessage(new ByteArrayInputStream(MESSAGE.getBytes(UTF_8)));
@@ -1042,6 +1353,15 @@ public class NettyClientTransportTest {
     final List<NettyServerTransport> transports = new ArrayList<>();
     final List<EchoServerStreamListener> streamListeners =
             Collections.synchronizedList(new ArrayList<EchoServerStreamListener>());
+    Metadata responseHeaders;
+
+    public EchoServerListener() {
+      this(new Metadata());
+    }
+
+    public EchoServerListener(Metadata responseHeaders) {
+      this.responseHeaders = responseHeaders;
+    }
 
     @Override
     public ServerTransportListener transportCreated(final ServerTransport transport) {
@@ -1051,7 +1371,7 @@ public class NettyClientTransportTest {
         public void streamCreated(ServerStream stream, String method, Metadata headers) {
           EchoServerStreamListener listener = new EchoServerStreamListener(stream, headers);
           stream.setListener(listener);
-          stream.writeHeaders(new Metadata(), true);
+          stream.writeHeaders(responseHeaders, true);
           stream.request(1);
           streamListeners.add(listener);
         }
@@ -1099,8 +1419,14 @@ public class NettyClientTransportTest {
     }
 
     @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+      // Prevent any data being passed to NettyClientHandler
+      ReferenceCountUtil.release(msg);
+    }
+
+    @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
-      ctx.pipeline().addBefore(ctx.name(), null, grpcHandler);
+      ctx.pipeline().addAfter(ctx.name(), null, grpcHandler);
     }
 
     public void fail(ChannelHandlerContext ctx, Throwable cause) {
@@ -1143,5 +1469,63 @@ public class NettyClientTransportTest {
 
     @Override
     public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
+  }
+
+  static class FakeClientTransportListener implements ManagedClientTransport.Listener {
+    private final SettableFuture<Void> connected;
+
+    @GuardedBy("this")
+    private boolean isConnected = false;
+
+    public FakeClientTransportListener(SettableFuture<Void> connected) {
+      this.connected = connected;
+    }
+
+    @Override
+    public void transportShutdown(Status s, DisconnectError e) {}
+
+    @Override
+    public void transportTerminated() {}
+
+    @Override
+    public void transportReady() {
+      synchronized (this) {
+        isConnected = true;
+      }
+      connected.set(null);
+    }
+
+    synchronized boolean isConnected() {
+      return isConnected;
+    }
+
+    @Override
+    public void transportInUse(boolean inUse) {}
+  }
+
+  private static class FakeTrustManager implements X509TrustManager {
+
+    private final X509TrustManager delegate;
+
+    public FakeTrustManager(X509TrustManager x509ExtendedTrustManager) {
+      this.delegate = x509ExtendedTrustManager;
+    }
+
+    @Override
+    public void checkClientTrusted(X509Certificate[] x509Certificates, String s)
+        throws CertificateException {
+      delegate.checkClientTrusted(x509Certificates, s);
+    }
+
+    @Override
+    public void checkServerTrusted(X509Certificate[] x509Certificates, String s)
+        throws CertificateException {
+      delegate.checkServerTrusted(x509Certificates, s);
+    }
+
+    @Override
+    public X509Certificate[] getAcceptedIssuers() {
+      return delegate.getAcceptedIssuers();
+    }
   }
 }

@@ -16,8 +16,8 @@
 
 package io.grpc.protobuf;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.google.protobuf.Descriptors.MethodDescriptor;
-import javax.annotation.CheckReturnValue;
 
 /**
  * Provides access to the underlying proto service method descriptor.

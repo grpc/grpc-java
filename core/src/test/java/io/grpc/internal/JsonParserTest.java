@@ -17,15 +17,14 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 import com.google.gson.stream.MalformedJsonException;
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -34,10 +33,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class JsonParserTest {
-
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void emptyObject() throws IOException {
@@ -75,45 +70,33 @@ public class JsonParserTest {
   }
 
   @Test
-  public void nanFails() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("NaN");
+  public void nanFails() {
+    assertThrows(MalformedJsonException.class, () -> JsonParser.parse("NaN"));
   }
 
   @Test
-  public void objectEarlyEnd() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("{foo:}");
+  public void objectEarlyEnd() {
+    assertThrows(MalformedJsonException.class, () -> JsonParser.parse("{foo:}"));
   }
 
   @Test
-  public void earlyEndArray() throws IOException {
-    thrown.expect(EOFException.class);
-
-    JsonParser.parse("[1, 2, ");
+  public void earlyEndArray() {
+    assertThrows(EOFException.class, () -> JsonParser.parse("[1, 2, "));
   }
 
   @Test
-  public void arrayMissingElement() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("[1, 2, ]");
+  public void arrayMissingElement() {
+    assertThrows(MalformedJsonException.class, () -> JsonParser.parse("[1, 2, ]"));
   }
 
   @Test
-  public void objectMissingElement() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("{1: ");
+  public void objectMissingElement() {
+    assertThrows(MalformedJsonException.class, () -> JsonParser.parse("{1: "));
   }
 
   @Test
-  public void objectNoName() throws IOException {
-    thrown.expect(MalformedJsonException.class);
-
-    JsonParser.parse("{: 1");
+  public void objectNoName() {
+    assertThrows(MalformedJsonException.class, () -> JsonParser.parse("{: 1"));
   }
 
   @Test
@@ -125,9 +108,7 @@ public class JsonParserTest {
   }
 
   @Test
-  public void duplicate() throws IOException {
-    thrown.expect(IllegalArgumentException.class);
-
-    JsonParser.parse("{\"hi\": 2, \"hi\": 3}");
+  public void duplicate() {
+    assertThrows(IllegalArgumentException.class, () -> JsonParser.parse("{\"hi\": 2, \"hi\": 3}"));
   }
 }

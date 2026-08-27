@@ -99,18 +99,16 @@ final class LazyLoadBalancer extends ForwardingLoadBalancer {
 
     @Override
     public void shutdown() {
+      delegate = new NoopLoadBalancer();
     }
 
     private final class LazyPicker extends SubchannelPicker {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
+        // activate() is a no-op after shutdown()
         helper.getSynchronizationContext().execute(LazyDelegate.this::activate);
-        return PickResult.withNoResult();
-      }
-
-      @Override
-      public void requestConnection() {
-        helper.getSynchronizationContext().execute(LazyDelegate.this::requestConnection);
+        return PickResult.withNoResult(
+            "connecting", "lazy: waiting for connection");
       }
     }
   }
@@ -125,5 +123,18 @@ final class LazyLoadBalancer extends ForwardingLoadBalancer {
     @Override public LoadBalancer newLoadBalancer(Helper helper) {
       return new LazyLoadBalancer(helper, delegate);
     }
+  }
+
+  private static final class NoopLoadBalancer extends LoadBalancer {
+    @Override
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      return Status.OK;
+    }
+
+    @Override
+    public void handleNameResolutionError(Status error) {}
+
+    @Override
+    public void shutdown() {}
   }
 }

@@ -18,8 +18,8 @@ package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CheckReturnValue;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.CheckReturnValue;
 
 /** Monitors the client's PING usage to make sure the rate is permitted. */
 public final class KeepAliveEnforcer {

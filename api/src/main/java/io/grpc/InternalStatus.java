@@ -38,12 +38,11 @@ public final class InternalStatus {
   public static final Metadata.Key<Status> CODE_KEY = Status.CODE_KEY;
 
   /**
-   * Create a new {@link StatusRuntimeException} with the internal option of skipping the filling
-   * of the stack trace.
+   * Create a new {@link StatusRuntimeException} skipping the filling of the stack trace.
    */
   @Internal
-  public static final StatusRuntimeException asRuntimeException(Status status,
-      @Nullable Metadata trailers, boolean fillInStackTrace) {
-    return new StatusRuntimeException(status, trailers, fillInStackTrace);
+  public static StatusRuntimeException asRuntimeExceptionWithoutStacktrace(Status status,
+      @Nullable Metadata trailers) {
+    return new InternalStatusRuntimeException(status, trailers);
   }
 }

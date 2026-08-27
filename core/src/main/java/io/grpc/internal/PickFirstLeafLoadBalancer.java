@@ -24,16 +24,19 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import java.net.Inet4Address;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,17 +61,19 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   @VisibleForTesting
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
+  private final boolean enableHappyEyeballs = !isSerializingRetries()
+      && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  static boolean weightedShuffling =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_PF_WEIGHTED_SHUFFLING", true);
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
-  private final Index addressIndex = new Index(ImmutableList.of());
+  private final Index addressIndex = new Index(ImmutableList.of(), this.enableHappyEyeballs);
   private int numTf = 0;
   private boolean firstPass = true;
   @Nullable
   private ScheduledHandle scheduleConnectionTask = null;
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
-  private final boolean enableHappyEyeballs = !isSerializingRetries()
-      && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
   private boolean notAPetiolePolicy = true; // means not under a petiole policy
   private final BackoffPolicy.Provider bkoffPolProvider = new ExponentialBackoffPolicy.Provider();
   private BackoffPolicy reconnectPolicy;
@@ -90,7 +95,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return Status.FAILED_PRECONDITION.withDescription("Already shut down");
     }
 
-    // Cache whether or not this is a petiole policy, which is based off of an address attribute
+    // Check whether this is a petiole policy, which is based off of an address attribute
     Boolean isPetiolePolicy = resolvedAddresses.getAttributes().get(IS_PETIOLE_POLICY);
     this.notAPetiolePolicy = isPetiolePolicy == null || !isPetiolePolicy;
 
@@ -127,22 +132,27 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       PickFirstLeafLoadBalancerConfig config
           = (PickFirstLeafLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       if (config.shuffleAddressList != null && config.shuffleAddressList) {
-        Collections.shuffle(cleanServers,
-            config.randomSeed != null ? new Random(config.randomSeed) : new Random());
+        cleanServers = shuffle(
+            cleanServers, config.randomSeed != null ? new Random(config.randomSeed) : new Random());
       }
     }
 
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
-        ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
+        ImmutableList.copyOf(cleanServers);
 
-    if (rawConnectivityState == READY) {
-      // If the previous ready subchannel exists in new address list,
-      // keep this connection and don't create new subchannels
+    if (rawConnectivityState == READY
+        || (rawConnectivityState == CONNECTING
+          && (!enableHappyEyeballs || addressIndex.isValid()))) {
+      // If the previous ready (or connecting) subchannel exists in new address list,
+      // keep this connection and don't create new subchannels. Happy Eyeballs is excluded when
+      // connecting, because it allows multiple attempts simultaneously, thus is fine to start at
+      // the beginning.
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
       addressIndex.updateGroups(newImmutableAddressGroups);
       if (addressIndex.seekTo(previousAddress)) {
         SubchannelData subchannelData = subchannels.get(previousAddress);
         subchannelData.getSubchannel().updateAddresses(addressIndex.getCurrentEagAsList());
+        shutdownRemovedAddresses(newImmutableAddressGroups);
         return Status.OK;
       }
       // Previous ready subchannel not in the new list of addresses
@@ -150,26 +160,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       addressIndex.updateGroups(newImmutableAddressGroups);
     }
 
-    // remove old subchannels that were not in new address list
-    Set<SocketAddress> oldAddrs = new HashSet<>(subchannels.keySet());
+    // No old addresses means first time through, so we will do an explicit move to CONNECTING
+    // which is what we implicitly started with
+    boolean noOldAddrs = shutdownRemovedAddresses(newImmutableAddressGroups);
 
-    // Flatten the new EAGs addresses
-    Set<SocketAddress> newAddrs = new HashSet<>();
-    for (EquivalentAddressGroup endpoint : newImmutableAddressGroups) {
-      newAddrs.addAll(endpoint.getAddresses());
-    }
-
-    // Shut them down and remove them
-    for (SocketAddress oldAddr : oldAddrs) {
-      if (!newAddrs.contains(oldAddr)) {
-        subchannels.remove(oldAddr).getSubchannel().shutdown();
-      }
-    }
-
-    if (oldAddrs.size() == 0) {
+    if (noOldAddrs) {
       // Make tests happy; they don't properly assume starting in CONNECTING
       rawConnectivityState = CONNECTING;
-      updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+      updateBalancingState(
+          CONNECTING,
+          new FixedResultPicker(
+              PickResult.withNoResult("connecting", "pick_first: address list updated")));
     }
 
     if (rawConnectivityState == READY) {
@@ -184,6 +185,31 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     return Status.OK;
+  }
+
+  /**
+   * Compute the difference between the flattened new addresses and the old addresses that had been
+   * made into subchannels and then shutdown the matching subchannels.
+   * @return true if there were no old addresses
+   */
+  private boolean shutdownRemovedAddresses(
+      ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups) {
+
+    Set<SocketAddress> oldAddrs = new HashSet<>(subchannels.keySet());
+
+    // Flatten the new EAGs addresses
+    Set<SocketAddress> newAddrs = new HashSet<>();
+    for (EquivalentAddressGroup endpoint : newImmutableAddressGroups) {
+      newAddrs.addAll(endpoint.getAddresses());
+    }
+
+    // Shut them down and remove them
+    for (SocketAddress oldAddr : oldAddrs) {
+      if (!newAddrs.contains(oldAddr)) {
+        subchannels.remove(oldAddr).getSubchannel().shutdown();
+      }
+    }
+    return oldAddrs.isEmpty();
   }
 
   private static List<EquivalentAddressGroup> deDupAddresses(List<EquivalentAddressGroup> groups) {
@@ -205,6 +231,46 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     return newGroups;
   }
 
+  // Also used by PickFirstLoadBalancer
+  @CheckReturnValue
+  static List<EquivalentAddressGroup> shuffle(List<EquivalentAddressGroup> eags, Random random) {
+    if (weightedShuffling) {
+      List<WeightEntry> weightedEntries = new ArrayList<>(eags.size());
+      for (EquivalentAddressGroup eag : eags) {
+        weightedEntries.add(new WeightEntry(eag, eagToWeight(eag, random)));
+      }
+      Collections.sort(weightedEntries, Collections.reverseOrder() /* descending */);
+      return Lists.transform(weightedEntries, entry -> entry.eag);
+    } else {
+      List<EquivalentAddressGroup> eagsCopy = new ArrayList<>(eags);
+      Collections.shuffle(eagsCopy, random);
+      return eagsCopy;
+    }
+  }
+
+  private static double eagToWeight(EquivalentAddressGroup eag, Random random) {
+    Long weight = eag.getAttributes().get(InternalEquivalentAddressGroup.ATTR_WEIGHT);
+    if (weight == null) {
+      weight = 1L;
+    }
+    return Math.pow(random.nextDouble(), 1.0 / weight);
+  }
+
+  private static final class WeightEntry implements Comparable<WeightEntry> {
+    final EquivalentAddressGroup eag;
+    final double weight;
+
+    public WeightEntry(EquivalentAddressGroup eag, double weight) {
+      this.eag = eag;
+      this.weight = weight;
+    }
+
+    @Override
+    public int compareTo(WeightEntry entry) {
+      return Double.compare(this.weight, entry.weight);
+    }
+  }
+
   @Override
   public void handleNameResolutionError(Status error) {
     if (rawConnectivityState == SHUTDOWN) {
@@ -217,7 +283,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     subchannels.clear();
     addressIndex.updateGroups(ImmutableList.of());
     rawConnectivityState = TRANSIENT_FAILURE;
-    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
   }
 
   void processSubchannelState(SubchannelData subchannelData, ConnectivityStateInfo stateInfo) {
@@ -270,7 +336,20 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
       case CONNECTING:
         rawConnectivityState = CONNECTING;
-        updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+        // If we get a newly resolved address list via acceptResolvedAddresses,
+        // as we are in CONNECTING, we will try to .updateAddresses the currently
+        // connecting subchannel if it exists in the new list.
+        // As such, We need to make sure that with transitioning to CONNECTING the subchannel for
+        // the current address of a valid index exists.
+        if ((!enableHappyEyeballs && !addressIndex.isValid())
+            || (addressIndex.isValid() && !subchannels.containsKey(
+                addressIndex.getCurrentAddress()))) {
+          addressIndex.seekTo(getAddress(subchannelData.subchannel));
+        }
+        updateBalancingState(
+            CONNECTING,
+            new FixedResultPicker(
+                PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
         break;
 
       case READY:
@@ -288,14 +367,21 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             cancelScheduleTask();
             requestConnection(); // is recursive so might hit the end of the addresses
           } else {
-            scheduleBackoff();
+            if (subchannels.size() >= addressIndex.size()) {
+              scheduleBackoff();
+            } else {
+              // We must have done a seek to the middle of the list lets start over from the
+              // beginning
+              addressIndex.reset();
+              requestConnection();
+            }
           }
         }
 
         if (isPassComplete()) {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
-              new Picker(PickResult.withError(stateInfo.getStatus())));
+              new FixedResultPicker(PickResult.withError(stateInfo.getStatus())));
 
           // Refresh Name Resolution, but only when all 3 conditions are met
           // * We are at the end of addressIndex
@@ -358,11 +444,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       updateBalancingState(READY,
           new FixedResultPicker(PickResult.withSubchannel(subchannelData.subchannel)));
     } else if (subchannelData.getHealthState() == TRANSIENT_FAILURE) {
-      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(
+      updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
           subchannelData.healthStateInfo.getStatus())));
     } else if (concludedState != TRANSIENT_FAILURE) {
-      updateBalancingState(subchannelData.getHealthState(),
-          new Picker(PickResult.withNoResult()));
+      updateBalancingState(subchannelData.getHealthState(), new FixedResultPicker(
+          PickResult.withNoResult("connecting",
+              "health check state: " + subchannelData.getHealthState())));
     }
   }
 
@@ -426,7 +513,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
+    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN || reconnectTask != null) {
       return;
     }
 
@@ -566,26 +653,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     return this.concludedState;
   }
 
-  /**
-   * No-op picker which doesn't add any custom picking logic. It just passes already known result
-   * received in constructor.
-   */
-  private static final class Picker extends SubchannelPicker {
-    private final PickResult result;
-
-    Picker(PickResult result) {
-      this.result = checkNotNull(result, "result");
-    }
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return result;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(Picker.class).add("result", result).toString();
-    }
+  @VisibleForTesting
+  ConnectivityState getRawConnectivityState() {
+    return this.rawConnectivityState;
   }
 
   /**
@@ -605,32 +675,32 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       if (connectionRequested.compareAndSet(false, true)) {
         helper.getSynchronizationContext().execute(pickFirstLeafLoadBalancer::requestConnection);
       }
-      return PickResult.withNoResult();
+      return PickResult.withNoResult(
+          "connecting", "pick_first: requesting connection");
     }
   }
 
   /**
-   * Index as in 'i', the pointer to an entry. Not a "search index."
+   * This contains both an ordered list of addresses and a pointer(i.e. index) to the current entry.
    * All updates should be done in a synchronization context.
    */
   @VisibleForTesting
   static final class Index {
-    private List<EquivalentAddressGroup> addressGroups;
-    private int size;
-    private int groupIndex;
-    private int addressIndex;
+    private List<UnwrappedEag> orderedAddresses;
+    private int activeElement = 0;
+    private boolean enableHappyEyeballs;
 
-    public Index(List<EquivalentAddressGroup> groups) {
+    Index(List<EquivalentAddressGroup> groups, boolean enableHappyEyeballs) {
+      this.enableHappyEyeballs = enableHappyEyeballs;
       updateGroups(groups);
     }
 
     public boolean isValid() {
-      // Is invalid if empty or has incremented off the end
-      return groupIndex < addressGroups.size();
+      return activeElement < orderedAddresses.size();
     }
 
     public boolean isAtBeginning() {
-      return groupIndex == 0 && addressIndex == 0;
+      return activeElement == 0;
     }
 
     /**
@@ -642,79 +712,150 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         return false;
       }
 
-      EquivalentAddressGroup group = addressGroups.get(groupIndex);
-      addressIndex++;
-      if (addressIndex >= group.getAddresses().size()) {
-        groupIndex++;
-        addressIndex = 0;
-        return groupIndex < addressGroups.size();
-      }
+      activeElement++;
 
-      return true;
+      return isValid();
     }
 
     public void reset() {
-      groupIndex = 0;
-      addressIndex = 0;
+      activeElement = 0;
     }
 
     public SocketAddress getCurrentAddress() {
       if (!isValid()) {
         throw new IllegalStateException("Index is past the end of the address group list");
       }
-      return addressGroups.get(groupIndex).getAddresses().get(addressIndex);
+      return orderedAddresses.get(activeElement).address;
     }
 
     public Attributes getCurrentEagAttributes() {
       if (!isValid()) {
         throw new IllegalStateException("Index is off the end of the address group list");
       }
-      return addressGroups.get(groupIndex).getAttributes();
+      return orderedAddresses.get(activeElement).attributes;
     }
 
     public List<EquivalentAddressGroup> getCurrentEagAsList() {
-      return Collections.singletonList(
-          new EquivalentAddressGroup(getCurrentAddress(), getCurrentEagAttributes()));
+      return Collections.singletonList(getCurrentEag());
+    }
+
+    private EquivalentAddressGroup getCurrentEag() {
+      if (!isValid()) {
+        throw new IllegalStateException("Index is past the end of the address group list");
+      }
+      return orderedAddresses.get(activeElement).asEag();
     }
 
     /**
      * Update to new groups, resetting the current index.
      */
     public void updateGroups(List<EquivalentAddressGroup> newGroups) {
-      addressGroups = checkNotNull(newGroups, "newGroups");
+      checkNotNull(newGroups, "newGroups");
+      orderedAddresses = enableHappyEyeballs
+                             ? updateGroupsHE(newGroups)
+                             : updateGroupsNonHE(newGroups);
       reset();
-      int size = 0;
-      for (EquivalentAddressGroup eag : newGroups) {
-        size += eag.getAddresses().size();
-      }
-      this.size = size;
     }
 
     /**
      * Returns false if the needle was not found and the current index was left unchanged.
      */
     public boolean seekTo(SocketAddress needle) {
-      for (int i = 0; i < addressGroups.size(); i++) {
-        EquivalentAddressGroup group = addressGroups.get(i);
-        int j = group.getAddresses().indexOf(needle);
-        if (j == -1) {
-          continue;
+      checkNotNull(needle, "needle");
+      for (int i = 0; i < orderedAddresses.size(); i++) {
+        if (orderedAddresses.get(i).address.equals(needle)) {
+          this.activeElement = i;
+          return true;
         }
-        this.groupIndex = i;
-        this.addressIndex = j;
-        return true;
       }
       return false;
     }
 
     public int size() {
-      return size;
+      return orderedAddresses.size();
+    }
+
+    private List<UnwrappedEag> updateGroupsNonHE(List<EquivalentAddressGroup> newGroups) {
+      List<UnwrappedEag> entries = new ArrayList<>();
+      for (int g = 0; g < newGroups.size(); g++) {
+        EquivalentAddressGroup eag = newGroups.get(g);
+        for (int a = 0; a < eag.getAddresses().size(); a++) {
+          SocketAddress addr = eag.getAddresses().get(a);
+          entries.add(new UnwrappedEag(eag.getAttributes(), addr));
+        }
+      }
+
+      return entries;
+    }
+
+    private List<UnwrappedEag> updateGroupsHE(List<EquivalentAddressGroup> newGroups) {
+      Boolean firstIsV6 = null;
+      List<UnwrappedEag> v4Entries = new ArrayList<>();
+      List<UnwrappedEag> v6Entries = new ArrayList<>();
+      for (int g = 0; g <  newGroups.size(); g++) {
+        EquivalentAddressGroup eag = newGroups.get(g);
+        for (int a = 0; a < eag.getAddresses().size(); a++) {
+          SocketAddress addr = eag.getAddresses().get(a);
+          boolean isIpV4 = addr instanceof InetSocketAddress
+              && ((InetSocketAddress) addr).getAddress() instanceof Inet4Address;
+          if (isIpV4) {
+            if (firstIsV6 == null) {
+              firstIsV6 = false;
+            }
+            v4Entries.add(new UnwrappedEag(eag.getAttributes(), addr));
+          } else {
+            if (firstIsV6 == null) {
+              firstIsV6 = true;
+            }
+            v6Entries.add(new UnwrappedEag(eag.getAttributes(), addr));
+          }
+        }
+      }
+
+      return firstIsV6 != null && firstIsV6
+          ? interleave(v6Entries, v4Entries)
+          : interleave(v4Entries, v6Entries);
+    }
+
+    private List<UnwrappedEag> interleave(List<UnwrappedEag> firstFamily,
+                                          List<UnwrappedEag> secondFamily) {
+      if (firstFamily.isEmpty()) {
+        return secondFamily;
+      }
+      if (secondFamily.isEmpty()) {
+        return firstFamily;
+      }
+
+      List<UnwrappedEag> result = new ArrayList<>(firstFamily.size() + secondFamily.size());
+      for (int i = 0; i < Math.max(firstFamily.size(), secondFamily.size()); i++) {
+        if (i < firstFamily.size()) {
+          result.add(firstFamily.get(i));
+        }
+        if (i < secondFamily.size()) {
+          result.add(secondFamily.get(i));
+        }
+      }
+      return result;
+    }
+
+    private static final class UnwrappedEag {
+      private final Attributes attributes;
+      private final SocketAddress address;
+
+      public UnwrappedEag(Attributes attributes, SocketAddress address) {
+        this.attributes = attributes;
+        this.address = address;
+      }
+
+      private EquivalentAddressGroup asEag() {
+        return new EquivalentAddressGroup(address, attributes);
+      }
     }
   }
 
   @VisibleForTesting
-  int getGroupIndex() {
-    return addressIndex.groupIndex;
+  int getIndexLocation() {
+    return addressIndex.activeElement;
   }
 
   @VisibleForTesting
@@ -778,4 +919,5 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       this.randomSeed = randomSeed;
     }
   }
+
 }

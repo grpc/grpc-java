@@ -19,13 +19,13 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * {@link StreamTracer} for the client-side.
+ *
+ * <p>This class is thread-safe.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
-@ThreadSafe
 public abstract class ClientStreamTracer extends StreamTracer {
   /**
    * Indicates how long the call was delayed, in nanoseconds, due to waiting for name resolution
@@ -55,6 +55,45 @@ public abstract class ClientStreamTracer extends StreamTracer {
    * the RPC comes do not go through the pending process, thus this callback will not be invoked.
    */
   public void createPendingStream() {
+  }
+
+  /**
+   * Called when an attempt-level delay segment (such as waiting for a load balancing pick or
+   * connection establishment) starts.
+   *
+   * <p>This method is invoked synchronously on the attempt thread. Implementations should start
+   * internal timers or child tracing spans (named strictly {@code "Attempt Delay"}) carrying the
+   * canonical {@code grpc.delay_type} attribute.
+   *
+   * @param delayType canonical low-cardinality label categorizing the delay (e.g., "connecting")
+   * @param delayReason high-cardinality diagnostic string describing granular runtime conditions
+   * @since 1.82.0
+   */
+  public void recordAttemptDelayStart(String delayType, String delayReason) {
+  }
+
+  /**
+   * Called when an attempt-level delay reason changes while the overall delay type remains
+   * constant (for example, when a priority load balancing policy fails over between tiers).
+   *
+   * <p>Implementations should record structured events (such as {@code "Delay state transition"})
+   * on the active delay span without recreating the span or resetting cumulative timers.
+   *
+   * @param delayReason updated high-cardinality diagnostic string describing new conditions
+   * @since 1.82.0
+   */
+  public void recordAttemptDelayReasonChanged(String delayReason) {
+  }
+
+  /**
+   * Called when an attempt-level delay segment ends upon successful pick or stream creation.
+   *
+   * <p>Implementations should simultaneously close active child tracing spans and record elapsed
+   * duration to the {@code grpc.client.attempt.delay.duration} histogram.
+   *
+   * @since 1.82.0
+   */
+  public void recordAttemptDelayEnd() {
   }
 
   /**
@@ -132,12 +171,15 @@ public abstract class ClientStreamTracer extends StreamTracer {
     private final CallOptions callOptions;
     private final int previousAttempts;
     private final boolean isTransparentRetry;
+    private final boolean isHedging;
 
     StreamInfo(
-        CallOptions callOptions, int previousAttempts, boolean isTransparentRetry) {
+        CallOptions callOptions, int previousAttempts, boolean isTransparentRetry,
+        boolean isHedging) {
       this.callOptions = checkNotNull(callOptions, "callOptions");
       this.previousAttempts = previousAttempts;
       this.isTransparentRetry = isTransparentRetry;
+      this.isHedging = isHedging;
     }
 
     /**
@@ -166,6 +208,15 @@ public abstract class ClientStreamTracer extends StreamTracer {
     }
 
     /**
+     * Whether the stream is hedging.
+     *
+     * @since 1.74.0
+     */
+    public boolean isHedging() {
+      return isHedging;
+    }
+
+    /**
      * Converts this StreamInfo into a new Builder.
      *
      * @since 1.21.0
@@ -174,7 +225,9 @@ public abstract class ClientStreamTracer extends StreamTracer {
       return new Builder()
           .setCallOptions(callOptions)
           .setPreviousAttempts(previousAttempts)
-          .setIsTransparentRetry(isTransparentRetry);
+          .setIsTransparentRetry(isTransparentRetry)
+          .setIsHedging(isHedging);
+
     }
 
     /**
@@ -192,6 +245,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
           .add("callOptions", callOptions)
           .add("previousAttempts", previousAttempts)
           .add("isTransparentRetry", isTransparentRetry)
+          .add("isHedging", isHedging)
           .toString();
     }
 
@@ -204,6 +258,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
       private CallOptions callOptions = CallOptions.DEFAULT;
       private int previousAttempts;
       private boolean isTransparentRetry;
+      private boolean isHedging;
 
       Builder() {
       }
@@ -237,10 +292,20 @@ public abstract class ClientStreamTracer extends StreamTracer {
       }
 
       /**
+       * Sets whether the stream is hedging.
+       *
+       * @since 1.74.0
+       */
+      public Builder setIsHedging(boolean isHedging) {
+        this.isHedging = isHedging;
+        return this;
+      }
+
+      /**
        * Builds a new StreamInfo.
        */
       public StreamInfo build() {
-        return new StreamInfo(callOptions, previousAttempts, isTransparentRetry);
+        return new StreamInfo(callOptions, previousAttempts, isTransparentRetry, isHedging);
       }
     }
   }

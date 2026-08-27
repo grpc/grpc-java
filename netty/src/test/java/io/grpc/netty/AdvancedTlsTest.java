@@ -436,16 +436,13 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void keyManagerAliasesTest() {
+  public void keyManagerAliasesTest() throws Exception {
     AdvancedTlsX509KeyManager km = new AdvancedTlsX509KeyManager();
-    assertArrayEquals(
-        new String[] {"default"}, km.getClientAliases("", null));
-    assertEquals(
-        "default", km.chooseClientAlias(new String[] {"default"}, null, null));
-    assertArrayEquals(
-        new String[] {"default"}, km.getServerAliases("", null));
-    assertEquals(
-        "default", km.chooseServerAlias("default", null, null));
+    km.updateIdentityCredentials(serverCert0, serverKey0);
+    assertArrayEquals(new String[] {"key-1"}, km.getClientAliases("", null));
+    assertEquals("key-1", km.chooseClientAlias(new String[] {"key-1"}, null, null));
+    assertArrayEquals(new String[] {"key-1"}, km.getServerAliases("", null));
+    assertEquals("key-1", km.chooseServerAlias("key-1", null, null));
   }
 
   @Test

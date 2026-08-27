@@ -32,9 +32,11 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -119,7 +121,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
     when(mockBuilder.build()).thenReturn(mockServer);
     when(mockServer.isShutdown()).thenReturn(false);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:" + PORT, mockBuilder, listener,
-            selectorManager, new FakeXdsClientPoolFactory(xdsClient), FilterRegistry.newRegistry());
+            selectorManager, new FakeXdsClientPoolFactory(xdsClient),
+            XdsServerTestHelper.RAW_BOOTSTRAP, FilterRegistry.newRegistry());
   }
 
   @Test
@@ -165,11 +168,12 @@ public class XdsClientWrapperForServerSdsTestMisc {
     EnvoyServerProtoData.Listener tcpListener =
         EnvoyServerProtoData.Listener.create(
             "listener1",
-            "10.1.2.3",
+            "0.0.0.0:7000",
             ImmutableList.of(),
-            null);
+            null,
+            Protocol.TCP);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(tcpListener);
-    xdsClient.ldsWatcher.onChanged(listenerUpdate);
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromValue(listenerUpdate));
     verify(listener, timeout(5000)).onServing();
     start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
     FilterChainSelector selector = selectorManager.getSelectorToUpdateSelector();
@@ -190,7 +194,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
       }
     });
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    xdsClient.ldsWatcher.onResourceDoesNotExist(ldsWatched);
+    Status status = Status.NOT_FOUND.withDescription("Resource not found: " + ldsWatched);
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(status));
     verify(listener, timeout(5000)).onNotServing(any());
     try {
       start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
@@ -275,7 +280,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
             getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
-    xdsClient.ldsWatcher.onResourceDoesNotExist("not-found Error");
+    Status status = Status.NOT_FOUND.withDescription("not-found Error");
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(status));
     verify(tlsContextManager, times(1)).releaseServerSslContextProvider(eq(sslContextProvider1));
   }
 
@@ -292,14 +298,14 @@ public class XdsClientWrapperForServerSdsTestMisc {
             getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
-    xdsClient.ldsWatcher.onError(Status.CANCELLED);
+    xdsClient.ldsWatcher.onAmbientError(Status.CANCELLED);
     verify(tlsContextManager, never()).releaseServerSslContextProvider(eq(sslContextProvider1));
   }
 
   private void callUpdateSslContext(SslContextProviderSupplier sslContextProviderSupplier) {
     assertThat(sslContextProviderSupplier).isNotNull();
     SslContextProvider.Callback callback = mock(SslContextProvider.Callback.class);
-    sslContextProviderSupplier.updateSslContext(callback);
+    sslContextProviderSupplier.updateSslContext(callback, false);
   }
 
   private void sendListenerUpdate(

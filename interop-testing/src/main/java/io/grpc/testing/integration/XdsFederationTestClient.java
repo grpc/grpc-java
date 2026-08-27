@@ -22,9 +22,10 @@ import static org.junit.Assert.assertTrue;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.ManagedChannelBuilder;
+import io.grpc.ManagedChannel;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
@@ -44,26 +45,8 @@ public final class XdsFederationTestClient {
   public static void main(String[] args) throws Exception {
     final XdsFederationTestClient client = new XdsFederationTestClient();
     client.parseArgs(args);
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread() {
-              @Override
-              @SuppressWarnings("CatchAndPrintStackTrace")
-              public void run() {
-                System.out.println("Shutting down");
-                try {
-                  client.tearDown();
-                } catch (RuntimeException e) {
-                  e.printStackTrace();
-                }
-              }
-            });
     client.setUp();
-    try {
-      client.run();
-    } finally {
-      client.tearDown();
-    }
+    client.run();
     System.exit(0);
   }
 
@@ -209,22 +192,13 @@ public final class XdsFederationTestClient {
     for (int i = 0; i < uris.length; i++) {
       clients.add(new InnerClient(creds[i], uris[i]));
     }
-    for (InnerClient c : clients) {
-      c.setUp();
-    }
-  }
-
-  private synchronized void tearDown() {
-    for (InnerClient c : clients) {
-      c.tearDown();
-    }
   }
 
   /**
    * Wraps a single client stub configuration and executes a
    * soak test case with that configuration.
    */
-  class InnerClient extends AbstractInteropTest {
+  class InnerClient {
     private final String credentialsType;
     private final String serverUri;
     private boolean runSucceeded = false;
@@ -249,7 +223,7 @@ public final class XdsFederationTestClient {
       try {
         switch (testCase) {
           case "rpc_soak": {
-            performSoakTest(
+            SoakClient.performSoakTest(
                 serverUri,
                 soakIterations,
                 soakMaxFailures,
@@ -259,11 +233,12 @@ public final class XdsFederationTestClient {
                 soakRequestSize,
                 soakResponseSize,
                 1,
+                createChannel(),
                 (currentChannel) -> currentChannel);
           }
               break;
           case "channel_soak": {
-            performSoakTest(
+            SoakClient.performSoakTest(
                 serverUri,
                 soakIterations,
                 soakMaxFailures,
@@ -273,6 +248,7 @@ public final class XdsFederationTestClient {
                 soakRequestSize,
                 soakResponseSize,
                 1,
+                createChannel(),
                 (currentChannel) -> createNewChannel(currentChannel));
           }
             break;
@@ -288,8 +264,7 @@ public final class XdsFederationTestClient {
       }
     }
 
-    @Override
-    protected ManagedChannelBuilder<?> createChannelBuilder() {
+    ManagedChannel createChannel() {
       ChannelCredentials channelCredentials;
       switch (credentialsType) {
         case "compute_engine_channel_creds":
@@ -303,7 +278,18 @@ public final class XdsFederationTestClient {
       }
       return Grpc.newChannelBuilder(serverUri, channelCredentials)
           .keepAliveTime(3600, SECONDS)
-          .keepAliveTimeout(20, SECONDS);
+          .keepAliveTimeout(20, SECONDS)
+          .build();
+    }
+
+    ManagedChannel createNewChannel(ManagedChannel currentChannel) {
+      currentChannel.shutdownNow();
+      try {
+        currentChannel.awaitTermination(10, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        throw new RuntimeException("Interrupted while creating a new channel", e);
+      }
+      return createChannel();
     }
   }
 

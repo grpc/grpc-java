@@ -17,16 +17,21 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import io.grpc.CallCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.auth.JwtTokenFileCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
+import io.grpc.xds.client.AllowedGrpcServices;
+import io.grpc.xds.client.AllowedGrpcServices.AllowedGrpcService;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
@@ -40,10 +45,9 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -53,9 +57,6 @@ public class GrpcBootstrapperImplTest {
 
   private static final String BOOTSTRAP_FILE_PATH = "/fake/fs/path/bootstrap.json";
   private static final String SERVER_URI = "trafficdirector.googleapis.com:443";
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   private final GrpcBootstrapperImpl bootstrapper = new GrpcBootstrapperImpl();
   private String originalBootstrapPathFromEnvVar;
@@ -85,6 +86,72 @@ public class GrpcBootstrapperImplTest {
     bootstrapper.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
     bootstrapper.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
     CommonBootstrapperTestUtils.setEnableXdsFallback(originalExperimentalXdsFallbackFlag);
+  }
+
+  @Test
+  public void parseBootstrap_emptyServers_throws() {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    XdsInitializationException e = Assert.assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat().isEqualTo("Invalid bootstrap: 'xds_servers' is empty");
+  }
+
+  @Test
+  public void parseBootstrap_allowedGrpcServices() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [{\"type\": \"insecure\"}]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"allowed_grpc_services\": {\n"
+        + "    \"dns:///foo.com:443\": {\n"
+        + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+        + "      \"call_creds\": [{\"type\": \"access_token\"}]\n"
+        + "    }\n"
+        + "  }\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    GrpcBootstrapImplConfig customConfig =
+        (GrpcBootstrapImplConfig) info.implSpecificObject().get();
+    AllowedGrpcServices allowed = customConfig.allowedGrpcServices();
+    assertThat(allowed).isNotNull();
+    assertThat(allowed.services()).containsKey("dns:///foo.com:443");
+    AllowedGrpcService service = allowed.services().get("dns:///foo.com:443");
+    assertThat(service.configuredChannelCredentials().channelCredentials())
+        .isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(service.callCredentials().isPresent()).isFalse();
+  }
+
+  @Test
+  public void parseBootstrap_allowedGrpcServices_invalidChannelCreds() {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [{\"type\": \"insecure\"}]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"allowed_grpc_services\": {\n"
+        + "    \"dns:///foo.com:443\": {\n"
+        + "      \"channel_creds\": []\n"
+        + "    }\n"
+        + "  }\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Invalid bootstrap: server dns:///foo.com:443 'channel_creds' required");
   }
 
   @Test
@@ -236,7 +303,7 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
-  public void parseBootstrap_missingServerChannelCreds() throws XdsInitializationException {
+  public void parseBootstrap_missingServerChannelCreds() {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -246,13 +313,14 @@ public class GrpcBootstrapperImplTest {
         + "}";
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-    thrown.expect(XdsInitializationException.class);
-    thrown.expectMessage("Invalid bootstrap: server " + SERVER_URI + " 'channel_creds' required");
-    bootstrapper.bootstrap();
+    XdsInitializationException e = Assert.assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Invalid bootstrap: server " + SERVER_URI + " 'channel_creds' required");
   }
 
   @Test
-  public void parseBootstrap_unsupportedServerChannelCreds() throws XdsInitializationException {
+  public void parseBootstrap_unsupportedServerChannelCreds() {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -265,9 +333,10 @@ public class GrpcBootstrapperImplTest {
         + "}";
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-    thrown.expect(XdsInitializationException.class);
-    thrown.expectMessage("Server " + SERVER_URI + ": no supported channel credentials found");
-    bootstrapper.bootstrap();
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Server " + SERVER_URI + ": no supported channel credentials found");
   }
 
   @Test
@@ -294,7 +363,7 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
-  public void parseBootstrap_noXdsServers() throws XdsInitializationException {
+  public void parseBootstrap_noXdsServers() {
     String rawData = "{\n"
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
@@ -312,9 +381,10 @@ public class GrpcBootstrapperImplTest {
         + "}";
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-    thrown.expect(XdsInitializationException.class);
-    thrown.expectMessage("Invalid bootstrap: 'xds_servers' does not exist.");
-    bootstrapper.bootstrap();
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Invalid bootstrap: 'xds_servers' does not exist.");
   }
 
   @Test
@@ -343,15 +413,23 @@ public class GrpcBootstrapperImplTest {
         + "}";
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-    thrown.expectMessage("Invalid bootstrap: missing 'server_uri'");
-    bootstrapper.bootstrap();
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat().isEqualTo("Invalid bootstrap: missing 'server_uri'");
   }
 
   @Test
   public void parseBootstrap_certProviderInstances() throws XdsInitializationException {
     String rawData =
         "{\n"
-            + "  \"xds_servers\": [],\n"
+            + "  \"xds_servers\": [\n"
+            + "    {\n"
+            + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+            + "      \"channel_creds\": [\n"
+            + "        {\"type\": \"insecure\"}\n"
+            + "      ]\n"
+            + "    }\n"
+            + "  ],\n"
             + "  \"certificate_providers\": {\n"
             + "    \"gcp_id\": {\n"
             + "      \"plugin_name\": \"meshca\",\n"
@@ -388,7 +466,6 @@ public class GrpcBootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.servers()).isEmpty();
     assertThat(info.node()).isEqualTo(getNodeBuilder().build());
     Map<String, Bootstrapper.CertificateProviderInfo> certProviders = info.certProviders();
     assertThat(certProviders).isNotNull();
@@ -555,7 +632,14 @@ public class GrpcBootstrapperImplTest {
   @Test
   public void parseBootstrap_grpcServerResourceId() throws XdsInitializationException {
     String rawData = "{\n"
-            + "  \"xds_servers\": [],\n"
+            + "  \"xds_servers\": [\n"
+            + "    {\n"
+            + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+            + "      \"channel_creds\": [\n"
+            + "        {\"type\": \"insecure\"}\n"
+            + "      ]\n"
+            + "    }\n"
+            + "  ],\n"
             + "  \"server_listener_resource_name_template\": \"grpc/serverx=%s\"\n"
             + "}";
 
@@ -697,6 +781,52 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
+  public void serverFeature_failOnDataErrors() throws XdsInitializationException {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\"fail_on_data_errors\"]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.failOnDataErrors()).isTrue();
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+  }
+
+  @Test
+  public void serverFeature_failOnDataErrors_requiresEnvVar() throws XdsInitializationException {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\"fail_on_data_errors\"]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    // Should be false when env var is not enabled
+    assertThat(serverInfo.failOnDataErrors()).isFalse();
+  }
+
+  @Test
   public void notFound() {
     bootstrapper.bootstrapPathFromEnvVar = null;
     bootstrapper.bootstrapPathFromSysProp = null;
@@ -778,6 +908,12 @@ public class GrpcBootstrapperImplTest {
   public void parseClientDefaultListenerResourceNameTemplate() throws Exception {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
         + "  ]\n"
         + "}";
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
@@ -787,6 +923,12 @@ public class GrpcBootstrapperImplTest {
     rawData = "{\n"
         + "  \"client_default_listener_resource_name_template\": \"xdstp://a.com/faketype/%s\",\n"
         + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
         + "  ]\n"
         + "}";
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
@@ -870,7 +1012,7 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
-  public void badFederationConfig() throws Exception {
+  public void badFederationConfig() {
     String rawData = "{\n"
         + "  \"authorities\": {\n"
         + "    \"a.com\": {\n"
@@ -917,5 +1059,259 @@ public class GrpcBootstrapperImplTest {
             .setUserAgentVersion(buildVersion.getImplementationVersion())
             .addClientFeatures(GrpcBootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING)
             .addClientFeatures(GrpcBootstrapperImpl.CLIENT_FEATURE_RESOURCE_IN_SOTW);
+  }
+
+  private static void setEnableXdsBootstrapCallCreds(boolean enable) {
+    io.grpc.xds.client.BootstrapperImpl.enableXdsBootstrapCallCreds = enable;
+  }
+
+  private static String getFilePath(JwtTokenFileCallCredentials credentials) {
+    try {
+      java.lang.reflect.Field field =
+          JwtTokenFileCallCredentials.class.getDeclaredField("filePath");
+      field.setAccessible(true);
+      return (String) field.get(credentials);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_callCreds_flagDisabled() throws Exception {
+    setEnableXdsBootstrapCallCreds(false);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": {\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
+          + "          }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.servers()).hasSize(1);
+      ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+      assertThat(serverInfo.callCredentials()).isNull();
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_xdsServers_jwtTokenFileCallCreds() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": {\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
+          + "          }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.servers()).hasSize(1);
+      ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+      assertThat(serverInfo.callCredentials())
+          .isInstanceOf(JwtTokenFileCallCredentials.class);
+      assertThat(getFilePath((JwtTokenFileCallCredentials) serverInfo.callCredentials()))
+          .isEqualTo("/var/run/secrets/token");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_authorities_jwtTokenFileCallCreds() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"authorities\": {\n"
+          + "    \"a.com\": {\n"
+          + "      \"xds_servers\": [\n"
+          + "        {\n"
+          + "          \"server_uri\": \"td2.googleapis.com:443\",\n"
+          + "          \"channel_creds\": [\n"
+          + "            {\"type\": \"insecure\"}\n"
+          + "          ],\n"
+          + "          \"call_creds\": [\n"
+          + "            {\n"
+          + "              \"type\": \"jwt_token_file\",\n"
+          + "              \"config\": {\n"
+          + "                \"jwt_token_file\": \"/var/run/secrets/authority_token\"\n"
+          + "              }\n"
+          + "            }\n"
+          + "          ]\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  },\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [\n"
+          + "        {\"type\": \"insecure\"}\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.authorities()).hasSize(1);
+      AuthorityInfo authorityInfo = info.authorities().get("a.com");
+      assertThat(authorityInfo.xdsServers()).hasSize(1);
+      ServerInfo serverInfo = authorityInfo.xdsServers().get(0);
+      assertThat(serverInfo.callCredentials())
+          .isInstanceOf(JwtTokenFileCallCredentials.class);
+      assertThat(getFilePath((JwtTokenFileCallCredentials) serverInfo.callCredentials()))
+          .isEqualTo("/var/run/secrets/authority_token");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_unsupportedCallCredsType_ignored() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"unsupported_type\",\n"
+          + "          \"config\": {\n"
+          + "            \"some_field\": \"some_val\"\n"
+          + "          }\n"
+          + "        },\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": {\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
+          + "          }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.servers()).hasSize(1);
+      ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+      assertThat(serverInfo.callCredentials())
+          .isInstanceOf(JwtTokenFileCallCredentials.class);
+      assertThat(getFilePath((JwtTokenFileCallCredentials) serverInfo.callCredentials()))
+          .isEqualTo("/var/run/secrets/token");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_malformedCallCreds_throws() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": {}\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      XdsInitializationException e = assertThrows(XdsInitializationException.class,
+          bootstrapper::bootstrap);
+      assertThat(e).hasMessageThat().contains("jwt_token_file' jwt_token_file missing or empty");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_xdsServers_multipleValidCallCreds() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": { \"jwt_token_file\": \"/var/run/secrets/token1\" }\n"
+          + "        },\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": { \"jwt_token_file\": \"/var/run/secrets/token2\" }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.servers()).hasSize(1);
+      ServerInfo serverInfo = info.servers().get(0);
+      CallCredentials creds = serverInfo.callCredentials();
+      assertThat(creds).isNotNull();
+      assertThat(creds).isInstanceOf(io.grpc.CompositeCallCredentials.class);
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_xdsServers_missingTypeCallCreds() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"config\": { \"jwt_token_file\": \"/var/run/secrets/token\" }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      bootstrapper.bootstrap();
+      fail("Expected exception");
+    } catch (XdsInitializationException e) {
+      assertThat(e).hasMessageThat().contains("with 'call_creds' type unspecified");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
   }
 }

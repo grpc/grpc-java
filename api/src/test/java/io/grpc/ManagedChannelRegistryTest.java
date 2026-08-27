@@ -20,17 +20,23 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableSet;
+import io.grpc.FlagResetRule;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 
 /** Unit tests for {@link ManagedChannelRegistry}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class ManagedChannelRegistryTest {
   private String target = "testing123";
   private ChannelCredentials creds = new ChannelCredentials() {
@@ -39,6 +45,20 @@ public class ManagedChannelRegistryTest {
       throw new UnsupportedOperationException();
     }
   };
+
+  @Rule public final FlagResetRule flagResetRule = new FlagResetRule();
+
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
+  @Before
+  public void setUp() {
+    flagResetRule.setFlagForTest(FeatureFlags::setRfc3986UrisEnabled, enableRfc3986UrisParam);
+  }
 
   @Test
   public void register_unavailableProviderThrows() {
@@ -221,6 +241,53 @@ public class ManagedChannelRegistryTest {
     assertThat(
         registry.newChannelBuilder(nameResolverRegistry, "sc1:" + target, creds)).isSameInstanceAs(
         mcb);
+  }
+
+  @Test
+  public void newChannelBuilder_propagatesRegistry() {
+    final NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
+    class SocketAddress1 extends SocketAddress {
+    }
+
+    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
+      @Override
+      public ManagedChannelBuilder<?> delegate() {
+        throw new UnsupportedOperationException();
+      }
+    }
+
+    final ManagedChannelBuilder<?> mcb = new MockChannelBuilder();
+    registry.register(new BaseProvider(true, 4) {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+
+      @Override
+      public NewChannelBuilderResult newChannelBuilder(
+          String passedTarget, ChannelCredentials passedCreds,
+          NameResolverRegistry passedRegistry, NameResolverProvider passedProvider) {
+        assertThat(passedRegistry).isSameInstanceAs(nameResolverRegistry);
+        return NewChannelBuilderResult.channelBuilder(mcb);
+      }
+    });
+
+    // ManagedChannelRegistry.newChannelBuilder(NameResolverRegistry, String, ChannelCredentials)
+    // gets the scheme from target. Then it gets NameResolverProvider from registry for that scheme.
+    // Then it gets producedSocketAddressTypes from that provider.
+    // Then it finds a ManagedChannelProvider that supports those types.
+    // So we need a registered NameResolverProvider for the scheme.
+    nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
+      @Override
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+    });
+
+    assertThat(
+        registry.newChannelBuilder(nameResolverRegistry, "sc1:" + target, creds)).isSameInstanceAs(
+            mcb);
   }
 
   @Test

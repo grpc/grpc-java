@@ -25,6 +25,7 @@ import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
 import com.google.common.collect.ImmutableList;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
@@ -48,7 +49,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -70,6 +70,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   private final LeakSafeOneWayBinder hostServiceBinder;
   private final BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker;
   private final InboundParcelablePolicy inboundParcelablePolicy;
+  private final OneWayBinderProxy.Decorator clientBinderDecorator;
 
   @GuardedBy("this")
   private ServerListener listener;
@@ -92,6 +93,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
         ImmutableList.copyOf(checkNotNull(builder.streamTracerFactories, "streamTracerFactories"));
     this.serverPolicyChecker = BinderInternal.createPolicyChecker(builder.serverSecurityPolicy);
     this.inboundParcelablePolicy = builder.inboundParcelablePolicy;
+    this.clientBinderDecorator = builder.clientBinderDecorator;
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
 
@@ -178,14 +180,14 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
               serverPolicyChecker,
               checkNotNull(executor, "Not started?"));
           // Create a new transport and let our listener know about it.
-          BinderTransport.BinderServerTransport transport =
-              new BinderTransport.BinderServerTransport(
+          BinderServerTransport transport =
+              BinderServerTransport.create(
                   executorServicePool,
                   attrsBuilder.build(),
                   streamTracerFactories,
-                  OneWayBinderProxy.IDENTITY_DECORATOR,
+                  clientBinderDecorator,
                   callbackBinder);
-          transport.setServerTransportListener(listener.transportCreated(transport));
+          transport.start(listener.transportCreated(transport));
           return true;
         }
       }
@@ -225,6 +227,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
         SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
     ServerSecurityPolicy serverSecurityPolicy = SecurityPolicies.serverInternalOnly();
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
+    OneWayBinderProxy.Decorator clientBinderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
 
     public BinderServer build() {
       return new BinderServer(this);
@@ -293,6 +296,20 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
     public Builder setInboundParcelablePolicy(InboundParcelablePolicy inboundParcelablePolicy) {
       this.inboundParcelablePolicy =
           checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
+      return this;
+    }
+
+    /**
+     * Sets the {@link OneWayBinderProxy.Decorator} to be applied to this server's "client Binders".
+     *
+     * <p>Tests can use this to capture post-setup transactions from server to client. The specified
+     * decorator will be applied every time a client connects. The decorated result will be used for
+     * all subsequent transactions to this client from the new ServerTransport.
+     *
+     * <p>Optional, {@link OneWayBinderProxy#IDENTITY_DECORATOR} is the default.
+     */
+    public Builder setClientBinderDecorator(OneWayBinderProxy.Decorator clientBinderDecorator) {
+      this.clientBinderDecorator = checkNotNull(clientBinderDecorator);
       return this;
     }
   }

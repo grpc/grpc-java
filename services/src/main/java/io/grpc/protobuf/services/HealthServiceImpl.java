@@ -18,6 +18,7 @@ package io.grpc.protobuf.services;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
@@ -26,6 +27,7 @@ import io.grpc.health.v1.HealthCheckRequest;
 import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
+import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -34,7 +36,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
 
@@ -83,6 +84,11 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
       final StreamObserver<HealthCheckResponse> responseObserver) {
     final String service = request.getService();
     synchronized (watchLock) {
+      if (responseObserver instanceof ServerCallStreamObserver) {
+        ((ServerCallStreamObserver) responseObserver).setOnCancelHandler(() -> {
+          removeWatcher(service, responseObserver);
+        });
+      }
       ServingStatus status = statusMap.get(service);
       responseObserver.onNext(getResponseForWatch(status));
       IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean> serviceWatchers =
@@ -98,19 +104,23 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
           @Override
           // Called when the client has closed the stream
           public void cancelled(Context context) {
-            synchronized (watchLock) {
-              IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean> serviceWatchers =
-                  watchers.get(service);
-              if (serviceWatchers != null) {
-                serviceWatchers.remove(responseObserver);
-                if (serviceWatchers.isEmpty()) {
-                  watchers.remove(service);
-                }
-              }
-            }
+            removeWatcher(service, responseObserver);
           }
         },
         MoreExecutors.directExecutor());
+  }
+
+  void removeWatcher(String service, StreamObserver<HealthCheckResponse> responseObserver) {
+    synchronized (watchLock) {
+      IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean> serviceWatchers =
+              watchers.get(service);
+      if (serviceWatchers != null) {
+        serviceWatchers.remove(responseObserver);
+        if (serviceWatchers.isEmpty()) {
+          watchers.remove(service);
+        }
+      }
+    }
   }
 
   void setStatus(String service, ServingStatus status) {

@@ -36,11 +36,25 @@ abstract class OpenTelemetryMetricsResource {
   abstract DoubleHistogram clientAttemptDurationCounter();
 
   @Nullable
+  abstract DoubleHistogram clientAttemptDelayCounter();
+
+  @Nullable
   abstract LongHistogram clientTotalSentCompressedMessageSizeCounter();
 
   @Nullable
   abstract LongHistogram clientTotalReceivedCompressedMessageSizeCounter();
 
+  @Nullable
+  abstract LongHistogram clientCallRetriesCounter();
+
+  @Nullable
+  abstract LongHistogram clientCallTransparentRetriesCounter();
+
+  @Nullable
+  abstract LongHistogram clientCallHedgesCounter();
+
+  @Nullable
+  abstract DoubleHistogram clientCallRetryDelayCounter();
 
   /* Server Metrics */
   @Nullable
@@ -68,10 +82,20 @@ abstract class OpenTelemetryMetricsResource {
 
     abstract Builder clientAttemptDurationCounter(DoubleHistogram counter);
 
+    abstract Builder clientAttemptDelayCounter(DoubleHistogram counter);
+
     abstract Builder clientTotalSentCompressedMessageSizeCounter(LongHistogram counter);
 
     abstract Builder clientTotalReceivedCompressedMessageSizeCounter(
         LongHistogram counter);
+
+    abstract Builder clientCallRetriesCounter(LongHistogram counter);
+
+    abstract Builder clientCallTransparentRetriesCounter(LongHistogram counter);
+
+    abstract Builder clientCallHedgesCounter(LongHistogram counter);
+
+    abstract Builder clientCallRetryDelayCounter(DoubleHistogram counter);
 
     abstract Builder serverCallCountCounter(LongCounter counter);
 

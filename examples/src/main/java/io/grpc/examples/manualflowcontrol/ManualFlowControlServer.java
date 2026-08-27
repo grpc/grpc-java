@@ -72,6 +72,7 @@ public class ManualFlowControlServer {
 
         // Give gRPC a StreamObserver that can observe and process incoming requests.
         return new StreamObserver<HelloRequest>() {
+          int cnt = 0;
           @Override
           public void onNext(HelloRequest request) {
             // Process the request and send a response or an error.
@@ -81,7 +82,8 @@ public class ManualFlowControlServer {
               logger.info("--> " + name);
 
               // Simulate server "work"
-              Thread.sleep(100);
+              int sleepMillis = ++cnt % 20 == 0 ? 2000 : 100;
+              Thread.sleep(sleepMillis);
 
               // Send a response.
               String message = "Hello " + name;

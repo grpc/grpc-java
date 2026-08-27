@@ -18,6 +18,7 @@ package io.grpc.testing;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,9 +36,7 @@ import io.grpc.Server;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule.Resource;
 import java.util.concurrent.TimeUnit;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.junit.runners.model.MultipleFailureException;
@@ -50,10 +49,6 @@ import org.mockito.InOrder;
 @RunWith(JUnit4.class)
 public class GrpcCleanupRuleTest {
   public static final FakeClock fakeClock = new FakeClock();
-
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void registerChannelReturnSameChannel() {
@@ -72,10 +67,9 @@ public class GrpcCleanupRuleTest {
     ManagedChannel channel = null;
     GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("channel");
-
-    grpcCleanup.register(channel);
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> grpcCleanup.register(channel));
+    assertThat(e).hasMessageThat().isEqualTo("channel");
   }
 
   @Test
@@ -83,10 +77,9 @@ public class GrpcCleanupRuleTest {
     Server server = null;
     GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("server");
-
-    grpcCleanup.register(server);
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> grpcCleanup.register(server));
+    assertThat(e).hasMessageThat().isEqualTo("server");
   }
 
   @Test

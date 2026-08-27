@@ -16,7 +16,9 @@
 
 package io.grpc.cronet;
 
+import static io.grpc.cronet.CronetClientStream.CRONET_READ_BUFFER_SIZE_KEY;
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -90,6 +92,41 @@ public final class CronetChannelBuilderTest {
         method, new Metadata(), CallOptions.DEFAULT, tracers);
 
     assertFalse(stream.idempotent);
+  }
+
+  @Test
+  public void channelBuilderReadBufferSize_defaultsTo4Kb() throws Exception {
+    CronetChannelBuilder builder = CronetChannelBuilder.forAddress("address", 1234, mockEngine);
+    CronetTransportFactory transportFactory =
+        (CronetTransportFactory) builder.buildTransportFactory();
+    CronetClientTransport transport =
+        (CronetClientTransport)
+            transportFactory.newClientTransport(
+                new InetSocketAddress("localhost", 443),
+                new ClientTransportOptions(),
+                channelLogger);
+    CronetClientStream stream = transport.newStream(
+        method, new Metadata(), CallOptions.DEFAULT, tracers);
+
+    assertEquals(4 * 1024, stream.readBufferSize);
+  }
+
+  @Test
+  public void channelBuilderReadBufferSize_changeReflected() throws Exception {
+    CronetChannelBuilder builder = CronetChannelBuilder.forAddress("address", 1234, mockEngine);
+    CronetTransportFactory transportFactory =
+        (CronetTransportFactory) builder.buildTransportFactory();
+    CronetClientTransport transport =
+        (CronetClientTransport)
+            transportFactory.newClientTransport(
+                new InetSocketAddress("localhost", 443),
+                new ClientTransportOptions(),
+                channelLogger);
+    CronetClientStream stream = transport.newStream(
+        method, new Metadata(),
+        CallOptions.DEFAULT.withOption(CRONET_READ_BUFFER_SIZE_KEY, 32 * 1024), tracers);
+
+    assertEquals(32 * 1024, stream.readBufferSize);
   }
 
   @Test

@@ -22,12 +22,12 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.util.Durations;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -73,20 +73,81 @@ public final class EnvoyServerProtoData {
 
   public static final class UpstreamTlsContext extends BaseTlsContext {
 
+    private final String sni;
+    private final boolean autoHostSni;
+    private final boolean autoSniSanValidation;
+
     @VisibleForTesting
     public UpstreamTlsContext(CommonTlsContext commonTlsContext) {
+      this(commonTlsContext, "", false, false);
+    }
+
+    @VisibleForTesting
+    public UpstreamTlsContext(
+        CommonTlsContext commonTlsContext, String sni, boolean autoHostSni,
+        boolean autoSniSanValidation) {
       super(commonTlsContext);
+      this.sni = sni == null ? "" : sni;
+      this.autoHostSni = autoHostSni;
+      this.autoSniSanValidation = autoSniSanValidation;
+    }
+
+    @VisibleForTesting
+    public UpstreamTlsContext(
+        io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            upstreamTlsContext) {
+      super(upstreamTlsContext.getCommonTlsContext());
+      this.sni = upstreamTlsContext.getSni();
+      this.autoHostSni = upstreamTlsContext.getAutoHostSni();
+      this.autoSniSanValidation = upstreamTlsContext.getAutoSniSanValidation();
     }
 
     public static UpstreamTlsContext fromEnvoyProtoUpstreamTlsContext(
         io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
             upstreamTlsContext) {
-      return new UpstreamTlsContext(upstreamTlsContext.getCommonTlsContext());
+      return new UpstreamTlsContext(upstreamTlsContext);
+    }
+
+    public String getSni() {
+      return sni;
+    }
+
+    public boolean getAutoHostSni() {
+      return autoHostSni;
+    }
+
+    public boolean getAutoSniSanValidation() {
+      return autoSniSanValidation;
     }
 
     @Override
     public String toString() {
-      return "UpstreamTlsContext{" + "commonTlsContext=" + commonTlsContext + '}';
+      return "UpstreamTlsContext{"
+          + "commonTlsContext=" + commonTlsContext
+          + "\nsni=" + sni
+          + "\nauto_host_sni=" + autoHostSni
+          + "\nauto_sni_san_validation=" + autoSniSanValidation
+          + "}";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      UpstreamTlsContext that = (UpstreamTlsContext) o;
+      return autoHostSni == that.autoHostSni
+          && autoSniSanValidation == that.autoSniSanValidation
+          && Objects.equals(commonTlsContext, that.commonTlsContext)
+          && Objects.equals(sni, that.sni);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(commonTlsContext, sni, autoHostSni, autoSniSanValidation);
     }
   }
 
@@ -150,9 +211,9 @@ public final class EnvoyServerProtoData {
 
     abstract int prefixLen();
 
-    static CidrRange create(String addressPrefix, int prefixLen) throws UnknownHostException {
+    static CidrRange create(InetAddress addressPrefix, int prefixLen) {
       return new AutoValue_EnvoyServerProtoData_CidrRange(
-          InetAddress.getByName(addressPrefix), prefixLen);
+          addressPrefix, prefixLen);
     }
   }
 
@@ -207,7 +268,7 @@ public final class EnvoyServerProtoData {
   @AutoValue
   abstract static class FilterChain {
 
-    // possibly empty
+    // Must be unique per server instance (except the default chain).
     abstract String name();
 
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
@@ -249,13 +310,17 @@ public final class EnvoyServerProtoData {
     @Nullable
     abstract FilterChain defaultFilterChain();
 
+    @Nullable
+    abstract Protocol protocol();
+
     static Listener create(
         String name,
         @Nullable String address,
         ImmutableList<FilterChain> filterChains,
-        @Nullable FilterChain defaultFilterChain) {
+        @Nullable FilterChain defaultFilterChain,
+        @Nullable Protocol protocol) {
       return new AutoValue_EnvoyServerProtoData_Listener(name, address, filterChains,
-          defaultFilterChain);
+          defaultFilterChain, protocol);
     }
   }
 
@@ -324,7 +389,7 @@ public final class EnvoyServerProtoData {
         Integer minimumHosts = envoyOutlierDetection.hasSuccessRateMinimumHosts()
             ? envoyOutlierDetection.getSuccessRateMinimumHosts().getValue() : null;
         Integer requestVolume = envoyOutlierDetection.hasSuccessRateRequestVolume()
-            ? envoyOutlierDetection.getSuccessRateMinimumHosts().getValue() : null;
+            ? envoyOutlierDetection.getSuccessRateRequestVolume().getValue() : null;
 
         successRateEjection = SuccessRateEjection.create(stdevFactor, enforcementPercentage,
             minimumHosts, requestVolume);

@@ -23,7 +23,6 @@ import com.google.protobuf.BoolValue;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
@@ -37,10 +36,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
+import javax.net.ssl.X509TrustManager;
 
 /** Utility class for client and server ssl provider tests. */
 public class CommonTlsContextTestsUtil {
@@ -61,50 +62,30 @@ public class CommonTlsContextTestsUtil {
   public static final String BAD_SERVER_KEY_FILE = "badserver.key";
   public static final String BAD_CLIENT_PEM_FILE = "badclient.pem";
   public static final String BAD_CLIENT_KEY_FILE = "badclient.key";
+  public static final String BAD_WILDCARD_DNS_PEM_FILE =
+      "sni-test-certs/bad_wildcard_dns_certificate.pem";
 
   /** takes additional values and creates CombinedCertificateValidationContext as needed. */
-  @SuppressWarnings("deprecation")
-  static CommonTlsContext buildCommonTlsContextWithAdditionalValues(
+  private static CommonTlsContext buildCommonTlsContextWithAdditionalValues(
       String certInstanceName, String certName,
       String validationContextCertInstanceName, String validationContextCertName,
       Iterable<StringMatcher> matchSubjectAltNames,
       Iterable<String> alpnNames) {
-
-    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
-
-    CertificateProviderInstance certificateProviderInstance = CertificateProviderInstance
-        .newBuilder().setInstanceName(certInstanceName).setCertificateName(certName).build();
-    if (certificateProviderInstance != null) {
-      builder.setTlsCertificateCertificateProviderInstance(certificateProviderInstance);
-    }
-    CertificateProviderInstance validationCertificateProviderInstance =
-        CertificateProviderInstance.newBuilder().setInstanceName(validationContextCertInstanceName)
-            .setCertificateName(validationContextCertName).build();
-    CertificateValidationContext certValidationContext =
-        matchSubjectAltNames == null
-            ? null
-            : CertificateValidationContext.newBuilder()
-                .addAllMatchSubjectAltNames(matchSubjectAltNames)
-                .build();
-    if (validationCertificateProviderInstance != null) {
-      CombinedCertificateValidationContext.Builder combinedBuilder =
-          CombinedCertificateValidationContext.newBuilder()
-              .setValidationContextCertificateProviderInstance(
-                  validationCertificateProviderInstance);
-      if (certValidationContext != null) {
-        combinedBuilder = combinedBuilder.setDefaultValidationContext(certValidationContext);
-      }
-      builder.setCombinedValidationContext(combinedBuilder);
-    } else if (validationCertificateProviderInstance != null) {
-      builder
-          .setValidationContextCertificateProviderInstance(validationCertificateProviderInstance);
-    } else if (certValidationContext != null) {
-      builder.setValidationContext(certValidationContext);
-    }
-    if (alpnNames != null) {
-      builder.addAllAlpnProtocols(alpnNames);
-    }
-    return builder.build();
+    @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
+    CertificateValidationContext.Builder certificateValidationContextBuilder
+        = CertificateValidationContext.newBuilder()
+        .addAllMatchSubjectAltNames(matchSubjectAltNames);
+    return CommonTlsContext.newBuilder()
+        .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
+          .setInstanceName(certInstanceName)
+          .setCertificateName(certName))
+        .setCombinedValidationContext(CombinedCertificateValidationContext.newBuilder()
+          .setDefaultValidationContext(certificateValidationContextBuilder
+            .setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
+              .setInstanceName(validationContextCertInstanceName)
+              .setCertificateName(validationContextCertName))))
+        .addAllAlpnProtocols(alpnNames)
+        .build();
   }
 
   /** Helper method to build DownstreamTlsContext for multiple test classes. */
@@ -152,7 +133,7 @@ public class CommonTlsContextTestsUtil {
           useSans ? Arrays.asList(
               StringMatcher.newBuilder()
                   .setExact("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob")
-                  .build()) : null,
+                  .build()) : Arrays.asList(),
           Arrays.asList("managed-tls"));
     }
     return buildDownstreamTlsContext(commonTlsContext, /* requireClientCert= */ false);
@@ -172,11 +153,24 @@ public class CommonTlsContextTestsUtil {
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
   static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
-      CommonTlsContext commonTlsContext) {
-    UpstreamTlsContext upstreamTlsContext =
-        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
+        CommonTlsContext commonTlsContext) {
+    return buildUpstreamTlsContext(commonTlsContext, "", false, false);
+  }
+
+  /**
+   * Helper method to build UpstreamTlsContext with SNI info.
+   */
+  static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
+        CommonTlsContext commonTlsContext, String sni, boolean autoHostSni,
+        boolean autoSniSanValidation) {
+    UpstreamTlsContext.Builder upstreamTlsContext =
+        UpstreamTlsContext.newBuilder()
+            .setCommonTlsContext(commonTlsContext)
+            .setAutoHostSni(autoHostSni)
+            .setAutoSniSanValidation(autoSniSanValidation)
+            .setSni(sni);
     return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-        upstreamTlsContext);
+        upstreamTlsContext.build());
   }
 
   /** Helper method to build UpstreamTlsContext for multiple test classes. */
@@ -191,6 +185,21 @@ public class CommonTlsContextTestsUtil {
         null);
   }
 
+  /** Helper method to build UpstreamTlsContext with SNI info. */
+  public static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
+      String commonInstanceName, boolean hasIdentityCert, String sni, boolean autoHostSni) {
+    return buildUpstreamTlsContextForCertProviderInstance(
+        hasIdentityCert ? commonInstanceName : null,
+        hasIdentityCert ? "default" : null,
+        commonInstanceName,
+        "ROOT",
+        null,
+        null,
+        sni,
+        autoHostSni,
+        false);
+  }
+
   /** Gets a cert from contents of a resource. */
   public static X509Certificate getCertFromResourceName(String resourceName)
       throws IOException, CertificateException {
@@ -199,7 +208,6 @@ public class CommonTlsContextTestsUtil {
     }
   }
 
-  @SuppressWarnings("deprecation")
   private static CommonTlsContext buildCommonTlsContextForCertProviderInstance(
       String certInstanceName,
       String certName,
@@ -210,10 +218,37 @@ public class CommonTlsContextTestsUtil {
     CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
     if (certInstanceName != null) {
       builder =
-          builder.setTlsCertificateCertificateProviderInstance(
-              CommonTlsContext.CertificateProviderInstance.newBuilder()
-                  .setInstanceName(certInstanceName)
-                  .setCertificateName(certName));
+              builder.setTlsCertificateProviderInstance(
+                      CertificateProviderPluginInstance.newBuilder()
+                              .setInstanceName(certInstanceName)
+                              .setCertificateName(certName));
+    }
+    builder =
+        addCertificateValidationContext(
+            builder, rootInstanceName, rootCertName, staticCertValidationContext);
+    if (alpnProtocols != null) {
+      builder.addAllAlpnProtocols(alpnProtocols);
+    }
+    return builder.build();
+  }
+
+  /** Helper method to build CommonTlsContext using deprecated certificate provider field. */
+  @SuppressWarnings("deprecation")
+  public static CommonTlsContext buildCommonTlsContextWithDeprecatedCertProviderInstance(
+      String certInstanceName,
+      String certName,
+      String rootInstanceName,
+      String rootCertName,
+      Iterable<String> alpnProtocols,
+      CertificateValidationContext staticCertValidationContext) {
+    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
+    if (certInstanceName != null) {
+      // Use deprecated field (field 11) instead of current field (field 14)
+      builder =
+              builder.setTlsCertificateCertificateProviderInstance(
+                      CommonTlsContext.CertificateProviderInstance.newBuilder()
+                              .setInstanceName(certInstanceName)
+                              .setCertificateName(certName));
     }
     builder =
         addCertificateValidationContext(
@@ -248,35 +283,28 @@ public class CommonTlsContextTestsUtil {
     return builder.build();
   }
 
-  @SuppressWarnings("deprecation")
   private static CommonTlsContext.Builder addCertificateValidationContext(
       CommonTlsContext.Builder builder,
       String rootInstanceName,
       String rootCertName,
       CertificateValidationContext staticCertValidationContext) {
-    CertificateProviderInstance providerInstance = null;
+    if (staticCertValidationContext == null && rootInstanceName == null) {
+      return builder;
+    }
+    CertificateValidationContext.Builder contextBuilder;
+    if (staticCertValidationContext == null) {
+      contextBuilder = CertificateValidationContext.newBuilder();
+    } else {
+      contextBuilder = staticCertValidationContext.toBuilder();
+    }
     if (rootInstanceName != null) {
-      providerInstance = CertificateProviderInstance.newBuilder()
+      contextBuilder.setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
           .setInstanceName(rootInstanceName)
-          .setCertificateName(rootCertName)
-          .build();
+          .setCertificateName(rootCertName));
+      builder.setValidationContext(contextBuilder.build());
     }
-    if (providerInstance != null) {
-      builder = builder.setValidationContextCertificateProviderInstance(providerInstance);
-    }
-    CombinedCertificateValidationContext.Builder combined =
-        CombinedCertificateValidationContext.newBuilder();
-    if (providerInstance != null) {
-      combined = combined.setValidationContextCertificateProviderInstance(providerInstance);
-    }
-    if (staticCertValidationContext != null) {
-      combined = combined.setDefaultValidationContext(staticCertValidationContext);
-    }
-    if (combined.hasValidationContextCertificateProviderInstance()
-        || combined.hasDefaultValidationContext()) {
-      builder = builder.setCombinedValidationContext(combined.build());
-    }
-    return builder;
+    return builder.setCombinedValidationContext(CombinedCertificateValidationContext.newBuilder()
+        .setDefaultValidationContext(contextBuilder));
   }
 
   private static CommonTlsContext.Builder addNewCertificateValidationContext(
@@ -315,7 +343,31 @@ public class CommonTlsContextTestsUtil {
             rootInstanceName,
             rootCertName,
             alpnProtocols,
-            staticCertValidationContext));
+            staticCertValidationContext),
+        "", false, false);
+  }
+
+  /** Helper method to build UpstreamTlsContext with SNI info for CertProvider tests. */
+  public static EnvoyServerProtoData.UpstreamTlsContext
+      buildUpstreamTlsContextForCertProviderInstance(
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext,
+          String sni,
+          boolean autoHostSni,
+          boolean autoSniSanValidation) {
+    return buildUpstreamTlsContext(
+        buildCommonTlsContextForCertProviderInstance(
+            certInstanceName,
+            certName,
+            rootInstanceName,
+            rootCertName,
+            alpnProtocols,
+            staticCertValidationContext),
+        sni, autoHostSni, autoSniSanValidation);
   }
 
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */
@@ -334,7 +386,8 @@ public class CommonTlsContextTestsUtil {
             rootInstanceName,
             rootCertName,
             alpnProtocols,
-            staticCertValidationContext));
+            staticCertValidationContext),
+    "", false, false);
   }
 
   /** Helper method to build DownstreamTlsContext for CertProvider tests. */
@@ -378,14 +431,15 @@ public class CommonTlsContextTestsUtil {
   }
 
   /** Perform some simple checks on sslContext. */
-  public static void doChecksOnSslContext(boolean server, SslContext sslContext,
+  public static void doChecksOnSslContext(boolean server,
+      AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm,
       List<String> expectedApnProtos) {
     if (server) {
-      assertThat(sslContext.isServer()).isTrue();
+      assertThat(sslContextAndTm.getKey().isServer()).isTrue();
     } else {
-      assertThat(sslContext.isClient()).isTrue();
+      assertThat(sslContextAndTm.getKey().isClient()).isTrue();
     }
-    List<String> apnProtos = sslContext.applicationProtocolNegotiator().protocols();
+    List<String> apnProtos = sslContextAndTm.getKey().applicationProtocolNegotiator().protocols();
     assertThat(apnProtos).isNotNull();
     if (expectedApnProtos != null) {
       assertThat(apnProtos).isEqualTo(expectedApnProtos);
@@ -411,7 +465,7 @@ public class CommonTlsContextTestsUtil {
 
   public static class TestCallback extends SslContextProvider.Callback {
 
-    public SslContext updatedSslContext;
+    public AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> updatedSslContext;
     public Throwable updatedThrowable;
 
     public TestCallback(Executor executor) {
@@ -419,7 +473,8 @@ public class CommonTlsContextTestsUtil {
     }
 
     @Override
-    public void updateSslContext(SslContext sslContext) {
+    public void updateSslContextAndExtendedX509TrustManager(
+        AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContext) {
       updatedSslContext = sslContext;
     }
 

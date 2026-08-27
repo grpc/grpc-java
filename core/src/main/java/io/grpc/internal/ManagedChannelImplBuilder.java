@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.internal.UriWrapper.wrap;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -28,6 +29,7 @@ import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
@@ -37,6 +39,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.InternalFeatureFlags;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
@@ -46,6 +49,7 @@ import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.grpc.StatusOr;
+import io.grpc.Uri;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.SocketAddress;
@@ -146,12 +150,17 @@ public final class ManagedChannelImplBuilder
   }
 
 
+  ChannelConfigurator channelConfigurator = builder -> { };
+
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
   ObjectPool<? extends Executor> offloadExecutorPool = DEFAULT_EXECUTOR_POOL;
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
+
+  @Nullable
+  NameResolverProvider nameResolverProvider;
 
   final List<ClientTransportFilter> transportFilters = new ArrayList<>();
 
@@ -288,6 +297,36 @@ public final class ManagedChannelImplBuilder
       String target, @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
+    this(
+        target,
+        channelCreds,
+        callCreds,
+        clientTransportFactoryBuilder,
+        channelBuilderDefaultPortProvider,
+        null,
+        null);
+  }
+
+  /**
+   * Creates a new managed channel builder with a target string, which can be
+   * either a valid {@link io.grpc.NameResolver}-compliant URI, or an authority
+   * string. Transport
+   * implementors must provide client transport factory builder, and may set
+   * custom channel default
+   * port provider.
+   *
+   * @param channelCreds         The ChannelCredentials provided by the user.
+   *                             These may be used when
+   *                             creating derivative channels.
+   * @param nameResolverRegistry the registry used to look up name resolvers.
+   * @param nameResolverProvider the provider used to look up name resolvers.
+   */
+  public ManagedChannelImplBuilder(
+      String target, @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
+      ClientTransportFactoryBuilder clientTransportFactoryBuilder,
+      @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider,
+      @Nullable NameResolverRegistry nameResolverRegistry,
+      @Nullable NameResolverProvider nameResolverProvider) {
     this.target = checkNotNull(target, "target");
     this.channelCredentials = channelCreds;
     this.callCredentials = callCreds;
@@ -295,11 +334,16 @@ public final class ManagedChannelImplBuilder
         "clientTransportFactoryBuilder");
     this.directServerAddress = null;
 
-    if (channelBuilderDefaultPortProvider != null) {
-      this.channelBuilderDefaultPortProvider = channelBuilderDefaultPortProvider;
-    } else {
-      this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
-    }
+    this.channelBuilderDefaultPortProvider =
+        channelBuilderDefaultPortProvider != null
+            ? channelBuilderDefaultPortProvider
+            : new ManagedChannelDefaultPortProvider();
+    this.nameResolverRegistry =
+        nameResolverRegistry != null
+            ? nameResolverRegistry
+            : NameResolverRegistry.getDefaultRegistry();
+    this.nameResolverProvider = nameResolverProvider;
+
     // TODO(dnvindhya): Move configurator to all the individual builders
     InternalConfiguratorRegistry.configureChannelBuilder(this);
   }
@@ -419,6 +463,7 @@ public final class ManagedChannelImplBuilder
     Preconditions.checkState(directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
         directServerAddress);
+
     if (resolverFactory != null) {
       NameResolverRegistry reg = new NameResolverRegistry();
       if (resolverFactory instanceof NameResolverProvider) {
@@ -579,8 +624,8 @@ public final class ManagedChannelImplBuilder
         parsedMap.put(key, checkListEntryTypes((List<?>) value));
       } else if (value instanceof String) {
         parsedMap.put(key, value);
-      } else if (value instanceof Double) {
-        parsedMap.put(key, value);
+      } else if (value instanceof Number) {
+        parsedMap.put(key, ((Number) value).doubleValue());
       } else if (value instanceof Boolean) {
         parsedMap.put(key, value);
       } else {
@@ -603,8 +648,8 @@ public final class ManagedChannelImplBuilder
         parsedList.add(checkListEntryTypes((List<?>) value));
       } else if (value instanceof String) {
         parsedList.add(value);
-      } else if (value instanceof Double) {
-        parsedList.add(value);
+      } else if (value instanceof Number) {
+        parsedList.add(((Number) value).doubleValue());
       } else if (value instanceof Boolean) {
         parsedList.add(value);
       } else {
@@ -715,11 +760,26 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
+  public ManagedChannelImplBuilder childChannelConfigurator(
+      ChannelConfigurator channelConfigurator) {
+    checkNotNull(channelConfigurator, "childChannelConfigurator");
+    ChannelConfigurator oldConfigurator = this.channelConfigurator;
+    this.channelConfigurator = builder -> {
+      oldConfigurator.configureChannelBuilder(builder);
+      channelConfigurator.configureChannelBuilder(builder);
+    };
+    return this;
+  }
+
+  @Override
   public ManagedChannel build() {
     ClientTransportFactory clientTransportFactory =
         clientTransportFactoryBuilder.buildClientTransportFactory();
-    ResolvedNameResolver resolvedResolver = getNameResolverProvider(
-        target, nameResolverRegistry, clientTransportFactory.getSupportedSocketAddressTypes());
+    ResolvedNameResolver resolvedResolver =
+        InternalFeatureFlags.getRfc3986UrisEnabled()
+            ? getNameResolverProviderRfc3986(target, nameResolverRegistry, nameResolverProvider)
+            : getNameResolverProvider(target, nameResolverRegistry, nameResolverProvider);
+    resolvedResolver.checkAddressTypes(clientTransportFactory.getSupportedSocketAddressTypes());
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
         clientTransportFactory,
@@ -737,18 +797,16 @@ public final class ManagedChannelImplBuilder
   // TODO(zdapeng): FIX IT
   @VisibleForTesting
   List<ClientInterceptor> getEffectiveInterceptors(String computedTarget) {
-    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
-    for (int i = 0; i < effectiveInterceptors.size(); i++) {
-      if (!(effectiveInterceptors.get(i) instanceof InterceptorFactoryWrapper)) {
-        continue;
+    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors.size());
+    for (ClientInterceptor interceptor : this.interceptors) {
+      if (interceptor instanceof InterceptorFactoryWrapper) {
+        InterceptorFactory factory = ((InterceptorFactoryWrapper) interceptor).factory;
+        interceptor = factory.newInterceptor(computedTarget);
+        if (interceptor == null) {
+          throw new NullPointerException("Factory returned null interceptor: " + factory);
+        }
       }
-      InterceptorFactory factory =
-          ((InterceptorFactoryWrapper) effectiveInterceptors.get(i)).factory;
-      ClientInterceptor interceptor = factory.newInterceptor(computedTarget);
-      if (interceptor == null) {
-        throw new NullPointerException("Factory returned null interceptor: " + factory);
-      }
-      effectiveInterceptors.set(i, interceptor);
+      effectiveInterceptors.add(interceptor);
     }
 
     boolean disableImplicitCensus = InternalConfiguratorRegistry.wasSetConfiguratorsCalled();
@@ -761,7 +819,7 @@ public final class ManagedChannelImplBuilder
       if (GET_CLIENT_INTERCEPTOR_METHOD != null) {
         try {
           statsInterceptor =
-            (ClientInterceptor) GET_CLIENT_INTERCEPTOR_METHOD
+              (ClientInterceptor) GET_CLIENT_INTERCEPTOR_METHOD
               .invoke(
                 null,
                 recordStartedRpcs,
@@ -816,19 +874,33 @@ public final class ManagedChannelImplBuilder
 
   @VisibleForTesting
   static class ResolvedNameResolver {
-    public final URI targetUri;
+    public final UriWrapper targetUri;
     public final NameResolverProvider provider;
 
-    public ResolvedNameResolver(URI targetUri, NameResolverProvider provider) {
+    public ResolvedNameResolver(UriWrapper targetUri, NameResolverProvider provider) {
       this.targetUri = checkNotNull(targetUri, "targetUri");
       this.provider = checkNotNull(provider, "provider");
+    }
+
+    void checkAddressTypes(
+        Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
+      if (channelTransportSocketAddressTypes != null) {
+        Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes =
+            provider.getProducedSocketAddressTypes();
+        if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Address types of NameResolver '%s' for '%s' not supported by transport",
+                  provider.getDefaultScheme(), targetUri));
+        }
+      }
     }
   }
 
   @VisibleForTesting
   static ResolvedNameResolver getNameResolverProvider(
       String target, NameResolverRegistry nameResolverRegistry,
-      Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
+      NameResolverProvider nameResolverProvider) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     NameResolverProvider provider = null;
@@ -843,19 +915,33 @@ public final class ManagedChannelImplBuilder
     if (targetUri != null) {
       // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
       // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
-      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      // Use the explicit provider if its scheme matches the target URI.
+      if (nameResolverProvider != null
+          && targetUri.getScheme().equals(nameResolverProvider.getScheme())) {
+        provider = nameResolverProvider;
+      } else {
+        provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      }
     }
 
     if (provider == null && !URI_PATTERN.matcher(target).matches()) {
-      // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
-      // scheme from the registry.
+      // It doesn't look like a URI target. Maybe it's an authority string. Try with
+      // the default scheme from the registry (if provider is not specified) or
+      // the provider's default scheme (if provider is specified).
+      String scheme = nameResolverProvider != null
+          ? nameResolverProvider.getScheme()
+          : nameResolverRegistry.getDefaultScheme();
       try {
-        targetUri = new URI(nameResolverRegistry.getDefaultScheme(), "", "/" + target, null);
+        targetUri = new URI(scheme, "", "/" + target, null);
       } catch (URISyntaxException e) {
-        // Should not be possible.
+        // Should not be possible
         throw new IllegalArgumentException(e);
       }
-      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      if (nameResolverProvider != null) {
+        provider = nameResolverProvider;
+      } else {
+        provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      }
     }
 
     if (provider == null) {
@@ -864,17 +950,60 @@ public final class ManagedChannelImplBuilder
           target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
     }
 
-    if (channelTransportSocketAddressTypes != null) {
-      Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
-          = provider.getProducedSocketAddressTypes();
-      if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
-        throw new IllegalArgumentException(String.format(
-            "Address types of NameResolver '%s' for '%s' not supported by transport",
-            targetUri.getScheme(), target));
+    return new ResolvedNameResolver(wrap(targetUri), provider);
+  }
+
+  @VisibleForTesting
+  static ResolvedNameResolver getNameResolverProviderRfc3986(
+      String target, NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
+    // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
+    // "dns:///".
+    NameResolverProvider provider = null;
+    Uri targetUri = null;
+    StringBuilder uriSyntaxErrors = new StringBuilder();
+    try {
+      targetUri = Uri.parse(target);
+    } catch (URISyntaxException e) {
+      // Can happen with ip addresses like "[::1]:1234" or 127.0.0.1:1234.
+      uriSyntaxErrors.append(e.getMessage());
+    }
+    if (targetUri != null) {
+      // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
+      // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
+      // Use the explicit provider if its scheme matches the target URI.
+      if (nameResolverProvider != null
+          && targetUri.getScheme().equals(nameResolverProvider.getScheme())) {
+        provider = nameResolverProvider;
+      } else {
+        provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
       }
     }
 
-    return new ResolvedNameResolver(targetUri, provider);
+    if (provider == null && !URI_PATTERN.matcher(target).matches()) {
+      // It doesn't look like a URI target. Maybe it's an authority string. Try with
+      // the default scheme from the registry (if provider is not specified) or
+      // the provider's default scheme (if provider is specified).
+      String scheme = nameResolverProvider != null
+          ? nameResolverProvider.getScheme()
+          : nameResolverRegistry.getDefaultScheme();
+      targetUri =
+          Uri.newBuilder()
+              .setScheme(scheme)
+              .setHost("")
+              .setPath("/" + target)
+              .build();
+      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+    }
+
+    if (provider == null) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Could not find a NameResolverProvider for %s%s",
+              target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
+    }
+
+    return new ResolvedNameResolver(wrap(targetUri), provider);
   }
 
   private static class DirectAddressNameResolverProvider extends NameResolverProvider {

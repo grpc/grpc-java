@@ -65,12 +65,26 @@ public interface MetricSink {
    * Adds a value for a long valued counter metric associated with specified metric instrument.
    *
    * @param metricInstrument The counter metric instrument identifies metric measure to add.
-   * @param value The value to record.
+   * @param value The value to record. MUST be non-negative.
    * @param requiredLabelValues A list of required label values for the metric.
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
   default void addLongCounter(LongCounterMetricInstrument metricInstrument, long value,
-      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+                              List<String> requiredLabelValues, List<String> optionalLabelValues) {
+  }
+
+  /**
+   * Adds a value for a long valued up down counter metric associated with specified metric
+   * instrument.
+   *
+   * @param metricInstrument    The counter metric instrument identifies metric measure to add.
+   * @param value               The value to record. May be positive, negative or zero.
+   * @param requiredLabelValues A list of required label values for the metric.
+   * @param optionalLabelValues A list of additional, optional label values for the metric.
+   */
+  default void addLongUpDownCounter(LongUpDownCounterMetricInstrument metricInstrument, long value,
+                                    List<String> requiredLabelValues,
+                                    List<String> optionalLabelValues) {
   }
 
   /**

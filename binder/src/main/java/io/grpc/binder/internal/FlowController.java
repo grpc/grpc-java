@@ -15,7 +15,7 @@
  */
 package io.grpc.binder.internal;
 
-import javax.annotation.concurrent.GuardedBy;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 
 /** Keeps track of the number of bytes on the wire in a single direction. */
 final class FlowController {

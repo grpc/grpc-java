@@ -32,13 +32,11 @@ dependencies {
 
     runtimeOnly libraries.errorprone.annotations,
             libraries.gson  // to fix checkUpperBoundDeps error here
-    compileOnly libraries.javax.annotation
     testImplementation project(':grpc-testing'),
             project(':grpc-inprocess'),
             libraries.netty.transport.epoll, // for DomainSocketAddress
             testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api'))
-    testCompileOnly libraries.javax.annotation
     signature (libraries.signature.java) {
         artifact {
             extension = "signature"

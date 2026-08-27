@@ -17,13 +17,11 @@ sourceSets {
 }
 
 tasks.named("compileContextJava").configure {
-    if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_20)) {
-        println("!!! Javac does not support generating Java 7 bytecode. Do not use for release builds !!!")
-    } else if (JavaVersion.current().isJava9Compatible()) {
-        options.release = 7
+    if (JavaVersion.current().isJava9Compatible()) {
+        options.release = 8
     } else {
-        sourceCompatibility = JavaVersion.VERSION_1_7
-        targetCompatibility = JavaVersion.VERSION_1_7
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
 }
 
@@ -36,7 +34,6 @@ tasks.named("jar").configure {
 dependencies {
     compileOnly sourceSets.context.output
     api libraries.jsr305,
-            libraries.animalsniffer.annotations,
             libraries.errorprone.annotations
     implementation libraries.guava
 
@@ -48,19 +45,22 @@ dependencies {
     testImplementation project(':grpc-core')
     testImplementation project(':grpc-testing')
     testImplementation libraries.guava.testlib
+    testImplementation libraries.truth
 
     signature (libraries.signature.java) {
         artifact {
             extension = "signature"
         }
     }
-    // TODO: Temporarily disabled until StatusException is fixed.
-    // Context: https://github.com/grpc/grpc-java/pull/11066
-    //signature (libraries.signature.android) {
-    //    artifact {
-    //        extension = "signature"
-    //    }
-    //}
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}
+
+animalsniffer {
+    annotation = 'io.grpc.IgnoreJRERequirement'
 }
 
 tasks.named("javadoc").configure {
@@ -71,6 +71,7 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/Internal?*.java'
     exclude 'io/grpc/MetricRecorder.java'
     exclude 'io/grpc/MetricSink.java'
+    exclude 'io/grpc/Uri.java'
 }
 
 tasks.named("sourcesJar").configure {

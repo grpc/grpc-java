@@ -22,13 +22,13 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * An object that accepts new incoming connections on one or more listening socket addresses.
  * This would commonly encapsulate a bound socket that {@code accept()}s new connections.
+ *
+ * <p>This interface is thread-safe.
  */
-@ThreadSafe
 public interface InternalServer {
   /**
    * Starts transport. Implementations must not call {@code listener} until after {@code start()}

@@ -22,6 +22,8 @@ import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteStreams;
 import java.io.ByteArrayInputStream;
@@ -32,8 +34,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -325,7 +325,7 @@ public final class Metadata {
     if (isEmpty()) {
       return Collections.emptySet();
     }
-    Set<String> ks = new HashSet<>(size);
+    Set<String> ks = Sets.newHashSetWithExpectedSize(size);
     for (int i = 0; i < size; i++) {
       ks.add(new String(name(i), 0 /* hibyte */));
     }
@@ -526,7 +526,7 @@ public final class Metadata {
   public void merge(Metadata other, Set<Key<?>> keys) {
     Preconditions.checkNotNull(other, "other");
     // Use ByteBuffer for equals and hashCode.
-    Map<ByteBuffer, Key<?>> asciiKeys = new HashMap<>(keys.size());
+    Map<ByteBuffer, Key<?>> asciiKeys = Maps.newHashMapWithExpectedSize(keys.size());
     for (Key<?> key : keys) {
       asciiKeys.put(ByteBuffer.wrap(key.asciiName()), key);
     }

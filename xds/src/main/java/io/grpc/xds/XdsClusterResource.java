@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.client.Bootstrapper.ServerInfo;
+import static io.grpc.xds.client.LoadStatsManager2.isEnabledOrcaLrsPropagation;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
@@ -34,17 +35,19 @@ import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TransportSocket;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.extensions.transport_sockets.http_11_proxy.v3.Http11ProxyUpstreamTransport;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.security.CommonTlsContextUtil;
@@ -58,10 +61,13 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   static boolean enableLeastRequest =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
-          : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
+          : Boolean.parseBoolean(
+              System.getProperty("io.grpc.xds.experimentalEnableLeastRequest", "true"));
   @VisibleForTesting
   public static boolean enableSystemRootCerts =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", true);
+  static boolean isEnabledXdsHttpConnect =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_HTTP_CONNECT", false);
 
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
@@ -158,18 +164,29 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     ImmutableMap<String, ?> lbPolicyConfig = LoadBalancerConfigFactory.newConfig(cluster,
         enableLeastRequest);
 
-    // Validate the LB config by trying to parse it with the corresponding LB provider.
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(lbPolicyConfig);
-    NameResolver.ConfigOrError configOrError = loadBalancerRegistry.getProvider(
-        lbConfig.getPolicyName()).parseLoadBalancingPolicyConfig(
-        lbConfig.getRawConfigValue());
+    NameResolver.ConfigOrError configOrError
+        = GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+            ImmutableList.of(lbPolicyConfig), loadBalancerRegistry);
     if (configOrError.getError() != null) {
-      throw new ResourceInvalidException(structOrError.getErrorDetail());
+      throw new ResourceInvalidException(
+          "Failed to parse lb config for cluster '" + cluster.getName() + "': "
+          + configOrError.getError());
     }
 
-    updateBuilder.lbPolicyConfig(lbPolicyConfig);
+    updateBuilder.lbPolicyConfig(configOrError.getConfig(), lbPolicyConfig);
     updateBuilder.filterMetadata(
         ImmutableMap.copyOf(cluster.getMetadata().getFilterMetadataMap()));
+
+    try {
+      MetadataRegistry registry = MetadataRegistry.getInstance();
+      ImmutableMap<String, Object> parsedFilterMetadata =
+          registry.parseMetadata(cluster.getMetadata());
+      updateBuilder.parsedMetadata(parsedFilterMetadata);
+    } catch (ResourceInvalidException e) {
+      throw new ResourceInvalidException(
+          "Failed to parse xDS filter metadata for cluster '" + cluster.getName() + "': "
+              + e.getMessage(), e);
+    }
 
     return updateBuilder.build();
   }
@@ -190,6 +207,10 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     } catch (InvalidProtocolBufferException e) {
       return StructOrError.fromError("Cluster " + clusterName + ": malformed ClusterConfig: " + e);
     }
+    if (clusterConfig.getClustersList().isEmpty()) {
+      return StructOrError.fromError("Cluster " + clusterName
+          + ": aggregate ClusterConfig.clusters must not be empty");
+    }
     return StructOrError.fromStruct(CdsUpdate.forAggregate(
         clusterName, clusterConfig.getClustersList()));
   }
@@ -201,6 +222,13 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     Long maxConcurrentRequests = null;
     UpstreamTlsContext upstreamTlsContext = null;
     OutlierDetection outlierDetection = null;
+    boolean isHttp11ProxyAvailable = false;
+    BackendMetricPropagation backendMetricPropagation = null;
+
+    if (isEnabledOrcaLrsPropagation && !cluster.getLrsReportEndpointMetricsList().isEmpty()) {
+      backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
+          cluster.getLrsReportEndpointMetricsList());
+    }
     if (cluster.hasLrsServer()) {
       if (!cluster.getLrsServer().hasSelf()) {
         return StructOrError.fromError(
@@ -223,17 +251,43 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       return StructOrError.fromError("Cluster " + clusterName
           + ": transport-socket-matches not supported.");
     }
-    if (cluster.hasTransportSocket()) {
-      if (!TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
-        return StructOrError.fromError("transport-socket with name "
-            + cluster.getTransportSocket().getName() + " not supported.");
+    boolean hasTransportSocket = cluster.hasTransportSocket();
+    TransportSocket transportSocket = cluster.getTransportSocket();
+
+    if (hasTransportSocket && !TRANSPORT_SOCKET_NAME_TLS.equals(transportSocket.getName())
+        && !(isEnabledXdsHttpConnect && transportSocket.getTypedConfig().is(
+        Http11ProxyUpstreamTransport.class))) {
+      return StructOrError.fromError(
+          "transport-socket with name " + transportSocket.getName() + " not supported.");
+    }
+
+    if (hasTransportSocket && isEnabledXdsHttpConnect && transportSocket.getTypedConfig().is(
+        Http11ProxyUpstreamTransport.class)) {
+      isHttp11ProxyAvailable = true;
+      try {
+        Http11ProxyUpstreamTransport wrappedTransportSocket = transportSocket
+            .getTypedConfig().unpack(io.envoyproxy.envoy.extensions.transport_sockets
+                .http_11_proxy.v3.Http11ProxyUpstreamTransport.class);
+        hasTransportSocket = wrappedTransportSocket.hasTransportSocket();
+        transportSocket = wrappedTransportSocket.getTransportSocket();
+      } catch (InvalidProtocolBufferException e) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": malformed Http11ProxyUpstreamTransport: " + e);
+      } catch (ClassCastException e) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": invalid transport_socket type in Http11ProxyUpstreamTransport");
       }
+    }
+
+    if (hasTransportSocket && TRANSPORT_SOCKET_NAME_TLS.equals(transportSocket.getName())) {
       try {
         upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
             validateUpstreamTlsContext(
-                unpackCompatibleType(cluster.getTransportSocket().getTypedConfig(),
-                io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
-                TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2),
+                unpackCompatibleType(transportSocket.getTypedConfig(),
+                    io.envoyproxy.envoy.extensions
+                        .transport_sockets.tls.v3.UpstreamTlsContext.class,
+                    TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2),
                 certProviderInstances));
       } catch (InvalidProtocolBufferException | ResourceInvalidException e) {
         return StructOrError.fromError(
@@ -271,9 +325,10 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
         return StructOrError.fromError(
             "EDS service_name must be set when Cluster resource has an xdstp name");
       }
+
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext,
-          outlierDetection));
+          outlierDetection, isHttp11ProxyAvailable, backendMetricPropagation));
     } else if (type.equals(Cluster.DiscoveryType.LOGICAL_DNS)) {
       if (!cluster.hasLoadAssignment()) {
         return StructOrError.fromError(
@@ -308,7 +363,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       String dnsHostName = String.format(
           Locale.US, "%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
-          clusterName, dnsHostName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext));
+          clusterName, dnsHostName, lrsServerInfo, maxConcurrentRequests,
+          upstreamTlsContext, isHttp11ProxyAvailable, backendMetricPropagation));
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
@@ -403,15 +459,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       throw new ResourceInvalidException(
           "common-tls-context with validation_context_sds_secret_config is not supported");
     }
-    if (commonTlsContext.hasValidationContextCertificateProvider()) {
-      throw new ResourceInvalidException(
-          "common-tls-context with validation_context_certificate_provider is not supported");
-    }
-    if (commonTlsContext.hasValidationContextCertificateProviderInstance()) {
-      throw new ResourceInvalidException(
-          "common-tls-context with validation_context_certificate_provider_instance is not"
-              + " supported");
-    }
     String certInstanceName = getIdentityCertInstanceName(commonTlsContext);
     if (certInstanceName == null) {
       if (server) {
@@ -423,10 +470,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
             "tls_certificate_provider_instance is unset");
       }
       if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
-        throw new ResourceInvalidException(
-            "tls_certificate_provider_instance is unset");
-      }
-      if (commonTlsContext.hasTlsCertificateCertificateProvider()) {
         throw new ResourceInvalidException(
             "tls_certificate_provider_instance is unset");
       }
@@ -458,7 +501,9 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
             .getDefaultValidationContext();
       }
       if (certificateValidationContext != null) {
-        if (certificateValidationContext.getMatchSubjectAltNamesCount() > 0 && server) {
+        @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
+        int matchSubjectAltNamesCount = certificateValidationContext.getMatchSubjectAltNamesCount();
+        if (matchSubjectAltNamesCount > 0 && server) {
           throw new ResourceInvalidException(
               "match_subject_alt_names only allowed in upstream_tls_context");
         }
@@ -489,10 +534,13 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   private static String getIdentityCertInstanceName(CommonTlsContext commonTlsContext) {
     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
       return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
-    } else if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
-      return commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName();
     }
-    return null;
+    // Fall back to deprecated field (field 11) for backward compatibility with Istio
+    @SuppressWarnings("deprecation")
+    String instanceName = commonTlsContext.hasTlsCertificateCertificateProviderInstance()
+        ? commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName()
+        : null;
+    return instanceName;
   }
 
   private static String getRootCertInstanceName(CommonTlsContext commonTlsContext) {
@@ -509,10 +557,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .hasCaCertificateProviderInstance()) {
         return combinedCertificateValidationContext.getDefaultValidationContext()
             .getCaCertificateProviderInstance().getInstanceName();
-      } else if (combinedCertificateValidationContext
-          .hasValidationContextCertificateProviderInstance()) {
-        return combinedCertificateValidationContext
-            .getValidationContextCertificateProviderInstance().getInstanceName();
+      }
+      // Fall back to deprecated field (field 4) in CombinedValidationContext
+      @SuppressWarnings("deprecation")
+      String instanceName = combinedCertificateValidationContext
+          .hasValidationContextCertificateProviderInstance()
+          ? combinedCertificateValidationContext.getValidationContextCertificateProviderInstance()
+              .getInstanceName()
+          : null;
+      if (instanceName != null) {
+        return instanceName;
       }
     }
     return null;
@@ -525,16 +579,22 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
     abstract ClusterType clusterType();
 
-    abstract ImmutableMap<String, ?> lbPolicyConfig();
+    /** Graceful switch configuration. */
+    Object lbPolicyConfig() {
+      return internalLbPolicyConfig().getValue();
+    }
 
-    // Only valid if lbPolicy is "ring_hash_experimental".
-    abstract long minRingSize();
+    /**
+     * Use {@link #lbPolicyConfig()} instead. This avoids using the LB policy configs' equals() when
+     * XdsClient squelches config updates that are identical to the current value. LB policies are
+     * not required to implement equals for their configs. Instead, {link
+     * #internalLbPolicyConfigJson()} is used to detect changes.
+     */
+    abstract IgnoreEquals<Object> internalLbPolicyConfig();
 
-    // Only valid if lbPolicy is "ring_hash_experimental".
-    abstract long maxRingSize();
-
-    // Only valid if lbPolicy is "least_request_experimental".
-    abstract int choiceCount();
+    /** Use {@code lbPolicyConfig} instead. */
+    @Nullable
+    abstract ImmutableMap<String, ?> internalLbPolicyConfigJson();
 
     // Alternative resource name to be used in EDS requests.
     /// Only valid for EDS cluster.
@@ -562,6 +622,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     @Nullable
     abstract UpstreamTlsContext upstreamTlsContext();
 
+    abstract boolean isHttp11ProxyAvailable();
+
     // List of underlying clusters making of this aggregate cluster.
     // Only valid for AGGREGATE cluster.
     @Nullable
@@ -573,13 +635,18 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
     abstract ImmutableMap<String, Struct> filterMetadata();
 
+    abstract ImmutableMap<String, Object> parsedMetadata();
+
+    @Nullable
+    abstract BackendMetricPropagation backendMetricPropagation();
+
     private static Builder newBuilder(String clusterName) {
       return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
-          .minRingSize(0)
-          .maxRingSize(0)
-          .choiceCount(0)
-          .filterMetadata(ImmutableMap.of());
+          .filterMetadata(ImmutableMap.of())
+          .parsedMetadata(ImmutableMap.of())
+          .isHttp11ProxyAvailable(false)
+          .backendMetricPropagation(null);
     }
 
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
@@ -592,26 +659,34 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     static Builder forEds(String clusterName, @Nullable String edsServiceName,
                           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
                           @Nullable UpstreamTlsContext upstreamTlsContext,
-                          @Nullable OutlierDetection outlierDetection) {
+                          @Nullable OutlierDetection outlierDetection,
+                          boolean isHttp11ProxyAvailable,
+                          BackendMetricPropagation backendMetricPropagation) {
       return newBuilder(clusterName)
           .clusterType(ClusterType.EDS)
           .edsServiceName(edsServiceName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext)
-          .outlierDetection(outlierDetection);
+          .outlierDetection(outlierDetection)
+          .isHttp11ProxyAvailable(isHttp11ProxyAvailable)
+          .backendMetricPropagation(backendMetricPropagation);
     }
 
     static Builder forLogicalDns(String clusterName, String dnsHostName,
                                  @Nullable ServerInfo lrsServerInfo,
                                  @Nullable Long maxConcurrentRequests,
-                                 @Nullable UpstreamTlsContext upstreamTlsContext) {
+                                 @Nullable UpstreamTlsContext upstreamTlsContext,
+                                 boolean isHttp11ProxyAvailable,
+                                 BackendMetricPropagation backendMetricPropagation) {
       return newBuilder(clusterName)
           .clusterType(ClusterType.LOGICAL_DNS)
           .dnsHostName(dnsHostName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
-          .upstreamTlsContext(upstreamTlsContext);
+          .upstreamTlsContext(upstreamTlsContext)
+          .isHttp11ProxyAvailable(isHttp11ProxyAvailable)
+          .backendMetricPropagation(backendMetricPropagation);
     }
 
     enum ClusterType {
@@ -628,10 +703,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       return MoreObjects.toStringHelper(this)
           .add("clusterName", clusterName())
           .add("clusterType", clusterType())
-          .add("lbPolicyConfig", lbPolicyConfig())
-          .add("minRingSize", minRingSize())
-          .add("maxRingSize", maxRingSize())
-          .add("choiceCount", choiceCount())
+          .add("lbPolicyConfigJson", internalLbPolicyConfigJson())
           .add("edsServiceName", edsServiceName())
           .add("dnsHostName", dnsHostName())
           .add("lrsServerInfo", lrsServerInfo())
@@ -650,31 +722,31 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      protected abstract Builder lbPolicyConfig(ImmutableMap<String, ?> lbPolicyConfig);
-
-      Builder roundRobinLbPolicy() {
-        return this.lbPolicyConfig(ImmutableMap.of("round_robin", ImmutableMap.of()));
+      /**
+       * The config to use, and the JSON representation that produced that config. The JSON
+       * representation is only used to detect if the configuration changed, since LB policies don't
+       * have to implement equals() for their parsed configs.
+       */
+      protected Builder lbPolicyConfig(
+          Object gracefulSwitchConfig, ImmutableMap<String, ?> jsonConfig) {
+        return internalLbPolicyConfig(new IgnoreEquals<>(gracefulSwitchConfig))
+            .internalLbPolicyConfigJson(jsonConfig);
       }
 
-      Builder ringHashLbPolicy(Long minRingSize, Long maxRingSize) {
-        return this.lbPolicyConfig(ImmutableMap.of("ring_hash_experimental",
-            ImmutableMap.of("minRingSize", minRingSize.doubleValue(), "maxRingSize",
-                maxRingSize.doubleValue())));
+      protected Builder lbPolicyConfigJsonForTesting(ImmutableMap<String, ?> jsonConfig) {
+        NameResolver.ConfigOrError result =
+            GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+                ImmutableList.of(jsonConfig));
+        if (result.getError() != null) {
+          throw new IllegalArgumentException(
+              "Bad JSON config: " + result.getError() + " json: " + jsonConfig);
+        }
+        return lbPolicyConfig(result.getConfig(), jsonConfig);
       }
 
-      Builder leastRequestLbPolicy(Integer choiceCount) {
-        return this.lbPolicyConfig(ImmutableMap.of("least_request_experimental",
-            ImmutableMap.of("choiceCount", choiceCount.doubleValue())));
-      }
+      protected abstract Builder internalLbPolicyConfig(IgnoreEquals<Object> gracefulSwitchConfig);
 
-      // Private, use leastRequestLbPolicy(int).
-      protected abstract Builder choiceCount(int choiceCount);
-
-      // Private, use ringHashLbPolicy(long, long).
-      protected abstract Builder minRingSize(long minRingSize);
-
-      // Private, use ringHashLbPolicy(long, long).
-      protected abstract Builder maxRingSize(long maxRingSize);
+      protected abstract Builder internalLbPolicyConfigJson(ImmutableMap<String, ?> jsonConfig);
 
       // Private, use CdsUpdate.forEds() instead.
       protected abstract Builder edsServiceName(String edsServiceName);
@@ -688,6 +760,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       // Private, use one of the static factory methods instead.
       protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
 
+      protected abstract Builder isHttp11ProxyAvailable(boolean isHttp11ProxyAvailable);
+
       // Private, use one of the static factory methods instead.
       protected abstract Builder upstreamTlsContext(UpstreamTlsContext upstreamTlsContext);
 
@@ -698,7 +772,43 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
       protected abstract Builder filterMetadata(ImmutableMap<String, Struct> filterMetadata);
 
+      protected abstract Builder parsedMetadata(ImmutableMap<String, Object> parsedMetadata);
+
+      protected abstract Builder backendMetricPropagation(
+          BackendMetricPropagation backendMetricPropagation);
+
       abstract CdsUpdate build();
+    }
+  }
+
+  /** Always equal to this same type. */
+  static final class IgnoreEquals<V> {
+    private final V value;
+
+    IgnoreEquals(V value) {
+      this.value = value;
+    }
+
+    public V getValue() {
+      return value;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof IgnoreEquals)) {
+        return false;
+      }
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      return 0;
+    }
+
+    @Override
+    public String toString() {
+      return "IgnoreEquals{" + value + "}";
     }
   }
 }

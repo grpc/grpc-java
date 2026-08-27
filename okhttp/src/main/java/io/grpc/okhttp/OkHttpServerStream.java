@@ -17,6 +17,7 @@
 package io.grpc.okhttp;
 
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -30,7 +31,6 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
 import java.util.List;
-import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 
 /**

@@ -19,9 +19,9 @@ package io.grpc.binder.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
-import static java.lang.Math.max;
 
 import android.os.Parcel;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Deadline;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -34,7 +34,6 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Sends the set of outbound transactions for a single BinderStream (rpc).
@@ -397,8 +396,7 @@ abstract class Outbound {
     @GuardedBy("this")
     void setDeadline(Deadline deadline) {
       headers.discardAll(TIMEOUT_KEY);
-      long effectiveTimeoutNanos = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
-      headers.put(TIMEOUT_KEY, effectiveTimeoutNanos);
+      headers.put(TIMEOUT_KEY, deadline.timeRemaining(TimeUnit.NANOSECONDS));
     }
   }
 

@@ -1,3 +1,4 @@
+load("@rules_java//java:defs.bzl", "java_library")
 load("@rules_jvm_external//:defs.bzl", "artifact")
 
 java_library(
@@ -6,13 +7,29 @@ java_library(
         "src/main/java/**/*.java",
         "src/context/java/**/*.java",
     ]),
-    javacopts = ["-Xep:DoNotCall:OFF"],  # Remove once requiring Bazel 3.4.0+; allows non-final
     visibility = ["//visibility:public"],
     deps = [
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:failureaccess"),  # future transitive dep of Guava. See #5214
         artifact("com.google.guava:guava"),
-        artifact("org.codehaus.mojo:animal-sniffer-annotations"),
+    ],
+)
+
+java_library(
+    name = "test_fixtures",
+    testonly = 1,
+    srcs = glob([
+        "src/testFixtures/java/io/grpc/**/*.java",
+    ]),
+    visibility = ["//xds:__pkg__"],
+    deps = [
+        "//core",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("com.google.truth:truth"),
+        artifact("junit:junit"),
+        artifact("org.mockito:mockito-core"),
     ],
 )

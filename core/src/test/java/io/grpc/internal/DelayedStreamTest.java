@@ -71,7 +71,7 @@ public class DelayedStreamTest {
   @Mock private ClientStreamListener listener;
   @Mock private ClientStream realStream;
   @Captor private ArgumentCaptor<ClientStreamListener> listenerCaptor;
-  private DelayedStream stream = new DelayedStream();
+  private DelayedStream stream = new DelayedStream("test_op");
 
   @Test
   public void setStream_setAuthority() {
@@ -450,7 +450,7 @@ public class DelayedStreamTest {
     InsightBuilder insight = new InsightBuilder();
     stream.start(listener);
     stream.appendTimeoutInsight(insight);
-    assertThat(insight.toString()).matches("\\[buffered_nanos=[0-9]+\\, waiting_for_connection]");
+    assertThat(insight.toString()).matches("\\[test_op_delay=[0-9]+ns\\, was_still_waiting]");
   }
 
   @Test
@@ -469,7 +469,7 @@ public class DelayedStreamTest {
     InsightBuilder insight = new InsightBuilder();
     stream.appendTimeoutInsight(insight);
     assertThat(insight.toString())
-        .matches("\\[buffered_nanos=[0-9]+, remote_addr=127\\.0\\.0\\.1:443\\]");
+        .matches("\\[test_op_delay=[0-9]+ns, remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
   private void callMeMaybe(Runnable r) {

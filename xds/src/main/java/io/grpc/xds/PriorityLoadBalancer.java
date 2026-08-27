@@ -28,6 +28,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
@@ -73,6 +74,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
   private SubchannelPicker currentPicker;
   // Set to true if currently in the process of handling resolved addresses.
   private boolean handlingResolvedAddresses;
+  static boolean enablePriorityLbChildPolicyCache =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_PRIORITY_LB_CHILD_POLICY_CACHE", false);
 
   PriorityLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -91,13 +94,19 @@ final class PriorityLoadBalancer extends LoadBalancer {
     checkNotNull(config, "missing priority lb config");
     priorityNames = config.priorities;
     priorityConfigs = config.childConfigs;
+    Status status = Status.OK;
     Set<String> prioritySet = new HashSet<>(config.priorities);
     ArrayList<String> childKeys = new ArrayList<>(children.keySet());
     for (String priority : childKeys) {
       if (!prioritySet.contains(priority)) {
         ChildLbState childLbState = children.get(priority);
         if (childLbState != null) {
-          childLbState.deactivate();
+          if (enablePriorityLbChildPolicyCache) {
+            childLbState.deactivate();
+          } else {
+            childLbState.tearDown();
+            children.remove(priority);
+          }
         }
       }
     }
@@ -105,12 +114,18 @@ final class PriorityLoadBalancer extends LoadBalancer {
     for (String priority : priorityNames) {
       ChildLbState childLbState = children.get(priority);
       if (childLbState != null) {
-        childLbState.updateResolvedAddresses();
+        Status newStatus = childLbState.updateResolvedAddresses();
+        if (!newStatus.isOk()) {
+          status = newStatus;
+        }
       }
     }
     handlingResolvedAddresses = false;
-    tryNextPriority();
-    return Status.OK;
+    Status newStatus = tryNextPriority();
+    if (!newStatus.isOk()) {
+      status = newStatus;
+    }
+    return status;
   }
 
   @Override
@@ -140,19 +155,19 @@ final class PriorityLoadBalancer extends LoadBalancer {
     children.clear();
   }
 
-  private void tryNextPriority() {
+  private Status tryNextPriority() {
     for (int i = 0; i < priorityNames.size(); i++) {
       String priority = priorityNames.get(i);
       if (!children.containsKey(priority)) {
         ChildLbState child =
             new ChildLbState(priority, priorityConfigs.get(priority).ignoreReresolution);
         children.put(priority, child);
-        updateOverallState(priority, CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+        // Child is created in CONNECTING with pending failOverTimer
+        updateOverallState(priority, child.connectivityState, child.picker);
         // Calling the child's updateResolvedAddresses() can result in tryNextPriority() being
         // called recursively. We need to be sure to be done with processing here before it is
         // called.
-        child.updateResolvedAddresses();
-        return; // Give priority i time to connect.
+        return child.updateResolvedAddresses(); // Give priority i time to connect.
       }
       ChildLbState child = children.get(priority);
       child.reactivate();
@@ -165,23 +180,26 @@ final class PriorityLoadBalancer extends LoadBalancer {
             children.get(p).deactivate();
           }
         }
-        return;
+        return Status.OK;
       }
-      if (child.failOverTimer != null && child.failOverTimer.isPending()) {
+      if (child.failOverTimer.isPending()) {
         updateOverallState(priority, child.connectivityState, child.picker);
-        return; // Give priority i time to connect.
-      }
-      if (priority.equals(currentPriority) && child.connectivityState != TRANSIENT_FAILURE) {
-        // If the current priority is not changed into TRANSIENT_FAILURE, keep using it.
-        updateOverallState(priority, child.connectivityState, child.picker);
-        return;
+        return Status.OK; // Give priority i time to connect.
       }
     }
-    // TODO(zdapeng): Include error details of each priority.
+    for (int i = 0; i < priorityNames.size(); i++) {
+      String priority = priorityNames.get(i);
+      ChildLbState child = children.get(priority);
+      if (child.connectivityState.equals(CONNECTING)) {
+        updateOverallState(priority, child.connectivityState, child.picker);
+        return Status.OK;
+      }
+    }
     logger.log(XdsLogLevel.DEBUG, "All priority failed");
     String lastPriority = priorityNames.get(priorityNames.size() - 1);
-    SubchannelPicker errorPicker = children.get(lastPriority).picker;
-    updateOverallState(lastPriority, TRANSIENT_FAILURE, errorPicker);
+    ChildLbState child = children.get(lastPriority);
+    updateOverallState(lastPriority, child.connectivityState, child.picker);
+    return Status.OK;
   }
 
   private void updateOverallState(
@@ -207,7 +225,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
     // deactivated.
     @Nullable ScheduledHandle deletionTimer;
     ConnectivityState connectivityState = CONNECTING;
-    SubchannelPicker picker = new FixedResultPicker(PickResult.withNoResult());
+    SubchannelPicker picker = new FixedResultPicker(
+        PickResult.withNoResult("connecting", "priority child state uninitialized"));
 
     ChildLbState(final String priority, boolean ignoreReresolution) {
       this.priority = priority;
@@ -224,11 +243,12 @@ final class PriorityLoadBalancer extends LoadBalancer {
           // The child is deactivated.
           return;
         }
-        picker = new FixedResultPicker(PickResult.withError(
-            Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority)));
         logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
-        currentPriority = null; // reset currentPriority to guarantee failover happen
-        tryNextPriority();
+        Status status = tryNextPriority();
+        if (!status.isOk()) {
+          // A child had a problem with the addresses/config. Request it to be refreshed
+          helper.refreshNameResolution();
+        }
       }
     }
 
@@ -279,10 +299,10 @@ final class PriorityLoadBalancer extends LoadBalancer {
      * resolvedAddresses}, or when priority lb receives a new resolved addresses while the child
      * already exists.
      */
-    void updateResolvedAddresses() {
+    Status updateResolvedAddresses() {
       PriorityLbConfig config =
           (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      lb.handleResolvedAddresses(
+      return lb.acceptResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), priority))
               .setLoadBalancingPolicyConfig(config.childConfigs.get(priority).childConfig)
@@ -309,13 +329,18 @@ final class PriorityLoadBalancer extends LoadBalancer {
         if (!children.containsKey(priority)) {
           return;
         }
+        ConnectivityState oldState = connectivityState;
         connectivityState = newState;
-        picker = newPicker;
+        if (newState == CONNECTING || newState == IDLE) {
+          picker = new PriorityPicker(newPicker, priority);
+        } else {
+          picker = newPicker;
+        }
 
         if (deletionTimer != null && deletionTimer.isPending()) {
           return;
         }
-        if (newState.equals(CONNECTING)) {
+        if (newState.equals(CONNECTING) && !oldState.equals(newState)) {
           if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
             failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
                 executor);
@@ -331,7 +356,11 @@ final class PriorityLoadBalancer extends LoadBalancer {
         // If we are currently handling newly resolved addresses, let's not try to reconfigure as
         // the address handling process will take care of that to provide an atomic config update.
         if (!handlingResolvedAddresses) {
-          tryNextPriority();
+          Status status = tryNextPriority();
+          if (!status.isOk()) {
+            // A child had a problem with the addresses/config. Request it to be refreshed
+            helper.refreshNameResolution();
+          }
         }
       }
 
@@ -339,6 +368,46 @@ final class PriorityLoadBalancer extends LoadBalancer {
       protected Helper delegate() {
         return helper;
       }
+    }
+  }
+
+  private static final class PriorityPicker extends SubchannelPicker {
+    private final SubchannelPicker delegate;
+    private final String priority;
+
+    PriorityPicker(SubchannelPicker delegate, String priority) {
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.priority = checkNotNull(priority, "priority");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      PickResult childResult = delegate.pickSubchannel(args);
+      if (!childResult.hasResult() && childResult.getDelayType() != null) {
+        String childReason = childResult.getDelayReason();
+        String composedType = priority + ":" + childResult.getDelayType();
+        String reason = "waiting on priority group " + priority + " ("
+            + (childReason != null ? childReason : "connecting") + ")";
+        return PickResult.withNoResult(composedType, reason);
+      }
+      return childResult;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      PriorityPicker that = (PriorityPicker) o;
+      return delegate.equals(that.delegate) && priority.equals(that.priority);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(delegate, priority);
     }
   }
 }

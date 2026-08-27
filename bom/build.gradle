@@ -1,40 +1,32 @@
 plugins {
+  id 'java-platform'
   id "maven-publish"
 }
 
 description = 'gRPC: BOM'
 
+gradle.projectsEvaluated {
+  def projectsToInclude = rootProject.subprojects.findAll {
+    return it.name != 'grpc-compiler'
+        && it.plugins.hasPlugin('java')
+        && it.plugins.hasPlugin('maven-publish')
+        && it.tasks.findByName('publishMavenPublicationToMavenRepository')?.enabled
+  }
+  dependencies {
+    constraints {
+      projectsToInclude.each { api it }
+    }
+  }
+}
+
 publishing {
   publications {
     maven(MavenPublication) {
-      // remove all other artifacts since BOM doesn't generates any Jar
-      artifacts = []
-
+      from components.javaPlatform
       pom.withXml {
-        // Generate bom using subprojects
-        def internalProjects = [
-          project.name,
-          'grpc-compiler',
-        ]
-
-        def dependencyManagement = asNode().appendNode('dependencyManagement')
-        def dependencies = dependencyManagement.appendNode('dependencies')
-        rootProject.subprojects.each { subproject ->
-          if (internalProjects.contains(subproject.name)) {
-            return
-          }
-          if (!subproject.hasProperty('publishMavenPublicationToMavenRepository')) {
-            return
-          }
-          if (!subproject.publishMavenPublicationToMavenRepository.enabled) {
-            return
-          }
-          def dependencyNode = dependencies.appendNode('dependency')
-          dependencyNode.appendNode('groupId', subproject.group)
-          dependencyNode.appendNode('artifactId', subproject.name)
-          dependencyNode.appendNode('version', subproject.version)
-        }
+        def dependencies = asNode().dependencyManagement.dependencies.last()
         // add protoc gen (produced by grpc-compiler with different artifact name)
+        // not sure how to express "<type>pom</type>" in gradle, kept in XML
         def dependencyNode = dependencies.appendNode('dependency')
         dependencyNode.appendNode('groupId', project.group)
         dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')

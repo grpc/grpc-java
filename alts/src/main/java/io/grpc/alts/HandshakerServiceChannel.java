@@ -21,10 +21,10 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.net.InetSocketAddress;
@@ -36,14 +36,36 @@ import java.util.concurrent.TimeUnit;
  * application will have at most one connection to the handshaker service.
  */
 final class HandshakerServiceChannel {
+  // Port 8080 is necessary for ALTS handshake.
+  private static final int ALTS_PORT = 8080;
+  private static final String DEFAULT_TARGET = "metadata.google.internal.:8080";
 
   static final Resource<Channel> SHARED_HANDSHAKER_CHANNEL =
-      new ChannelResource("metadata.google.internal.:8080");
-
+      new ChannelResource(getHandshakerTarget(System.getenv("GCE_METADATA_HOST")));
+  
+  /**
+   * Returns handshaker target. When GCE_METADATA_HOST is provided, it might contain port which we
+   * will discard and use ALTS_PORT instead.
+   */
+  static String getHandshakerTarget(String envValue) {
+    if (envValue == null || envValue.isEmpty()) {
+      return DEFAULT_TARGET;
+    }
+    String host = envValue;
+    int portIndex = host.lastIndexOf(':');
+    if (portIndex != -1) {
+      host = host.substring(0, portIndex); // Discard port if specified
+    }
+    return host + ":" + ALTS_PORT; // Utilize ALTS port in all cases
+  }
+  
   /** Returns a resource of handshaker service channel for testing only. */
   static Resource<Channel> getHandshakerChannelForTesting(String handshakerAddress) {
     return new ChannelResource(handshakerAddress);
   }
+
+  private static final boolean EXPERIMENTAL_ALTS_HANDSHAKER_KEEPALIVE_PARAMS =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ALTS_HANDSHAKER_KEEPALIVE_PARAMS", false);
 
   private static class ChannelResource implements Resource<Channel> {
     private final String target;
@@ -55,14 +77,20 @@ final class HandshakerServiceChannel {
     @Override
     public Channel create() {
       /* Use its own event loop thread pool to avoid blocking. */
+      @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
       EventLoopGroup eventGroup =
-          new NioEventLoopGroup(1, new DefaultThreadFactory("handshaker pool", true));
-      ManagedChannel channel = NettyChannelBuilder.forTarget(target)
+          new io.netty.channel.nio.NioEventLoopGroup(
+              1, new DefaultThreadFactory("handshaker pool", true));
+      NettyChannelBuilder channelBuilder =
+          NettyChannelBuilder.forTarget(target)
           .channelType(NioSocketChannel.class, InetSocketAddress.class)
           .directExecutor()
           .eventLoopGroup(eventGroup)
-          .usePlaintext()
-          .build();
+          .usePlaintext();
+      if (EXPERIMENTAL_ALTS_HANDSHAKER_KEEPALIVE_PARAMS) {
+        channelBuilder.keepAliveTime(10, TimeUnit.MINUTES).keepAliveTimeout(10, TimeUnit.SECONDS);
+      }
+      ManagedChannel channel = channelBuilder.build();
       return new EventLoopHoldingChannel(channel, eventGroup);
     }
 

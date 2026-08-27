@@ -34,7 +34,6 @@ import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.internal.SerializingExecutor;
 import java.time.Duration;
 import java.util.concurrent.Executor;
-import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;

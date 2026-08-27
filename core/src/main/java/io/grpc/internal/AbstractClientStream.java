@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
-import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -44,9 +43,9 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * The abstract base class for {@link ClientStream} implementations. Extending classes only need to
- * implement {@link #transportState()} and {@link #abstractClientStreamSink()}. Must only be called
- * from the sending application thread.
+ * The abstract base class for {@link ClientStream} implementations.
+ *
+ * <p>Must only be called from the sending application thread.
  */
 public abstract class AbstractClientStream extends AbstractStream
     implements ClientStream, MessageFramer.Sink {
@@ -102,6 +101,7 @@ public abstract class AbstractClientStream extends AbstractStream
    */
   private volatile boolean cancelled;
 
+  @SuppressWarnings("this-escape")
   protected AbstractClientStream(
       WritableBufferAllocator bufferAllocator,
       StatsTraceContext statsTraceCtx,
@@ -114,7 +114,7 @@ public abstract class AbstractClientStream extends AbstractStream
     this.shouldBeCountedForInUse = GrpcUtil.shouldBeCountedForInUse(callOptions);
     this.useGet = useGet;
     if (!useGet) {
-      framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
+      this.framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
       this.headers = headers;
     } else {
       framer = new GetFramer(headers, statsTraceCtx);
@@ -124,8 +124,7 @@ public abstract class AbstractClientStream extends AbstractStream
   @Override
   public void setDeadline(Deadline deadline) {
     headers.discardAll(TIMEOUT_KEY);
-    long effectiveTimeout = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
-    headers.put(TIMEOUT_KEY, effectiveTimeout);
+    headers.put(TIMEOUT_KEY, deadline.timeRemaining(TimeUnit.NANOSECONDS));
   }
 
   @Override

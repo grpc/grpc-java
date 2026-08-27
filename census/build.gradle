@@ -40,7 +40,7 @@ dependencies {
 }
 
 tasks.named("javadoc").configure {
-    failOnError false  // no public or protected classes found to document
+    failOnError = false  // no public or protected classes found to document
     exclude 'io/grpc/census/internal/**'
     exclude 'io/grpc/census/Internal*'
 }

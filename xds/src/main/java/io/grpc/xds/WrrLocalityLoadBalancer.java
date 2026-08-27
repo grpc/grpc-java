@@ -74,8 +74,8 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
     Map<String, Integer> localityWeights = new HashMap<>();
     for (EquivalentAddressGroup eag : resolvedAddresses.getAddresses()) {
       Attributes eagAttrs = eag.getAttributes();
-      String locality = eagAttrs.get(InternalXdsAttributes.ATTR_LOCALITY_NAME);
-      Integer localityWeight = eagAttrs.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT);
+      String locality = eagAttrs.get(EquivalentAddressGroup.ATTR_LOCALITY_NAME);
+      Integer localityWeight = eagAttrs.get(XdsAttributes.ATTR_LOCALITY_WEIGHT);
 
       if (locality == null) {
         Status unavailableStatus = Status.UNAVAILABLE.withDescription(
@@ -113,12 +113,10 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
     Object switchConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
         lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME),
         new WeightedTargetConfig(weightedPolicySelections));
-    switchLb.handleResolvedAddresses(
+    return switchLb.acceptResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setLoadBalancingPolicyConfig(switchConfig)
             .build());
-
-    return Status.OK;
   }
 
   @Override

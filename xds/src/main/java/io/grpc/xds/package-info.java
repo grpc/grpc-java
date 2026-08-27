@@ -15,7 +15,7 @@
  */
 
 /**
- * Library for gPRC proxyless service mesh using Envoy xDS protocol.
+ * Library for gRPC proxyless service mesh using Envoy xDS protocol.
  *
  * <p>The package currently includes a name resolver plugin and a family of load balancer plugins.
  * A gRPC channel for a target with {@code "xds:"} scheme will load the plugins and a

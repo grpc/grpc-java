@@ -25,6 +25,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import java.util.LinkedHashMap;
@@ -99,9 +100,10 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
         ConfigOrError childConfig = GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
             JsonUtil.getListOfObjects(rawWeightedTarget, "childPolicy"), lbRegistry);
         if (childConfig.getError() != null) {
-          return ConfigOrError.fromError(Status.INTERNAL
-              .withDescription("Could not parse weighted_target's child policy:" + name)
-              .withCause(childConfig.getError().asRuntimeException()));
+          return ConfigOrError.fromError(GrpcUtil.statusWithDetails(
+              Status.Code.INTERNAL,
+              "Could not parse weighted_target's child policy: " + name,
+              childConfig.getError()));
         }
         parsedChildConfigs.put(name, new WeightedPolicySelection(weight, childConfig.getConfig()));
       }

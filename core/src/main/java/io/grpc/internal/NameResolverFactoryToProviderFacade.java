@@ -19,6 +19,7 @@ package io.grpc.internal;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.Uri;
 import java.net.URI;
 
 public class NameResolverFactoryToProviderFacade extends NameResolverProvider {
@@ -31,6 +32,11 @@ public class NameResolverFactoryToProviderFacade extends NameResolverProvider {
 
   @Override
   public NameResolver newNameResolver(URI targetUri, Args args) {
+    return factory.newNameResolver(targetUri, args);
+  }
+
+  @Override
+  public NameResolver newNameResolver(Uri targetUri, Args args) {
     return factory.newNameResolver(targetUri, args);
   }
 

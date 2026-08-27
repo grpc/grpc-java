@@ -1,14 +1,12 @@
 plugins {
     id 'application' // Provide convenience executables for trying out the examples.
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.9.5'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
     id 'java'
 }
 
 repositories {
-    maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/maven2/" }
     mavenCentral()
     mavenLocal()
 }
@@ -18,16 +16,14 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
-def grpcVersion = '1.70.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.25.5'
+def grpcVersion = '1.85.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protocVersion = '3.25.8'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "io.grpc:grpc-netty-shaded:${grpcVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
-
 }
 
 protobuf {

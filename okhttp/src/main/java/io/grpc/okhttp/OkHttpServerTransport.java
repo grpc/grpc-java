@@ -20,8 +20,10 @@ import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABL
 import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalLogId;
@@ -51,6 +53,7 @@ import io.grpc.okhttp.internal.framed.Variant;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -62,7 +65,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.BufferedSource;
 import okio.ByteString;
@@ -91,6 +93,7 @@ final class OkHttpServerTransport implements ServerTransport,
   private static final ByteString TE_TRAILERS = ByteString.encodeUtf8("trailers");
   private static final ByteString CONTENT_TYPE = ByteString.encodeUtf8("content-type");
   private static final ByteString CONTENT_LENGTH = ByteString.encodeUtf8("content-length");
+  private static final ByteString ALLOW = ByteString.encodeUtf8("allow");
 
   private final Config config;
   private final Variant variant = new Http2();
@@ -772,8 +775,9 @@ final class OkHttpServerTransport implements ServerTransport,
       }
 
       if (!POST_METHOD.equals(httpMethod)) {
+        List<Header> extraHeaders = Lists.newArrayList(new Header(ALLOW, POST_METHOD));
         respondWithHttpError(streamId, inFinished, 405, Status.Code.INTERNAL,
-            "HTTP Method is not supported: " + asciiString(httpMethod));
+            "HTTP Method is not supported: " + asciiString(httpMethod), extraHeaders);
         return;
       }
 
@@ -860,6 +864,19 @@ final class OkHttpServerTransport implements ServerTransport,
       // concerned with the window being exceeded at this point.
       in.require(length);
 
+      // connection window update
+      // The connection window must be updated even if the stream is in an errored state.
+      // See RFC 9113, section 6.9
+      connectionUnacknowledgedBytesRead += paddedLength;
+      if (connectionUnacknowledgedBytesRead
+          >= config.flowControlWindow * Utils.DEFAULT_WINDOW_UPDATE_RATIO) {
+        synchronized (lock) {
+          frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);
+          frameWriter.flush();
+        }
+        connectionUnacknowledgedBytesRead = 0;
+      }
+
       synchronized (lock) {
         StreamState stream = streams.get(streamId);
         if (stream == null) {
@@ -882,17 +899,6 @@ final class OkHttpServerTransport implements ServerTransport,
         Buffer buf = new Buffer();
         buf.write(in.getBuffer(), length);
         stream.inboundDataReceived(buf, length, paddedLength - length, inFinished);
-      }
-
-      // connection window update
-      connectionUnacknowledgedBytesRead += paddedLength;
-      if (connectionUnacknowledgedBytesRead
-          >= config.flowControlWindow * Utils.DEFAULT_WINDOW_UPDATE_RATIO) {
-        synchronized (lock) {
-          frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);
-          frameWriter.flush();
-        }
-        connectionUnacknowledgedBytesRead = 0;
       }
     }
 
@@ -947,13 +953,13 @@ final class OkHttpServerTransport implements ServerTransport,
 
     @Override
     public void ping(boolean ack, int payload1, int payload2) {
-      if (!keepAliveEnforcer.pingAcceptable()) {
-        abruptShutdown(ErrorCode.ENHANCE_YOUR_CALM, "too_many_pings",
-            Status.RESOURCE_EXHAUSTED.withDescription("Too many pings from client"), false);
-        return;
-      }
       long payload = (((long) payload1) << 32) | (payload2 & 0xffffffffL);
       if (!ack) {
+        if (!keepAliveEnforcer.pingAcceptable()) {
+          abruptShutdown(ErrorCode.ENHANCE_YOUR_CALM, "too_many_pings",
+              Status.RESOURCE_EXHAUSTED.withDescription("Too many pings from client"), false);
+          return;
+        }
         frameLogger.logPing(OkHttpFrameLogger.Direction.INBOUND, payload);
         synchronized (lock) {
           frameWriter.ping(true, payload1, payload2);
@@ -1066,11 +1072,19 @@ final class OkHttpServerTransport implements ServerTransport,
 
     private void respondWithHttpError(
         int streamId, boolean inFinished, int httpCode, Status.Code statusCode, String msg) {
+      respondWithHttpError(streamId, inFinished, httpCode, statusCode, msg,
+              Collections.emptyList());
+    }
+
+    private void respondWithHttpError(
+        int streamId, boolean inFinished, int httpCode, Status.Code statusCode, String msg,
+        List<Header> extraHeaders) {
       Metadata metadata = new Metadata();
       metadata.put(InternalStatus.CODE_KEY, statusCode.toStatus());
       metadata.put(InternalStatus.MESSAGE_KEY, msg);
       List<Header> headers =
           Headers.createHttpResponseHeaders(httpCode, "text/plain; charset=utf-8", metadata);
+      headers.addAll(extraHeaders);
       Buffer data = new Buffer().writeUtf8(msg);
 
       synchronized (lock) {

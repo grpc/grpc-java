@@ -16,10 +16,15 @@
 
 package io.grpc.binder.internal;
 
+import static com.google.common.util.concurrent.Futures.nonCancellationPropagating;
+
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.Internal;
 import io.grpc.Metadata;
@@ -35,7 +40,6 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /**
@@ -84,6 +88,24 @@ public final class BinderTransportSecurity {
   }
 
   /**
+   * Informs this module that the transport with the specified 'attributes' is terminating.
+   *
+   * <p>Any resources allocated by this module will be released and no further resources will be
+   * allocated. Any ongoing background work will be canceled and no further background work will be
+   * initiated.
+   *
+   * <p>This method completes futures and therefore may execute arbitrary listener code on a
+   * potentially direct Executor. To avoid deadlock, callers must not hold any locks.
+   */
+  @Internal
+  public static void notifyTerminatedUnlocked(Attributes attributes) {
+    TransportAuthorizationState state = attributes.get(TRANSPORT_AUTHORIZATION_STATE);
+    if (state != null) {
+      state.notifyTerminatedUnlocked();
+    }
+  }
+
+  /**
    * Intercepts server calls and ensures they're authorized before allowing them to proceed.
    * Authentication state is fetched from the call attributes, inherited from the transport.
    */
@@ -108,13 +130,10 @@ public final class BinderTransportSecurity {
       Status authStatus;
       try {
         authStatus = Futures.getDone(authStatusFuture);
-      } catch (ExecutionException | CancellationException e) {
-        // Failed futures are treated as an internal error rather than a security rejection.
-        authStatus = Status.INTERNAL.withCause(e);
-        @Nullable String message = e.getMessage();
-        if (message != null) {
-          authStatus = authStatus.withDescription(message);
-        }
+      } catch (ExecutionException e) {
+        authStatus = statusFromFailedAuthorizationFuture(e.getCause());
+      } catch (CancellationException e) {
+        authStatus = statusFromFailedAuthorizationFuture(e);
       }
 
       if (authStatus.isOk()) {
@@ -147,13 +166,17 @@ public final class BinderTransportSecurity {
 
             @Override
             public void onFailure(Throwable t) {
-              call.close(
-                  Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
-                  new Metadata());
+              call.close(statusFromFailedAuthorizationFuture(t), new Metadata());
             }
           },
           executor);
       return listener;
+    }
+
+    private static Status statusFromFailedAuthorizationFuture(Throwable cause) {
+      // The actual failure is retained as the cause for debugging, but peers should see a
+      // uniform transport-level failure instead of the underlying exception message.
+      return Status.INTERNAL.withCause(cause).withDescription("Authorization future failed");
     }
   }
 
@@ -161,11 +184,15 @@ public final class BinderTransportSecurity {
    * Maintains the authorization state for a single transport instance. This class lives for the
    * lifetime of a single transport.
    */
-  private static final class TransportAuthorizationState {
+  @VisibleForTesting
+  static final class TransportAuthorizationState {
     private final int uid;
     private final ServerPolicyChecker serverPolicyChecker;
+    // Holds *all* pending policy check futures and *certain* complete ones that we want to cache.
     private final ConcurrentHashMap<String, ListenableFuture<Status>> serviceAuthorization;
     private final Executor executor;
+
+    private volatile boolean isTerminated;
 
     /**
      * @param executor used for calling into the application. Must outlive the transport.
@@ -182,43 +209,76 @@ public final class BinderTransportSecurity {
     @CheckReturnValue
     ListenableFuture<Status> checkAuthorization(MethodDescriptor<?, ?> method) {
       String serviceName = method.getServiceName();
-      // Only cache decisions if the method can be sampled for tracing,
-      // which is true for all generated methods. Otherwise, programmatically
-      // created methods could cause this cache to grow unbounded.
-      boolean useCache = method.isSampledToLocalTracing();
-      if (useCache) {
-        @Nullable ListenableFuture<Status> authorization = serviceAuthorization.get(serviceName);
-        if (authorization != null) {
-          // Authorization check exists and is a pending or successful future (even if for a
-          // failed authorization).
-          return authorization;
-        }
+      @Nullable
+      ListenableFuture<Status> pendingOrCachedAuthResult = serviceAuthorization.get(serviceName);
+      if (pendingOrCachedAuthResult != null) {
+        return nonCancellationPropagating(pendingOrCachedAuthResult);
       }
-      // Under high load, this may trigger a large number of concurrent authorization checks that
-      // perform essentially the same work and have the potential of exhausting the resources they
-      // depend on. This was a non-issue in the past with synchronous policy checks due to the
-      // fixed-size nature of the thread pool this method runs under.
-      //
-      // TODO(10669): evaluate if there should be at most a single pending authorization check per
-      //  (uid, serviceName) pair at any given time.
-      ListenableFuture<Status> authorization =
-          serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
-      if (useCache) {
-        serviceAuthorization.putIfAbsent(serviceName, authorization);
-        Futures.addCallback(
-            authorization,
-            new FutureCallback<Status>() {
-              @Override
-              public void onSuccess(Status result) {}
 
-              @Override
-              public void onFailure(Throwable t) {
-                serviceAuthorization.remove(serviceName, authorization);
-              }
-            },
-            MoreExecutors.directExecutor());
+      SettableFuture<Status> newPendingAuthResult = SettableFuture.create();
+      ListenableFuture<Status> checkThenActRaceWinner =
+          serviceAuthorization.putIfAbsent(serviceName, newPendingAuthResult);
+      if (checkThenActRaceWinner != null) {
+        // Another thread running this method must have also just saw no entry for serviceName, then
+        // beat us to calling putIfAbsent(). We can only track one check at a time so share theirs.
+        return nonCancellationPropagating(checkThenActRaceWinner);
       }
-      return authorization;
+
+      // We only check isTerminated *after* the new future is visible to other threads in
+      // serviceAuthorization. In case of a race with a simultaneous call to notifyTerminated(),
+      // better to harmlessly cancel the new future twice rather than not cancel it at all.
+      if (!isTerminated) {
+        // If notifyTerminated() already cancelled newPendingAuthResult, setFuture() will forward
+        // that cancellation to its argument so it's safe to ignore the return value here.
+        try {
+          newPendingAuthResult.setFuture(
+              serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName));
+        } catch (Exception e) {  // Not just RuntimeException! Handle the "sneaky" checked case too.
+          newPendingAuthResult.setException(e);
+        }
+      } else {
+        newPendingAuthResult.cancel(false);
+      }
+
+      Futures.addCallback(
+          newPendingAuthResult,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status result) {
+              // Auth checks can be expensive so we want to cache the results. But programmatically
+              // created service names could cause the cache to grow without bound. Conservatively,
+              // we only cache results for codegen service names as there can't be too many of them.
+              if (!method.isSampledToLocalTracing()) {
+                serviceAuthorization.remove(serviceName, newPendingAuthResult);
+              }
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              // Not simply a non-OK auth result but a failure to return any decision at all. Never
+              // cache these so that if the caller retries, we'll retry the auth check as well.
+              serviceAuthorization.remove(serviceName, newPendingAuthResult);
+            }
+          },
+          MoreExecutors.directExecutor());
+
+      return nonCancellationPropagating(newPendingAuthResult);
+    }
+
+    /**
+     * After this method returns, every future ever returned by a prior or concurrent call to
+     * checkAuthorization() is guaranteed to be complete. Every future returned by subsequent call
+     * to checkAuthorization() is also guaranteed to be complete.
+     */
+    void notifyTerminatedUnlocked() {
+      // Any entries added to serviceAuthorization *after* this assignment will be immediately
+      // canceled by the adding thread in checkAuthorization().
+      isTerminated = true;
+
+      // Cancel any entries added to serviceAuthorization *before* the volatile assignment above.
+      for (ListenableFuture<Status> authResult : serviceAuthorization.values()) {
+        authResult.cancel(false); // No-op for cached results (already done).
+      }
     }
   }
 

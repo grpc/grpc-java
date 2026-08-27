@@ -16,17 +16,18 @@
 
 package io.grpc;
 
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import com.google.common.truth.StringSubject;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -36,32 +37,27 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ServiceDescriptorTest {
 
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
-
   @Test
   public void failsOnNullName() {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("name");
-
-    new ServiceDescriptor(null, Collections.<MethodDescriptor<?, ?>>emptyList());
+    List<MethodDescriptor<?, ?>> methods = Collections.emptyList();
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> new ServiceDescriptor(null, methods));
+    assertThat(e).hasMessageThat().isEqualTo("name");
   }
 
   @Test
   public void failsOnNullMethods() {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("methods");
-
-    new ServiceDescriptor("name", (Collection<MethodDescriptor<?, ?>>) null);
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> new ServiceDescriptor("name", (Collection<MethodDescriptor<?, ?>>) null));
+    assertThat(e).hasMessageThat().isEqualTo("methods");
   }
 
   @Test
   public void failsOnNullMethod() {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("method");
-
-    new ServiceDescriptor("name", Collections.<MethodDescriptor<?, ?>>singletonList(null));
+    List<MethodDescriptor<?, ?>> methods = Collections.singletonList(null);
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> new ServiceDescriptor("name", methods));
+    assertThat(e).hasMessageThat().isEqualTo("method");
   }
 
   @Test
@@ -69,15 +65,17 @@ public class ServiceDescriptorTest {
     List<MethodDescriptor<?, ?>> descriptors = Collections.<MethodDescriptor<?, ?>>singletonList(
         MethodDescriptor.<Void, Void>newBuilder()
           .setType(MethodType.UNARY)
-          .setFullMethodName(MethodDescriptor.generateFullMethodName("wrongservice", "method"))
+          .setFullMethodName(MethodDescriptor.generateFullMethodName("wrongService", "method"))
           .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
           .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
           .build());
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("service names");
-
-    new ServiceDescriptor("name", descriptors);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new ServiceDescriptor("fooService", descriptors));
+    StringSubject error = assertThat(e).hasMessageThat();
+    error.contains("service names");
+    error.contains("fooService");
+    error.contains("wrongService");
   }
 
   @Test
@@ -96,10 +94,9 @@ public class ServiceDescriptorTest {
           .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
           .build());
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("duplicate");
-
-    new ServiceDescriptor("name", descriptors);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new ServiceDescriptor("name", descriptors));
+    assertThat(e).hasMessageThat().isEqualTo("duplicate name name/method");
   }
 
   @Test

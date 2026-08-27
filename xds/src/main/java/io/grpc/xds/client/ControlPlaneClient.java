@@ -109,7 +109,7 @@ final class ControlPlaneClient {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.messagePrinter = checkNotNull(messagePrinter, "messagePrinter");
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
-    logId = InternalLogId.allocate("xds-client", serverInfo.target());
+    logId = InternalLogId.allocate("xds-cp-client", serverInfo.target());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -160,6 +160,31 @@ final class ControlPlaneClient {
     }
 
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
+    if (resources == null && !adsStream.sentTypes.contains(resourceType)) {
+      // No subscription for this type on this server, and we have never sent a DiscoveryRequest
+      // of this type on the current stream — the server has no subscription state to clear.
+      //
+      // Per the ResourceStore contract in XdsClient.java, a null return means "no subscription";
+      // an empty collection means wildcard subscription, which is a real subscription and must
+      // not be skipped here.
+      //
+      // We track sent types per-stream rather than gating on `versions` because `versions` is
+      // only populated on ACK. If a watch is canceled after the initial DiscoveryRequest goes
+      // out but before any response is ACKed, `versions` would still have no entry for the
+      // type, and gating on it would suppress the empty unsubscribe — leaving the server with
+      // a stale subscription until the stream resets.
+      //
+      // Without this skip, sendDiscoveryRequests() iterates over every globally-subscribed
+      // resource type when a stream becomes ready and emits an empty DiscoveryRequest for types
+      // that have no subscription on this server. Per A47 (xDS Federation) servers may be
+      // authority-specific (e.g. an EDS-only control plane) and reject DiscoveryRequests for
+      // types they do not handle, tearing down the stream.
+      //
+      // Mirrors grpc-go's behavior in
+      // internal/xds/clients/xdsclient/ads_stream.go:sendExisting, which skips types with no
+      // subscription.
+      return;
+    }
     if (resources == null) {
       resources = Collections.emptyList();
     }
@@ -167,9 +192,10 @@ final class ControlPlaneClient {
     resourceStore.startMissingResourceTimers(resources, resourceType);
 
     if (resources.isEmpty()) {
-      // The resource type no longer has subscribing resources; clean up references to it
+      // The resource type no longer has subscribing resources; clean up references to it, except
+      // for nonces. If the resource type becomes used again the control plane can ignore requests
+      // for old/missing nonces. Old type's nonces are dropped when the ADS stream is restarted.
       versions.remove(resourceType);
-      adsStream.respNonces.remove(resourceType);
     }
   }
 
@@ -308,13 +334,21 @@ final class ControlPlaneClient {
     private boolean responseReceived;
     private boolean sentInitialRequest;
     private boolean closed;
-    // Response nonce for the most recently received discovery responses of each resource type.
+    // Response nonce for the most recently received discovery responses of each resource type URL.
     // Client initiated requests start response nonce with empty string.
     // Nonce in each response is echoed back in the following ACK/NACK request. It is
     // used for management server to identify which response the client is ACKing/NACking.
     // To avoid confusion, client-initiated requests will always use the nonce in
-    // most recently received responses of each resource type.
-    private final Map<XdsResourceType<?>, String> respNonces = new HashMap<>();
+    // most recently received responses of each resource type. Nonces are never deleted from the
+    // map; nonces are only discarded once the stream closes because xds_protocol says "the
+    // management server should not send a DiscoveryResponse for any DiscoveryRequest that has a
+    // stale nonce."
+    private final Map<String, String> respNonces = new HashMap<>();
+    // Resource types for which a DiscoveryRequest has been sent on this stream. Used by
+    // adjustResourceSubscription() to decide whether an empty unsubscribe must be sent on the
+    // wire: the server only has subscription state to clear for types we have actually sent a
+    // request for on this stream. Cleared implicitly when the stream is replaced.
+    private final Set<XdsResourceType<?>> sentTypes = new HashSet<>();
     private final StreamingCall<DiscoveryRequest, DiscoveryResponse> call;
     private final MethodDescriptor<DiscoveryRequest, DiscoveryResponse> methodDescriptor =
         AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod();
@@ -354,6 +388,7 @@ final class ControlPlaneClient {
       }
       DiscoveryRequest request = builder.build();
       call.sendMessage(request);
+      sentTypes.add(type);
       if (logger.isLoggable(XdsLogLevel.DEBUG)) {
         logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", messagePrinter.print(request));
       }
@@ -365,7 +400,7 @@ final class ControlPlaneClient {
     final void sendDiscoveryRequest(XdsResourceType<?> type, Collection<String> resources) {
       logger.log(XdsLogLevel.INFO, "Sending {0} request for resources: {1}", type, resources);
       sendDiscoveryRequest(type, versions.getOrDefault(type, ""), resources,
-          respNonces.getOrDefault(type, ""), null);
+          respNonces.getOrDefault(type.typeUrl(), ""), null);
     }
 
     @Override
@@ -396,6 +431,7 @@ final class ControlPlaneClient {
           boolean isFirstResponse = !responseReceived;
           responseReceived = true;
           inError = false;
+          respNonces.put(response.getTypeUrl(), response.getNonce());
 
           XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
           if (logger.isLoggable(XdsLogLevel.DEBUG)) {
@@ -429,7 +465,6 @@ final class ControlPlaneClient {
                                  String nonce, boolean isFirstResponse) {
       checkNotNull(type, "type");
 
-      respNonces.put(type, nonce);
       ProcessingTracker processingTracker = new ProcessingTracker(
           () -> call.startRecvMessage(), syncContext);
       xdsResponseHandler.handleResourceResponse(type, serverInfo, versionInfo, resources, nonce,
@@ -449,24 +484,14 @@ final class ControlPlaneClient {
         stopwatch.reset();
       }
 
-      // FakeClock in tests isn't thread-safe. Schedule the retry timer before notifying callbacks
-      // to avoid TSAN races, since tests may wait until callbacks are called but then would run
-      // concurrently with the stopwatch and schedule.
-
-      long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
-
-      rpcRetryTimer =
-          syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
-
       Status newStatus = status;
       if (responseReceived) {
         // A closed ADS stream after a successful response is not considered an error. Servers may
         // close streams for various reasons during normal operation, such as load balancing or
-        // underlying connection hitting its max connection age limit  (see gRFC A9).
+        // underlying connection hitting its max connection age limit (see gRFC A9).
         if (!status.isOk()) {
           newStatus = Status.OK;
-          logger.log( XdsLogLevel.DEBUG, "ADS stream closed with error {0}: {1}. However, a "
+          logger.log(XdsLogLevel.DEBUG, "ADS stream closed with error {0}: {1}. However, a "
               + "response was received, so this will not be treated as an error. Cause: {2}",
               status.getCode(), status.getDescription(), status.getCause());
         } else {
@@ -486,9 +511,17 @@ final class ControlPlaneClient {
             newStatus.getCode(), newStatus.getDescription(), newStatus.getCause());
       }
 
-      closed = true;
+      close(newStatus.asException());
+
+      // FakeClock in tests isn't thread-safe. Schedule the retry timer before notifying callbacks
+      // to avoid TSAN races, since tests may wait until callbacks are called but then would run
+      // concurrently with the stopwatch and schedule.
+      long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+      long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
+      rpcRetryTimer =
+          syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
+
       xdsResponseHandler.handleStreamClosed(newStatus, !responseReceived);
-      cleanUp();
     }
 
     private void close(Exception error) {

@@ -18,7 +18,6 @@ package io.grpc.xds.internal.security;
 
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 
 /** Class for utility functions for {@link CommonTlsContext}. */
 public final class CommonTlsContextUtil {
@@ -29,22 +28,11 @@ public final class CommonTlsContextUtil {
     if (commonTlsContext == null) {
       return false;
     }
-    return hasIdentityCertificateProviderInstance(commonTlsContext)
-        || hasCertProviderValidationContext(commonTlsContext);
-  }
-
-  private static boolean hasCertProviderValidationContext(CommonTlsContext commonTlsContext) {
-    if (commonTlsContext.hasCombinedValidationContext()) {
-      CombinedCertificateValidationContext combinedCertificateValidationContext =
-          commonTlsContext.getCombinedValidationContext();
-      return combinedCertificateValidationContext.hasValidationContextCertificateProviderInstance();
-    }
-    return hasValidationProviderInstance(commonTlsContext);
-  }
-
-  private static boolean hasIdentityCertificateProviderInstance(CommonTlsContext commonTlsContext) {
+    @SuppressWarnings("deprecation")
+    boolean hasDeprecatedField = commonTlsContext.hasTlsCertificateCertificateProviderInstance();
     return commonTlsContext.hasTlsCertificateProviderInstance()
-        || commonTlsContext.hasTlsCertificateCertificateProviderInstance();
+        || hasDeprecatedField
+        || hasValidationProviderInstance(commonTlsContext);
   }
 
   private static boolean hasValidationProviderInstance(CommonTlsContext commonTlsContext) {
@@ -52,7 +40,19 @@ public final class CommonTlsContextUtil {
         .hasCaCertificateProviderInstance()) {
       return true;
     }
-    return commonTlsContext.hasValidationContextCertificateProviderInstance();
+    if (commonTlsContext.hasCombinedValidationContext()) {
+      CommonTlsContext.CombinedCertificateValidationContext combined =
+          commonTlsContext.getCombinedValidationContext();
+      if (combined.hasDefaultValidationContext()
+          && combined.getDefaultValidationContext().hasCaCertificateProviderInstance()) {
+        return true;
+      }
+      // Check deprecated field (field 4) in CombinedValidationContext
+      @SuppressWarnings("deprecation")
+      boolean hasDeprecatedField = combined.hasValidationContextCertificateProviderInstance();
+      return hasDeprecatedField;
+    }
+    return false;
   }
 
   /**

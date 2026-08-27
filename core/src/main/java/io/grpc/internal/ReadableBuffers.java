@@ -172,15 +172,6 @@ public final class ReadableBuffers {
     }
 
     @Override
-    public void readBytes(ByteBuffer dest) {
-      Preconditions.checkNotNull(dest, "dest");
-      int length = dest.remaining();
-      checkReadable(length);
-      dest.put(bytes, offset, length);
-      offset += length;
-    }
-
-    @Override
     public void readBytes(OutputStream dest, int length) throws IOException {
       checkReadable(length);
       dest.write(bytes, offset, length);
@@ -260,21 +251,6 @@ public final class ReadableBuffers {
     public void readBytes(byte[] dest, int destOffset, int length) {
       checkReadable(length);
       bytes.get(dest, destOffset, length);
-    }
-
-    @Override
-    public void readBytes(ByteBuffer dest) {
-      Preconditions.checkNotNull(dest, "dest");
-      int length = dest.remaining();
-      checkReadable(length);
-
-      // Change the limit so that only length bytes are available.
-      int prevLimit = bytes.limit();
-      ((Buffer) bytes).limit(bytes.position() + length);
-
-      // Write the bytes and restore the original limit.
-      dest.put(bytes);
-      bytes.limit(prevLimit);
     }
 
     @Override

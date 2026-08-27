@@ -48,4 +48,8 @@ public final class InternalConfiguratorRegistry {
   public static boolean wasSetConfiguratorsCalled() {
     return ConfiguratorRegistry.getDefaultRegistry().wasSetConfiguratorsCalled();
   }
+
+  public static int getConfiguratorsCallCountBeforeSet() {
+    return ConfiguratorRegistry.getDefaultRegistry().getConfiguratorsCallCountBeforeSet();
+  }
 }
