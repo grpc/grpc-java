@@ -26,8 +26,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.Status;
-import io.grpc.StatusException;
-import io.grpc.StatusRuntimeException;
 
 /**
  * Utility functions for adapting {@link ServerCallHandler}s to application service implementation,
@@ -47,14 +45,6 @@ public final class ServerCalls {
    * Creates a {@link ServerCallHandler} for a unary call method of the service.
    *
    * @param method an adaptor to the actual method on the service implementation.
-   * <p>
-   * <h3>Server errors</h3>
-   * If the throwable sent to the server's outbound {@link StreamObserver}'s onError
-   * is a {@link StatusException} or {@link StatusRuntimeException}, that status code will be sent
-   * and UNKNOWN status code otherwise. Its description will be encoded to the stream trailer, but
-   * the cause (which may contain server application's information) will not. After the stream
-   * trailer with END_STREAM is sent, the server side call is considered to be closed.
-   * </p>
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncUnaryCall(
       UnaryMethod<ReqT, RespT> method) {
@@ -65,22 +55,6 @@ public final class ServerCalls {
    * Creates a {@link ServerCallHandler} for a server streaming method of the service.
    *
    * @param method an adaptor to the actual method on the service implementation.
-   * <p>
-   * <h3>Client errors</h3>
-   * The server's request stream observer will receive an
-   * onError callback with a {@link io.grpc.StatusRuntimeException} for the cancellation with the
-   * message 'Client cancelled', and exception cause set to null because the actual exception
-   * passed by the client to onError is never actually transmitted to the server and the server just
-   * receives a RST_STREAM frame indicating cancellation by the client.
-   * </p>
-   * <p>
-   * <h3>Server errors</h3>
-   * If the throwable sent to the server's outbound {@link StreamObserver}'s onError
-   * is a {@link StatusException} or {@link StatusRuntimeException}, that status code will be sent
-   * and UNKNOWN status code otherwise. Its description will be encoded to the stream trailer, but
-   * the cause (which may contain server application's information) will not. After the stream
-   * trailer with END_STREAM is sent, the server side call is considered to be closed.
-   * </p>
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncServerStreamingCall(
       ServerStreamingMethod<ReqT, RespT> method) {
@@ -91,22 +65,6 @@ public final class ServerCalls {
    * Creates a {@link ServerCallHandler} for a client streaming method of the service.
    *
    * @param method an adaptor to the actual method on the service implementation.
-   * <p>
-   * <h3>Client errors</h3>
-   * The server's request stream observer will receive an
-   * onError callback with a {@link io.grpc.StatusRuntimeException} for the cancellation with the
-   * message 'Client cancelled', and exception cause set to null because the actual exception
-   * passed by the client to onError is never actually transmitted to the server and the server just
-   * receives a RST_STREAM frame indicating cancellation by the client.
-   * </p>
-   * <p>
-   * <h3>Server errors</h3>
-   * If the throwable sent to the server's outbound {@link StreamObserver}'s onError
-   * is a {@link StatusException} or {@link StatusRuntimeException}, that status code will be sent
-   * and UNKNOWN status code otherwise. Its description will be encoded to the stream trailer, but
-   * the cause (which may contain server application's information) will not. After the stream
-   * trailer with END_STREAM is sent, the server side call is considered to be closed.
-   * </p>
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncClientStreamingCall(
       ClientStreamingMethod<ReqT, RespT> method) {
@@ -117,22 +75,6 @@ public final class ServerCalls {
    * Creates a {@link ServerCallHandler} for a bidi streaming method of the service.
    *
    * @param method an adaptor to the actual method on the service implementation.
-   * <p>
-   * <h3>Client errors</h3>
-   * The server's request stream observer will receive an
-   * onError callback with a {@link io.grpc.StatusRuntimeException} for the cancellation with the
-   * message 'Client cancelled', and exception cause set to null because the actual exception
-   * passed by the client to onError is never actually transmitted to the server and the server just
-   * receives a RST_STREAM frame indicating cancellation by the client.
-   * </p>
-   * <p>
-   * <h3>Server errors</h3>
-   * If the throwable sent to the server's outbound {@link StreamObserver}'s onError
-   * is a {@link StatusException} or {@link StatusRuntimeException}, that status code will be sent
-   * and UNKNOWN status code otherwise. Its description will be encoded to the stream trailer, but
-   * the cause (which may contain server application's information) will not. After the stream
-   * trailer with END_STREAM is sent, the server side call is considered to be closed.
-   * </p>
    */
   public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncBidiStreamingCall(
       BidiStreamingMethod<ReqT, RespT> method) {
@@ -143,6 +85,20 @@ public final class ServerCalls {
    * Adaptor to a unary call method.
    */
   public interface UnaryMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    /**
+     * Invoke the method.
+     *
+     * @param request the request message from the client
+     * @param responseObserver the observer to receive the single response. Calling {@code
+     *     responseObserver}'s {@link StreamObserver#onCompleted} or {@link
+     *     StreamObserver#onError} is the end of the RPC. {@code onCompleted()} will close the RPC
+     *     with status code OK. {@code onError()} will convert the Throwable to a Status with {@link
+     *     Status#fromThrowable} and trailers with {@link Status#trailersFromThrowable}. The {@link
+     *     Status#getCause} is not sent to the client, except if done by an interceptor. Callers
+     *     generally create a Throwable with {@link Status#asException()}, {@link
+     *     Status#asException(Metadata)}, {@link Status#asRuntimeException()}, or {@link
+     *     Status#asRuntimeException(Metadata)}.
+     */
     @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
   }
 
@@ -150,6 +106,20 @@ public final class ServerCalls {
    * Adaptor to a server streaming method.
    */
   public interface ServerStreamingMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    /**
+     * Invoke the method.
+     *
+     * @param request the request message from the client
+     * @param responseObserver the observer to receive the response stream. Calling {@code
+     *     responseObserver}'s {@link StreamObserver#onCompleted} or {@link
+     *     StreamObserver#onError} is the end of the RPC. {@code onCompleted()} will close the RPC
+     *     with status code OK. {@code onError()} will convert the Throwable to a Status with {@link
+     *     Status#fromThrowable} and trailers with {@link Status#trailersFromThrowable}. The {@link
+     *     Status#getCause} is not sent to the client, except if done by an interceptor. Callers
+     *     generally create a Throwable with {@link Status#asException()}, {@link
+     *     Status#asException(Metadata)}, {@link Status#asRuntimeException()}, or {@link
+     *     Status#asRuntimeException(Metadata)}.
+     */
     @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
   }
 
@@ -157,6 +127,24 @@ public final class ServerCalls {
    * Adaptor to a client streaming method.
    */
   public interface ClientStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    /**
+     * Invoke the method.
+     *
+     * <h3>Client errors</h3>
+     * The Throwable received by the server's request stream observer when converted to a status
+     * with Status.fromThrowable(), always has the status code CANCELLED.
+     *
+     * @param responseObserver the observer to receive the single response. Calling {@code
+     *     responseObserver}'s {@link StreamObserver#onCompleted} or {@link
+     *     StreamObserver#onError} is the end of the RPC. {@code onCompleted()} will close the RPC
+     *     with status code OK. {@code onError()} will convert the Throwable to a Status with {@link
+     *     Status#fromThrowable} and trailers with {@link Status#trailersFromThrowable}. The {@link
+     *     Status#getCause} is not sent to the client, except if done by an interceptor. Callers
+     *     generally create a Throwable with {@link Status#asException()}, {@link
+     *     Status#asException(Metadata)}, {@link Status#asRuntimeException()}, or {@link
+     *     Status#asRuntimeException(Metadata)}.
+     * @return a stream observer for receiving the request stream from the client
+     */
     @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
   }
 
@@ -164,6 +152,24 @@ public final class ServerCalls {
    * Adaptor to a bidirectional streaming method.
    */
   public interface BidiStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    /**
+     * Invoke the method.
+     *
+     * <h3>Client errors</h3>
+     * The Throwable received by the server's request stream observer when converted to a status
+     * with Status.fromThrowable(), always has the status code CANCELLED.
+     *
+     * @param responseObserver the observer to receive the response stream. Calling {@code
+     *     responseObserver}'s {@link StreamObserver#onCompleted} or {@link
+     *     StreamObserver#onError} is the end of the RPC. {@code onCompleted()} will close the RPC
+     *     with status code OK. {@code onError()} will convert the Throwable to a Status with {@link
+     *     Status#fromThrowable} and trailers with {@link Status#trailersFromThrowable}. The {@link
+     *     Status#getCause} is not sent to the client, except if done by an interceptor. Callers
+     *     generally create a Throwable with {@link Status#asException()}, {@link
+     *     Status#asException(Metadata)}, {@link Status#asRuntimeException()}, or {@link
+     *     Status#asRuntimeException(Metadata)}.
+     * @return a stream observer for receiving the request stream from the client
+     */
     @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
   }
 
