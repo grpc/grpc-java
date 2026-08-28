@@ -1431,67 +1431,63 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
+      boolean closeNow = dataPlaneClientCall.getConfig().getObservabilityMode();
+
       if (dataPlaneClientCall.responseDrainComplete.get()) {
-        proceedWithClose();
-        if (!dataPlaneClientCall.getConfig().getObservabilityMode()) {
-          dataPlaneClientCall.closeExtProcStream();
-        }
-        return;
-      }
+        closeNow = true;
+      } else {
+        boolean sendResponseHeaders =
+            dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
+                == ProcessingMode.HeaderSendMode.SEND
+            || dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
+                == ProcessingMode.HeaderSendMode.DEFAULT;
 
-      boolean sendResponseHeaders =
-          dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
-              == ProcessingMode.HeaderSendMode.SEND
-          || dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
-              == ProcessingMode.HeaderSendMode.DEFAULT;
+        boolean sendResponseTrailers =
+            dataPlaneClientCall.getCurrentProcessingMode().getResponseTrailerMode()
+                == ProcessingMode.HeaderSendMode.SEND;
 
-      boolean sendResponseTrailers =
-          dataPlaneClientCall.getCurrentProcessingMode().getResponseTrailerMode()
-              == ProcessingMode.HeaderSendMode.SEND;
-
-      if (trailersOnly.get()) {
-        if (sendResponseHeaders) {
+        if (trailersOnly.get()) {
+          if (sendResponseHeaders) {
+            dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
+                .setResponseHeaders(HttpHeaders.newBuilder()
+                    .setHeaders(
+                        toHeaderMap(
+                            savedTrailers,
+                            dataPlaneClientCall.getConfig().getForwardRulesConfig()))
+                    .setEndOfStream(true)
+                    .build())
+                .build());
+            dataPlaneClientCall.responseTrailersSent.set(true);
+          } else {
+            closeNow = true;
+          }
+        } else if (sendResponseTrailers) {
+          dataPlaneClientCall.getIsProcessingTrailers().set(true);
           dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
-              .setResponseHeaders(HttpHeaders.newBuilder()
-                  .setHeaders(
+              .setResponseTrailers(HttpTrailers.newBuilder()
+                  .setTrailers(
                       toHeaderMap(
                           savedTrailers,
                           dataPlaneClientCall.getConfig().getForwardRulesConfig()))
-                  .setEndOfStream(true)
                   .build())
               .build());
           dataPlaneClientCall.responseTrailersSent.set(true);
         } else {
-          proceedWithClose();
-          if (!dataPlaneClientCall.getConfig().getObservabilityMode()) {
-            dataPlaneClientCall.closeExtProcStream();
-          }
-        }
-      } else if (sendResponseTrailers) {
-        dataPlaneClientCall.getIsProcessingTrailers().set(true);
-        dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
-            .setResponseTrailers(HttpTrailers.newBuilder()
-                .setTrailers(
-                    toHeaderMap(
-                        savedTrailers,
-                        dataPlaneClientCall.getConfig().getForwardRulesConfig()))
-                .build())
-            .build());
-        dataPlaneClientCall.responseTrailersSent.set(true);
-      } else {
-        proceedWithClose();
-        if (!dataPlaneClientCall.getConfig().getObservabilityMode()) {
-          dataPlaneClientCall.closeExtProcStream();
+          closeNow = true;
         }
       }
 
-      if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
+      if (closeNow) {
         proceedWithClose();
-        @SuppressWarnings("unused")
-        ScheduledFuture<?> unused = dataPlaneClientCall.getScheduler().schedule(
-            dataPlaneClientCall::closeExtProcStream,
-            dataPlaneClientCall.getConfig().getDeferredCloseTimeoutNanos(),
-            TimeUnit.NANOSECONDS);
+        if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
+          @SuppressWarnings("unused")
+          ScheduledFuture<?> unused = dataPlaneClientCall.getScheduler().schedule(
+              dataPlaneClientCall::closeExtProcStream,
+              dataPlaneClientCall.getConfig().getDeferredCloseTimeoutNanos(),
+              TimeUnit.NANOSECONDS);
+        } else {
+          dataPlaneClientCall.closeExtProcStream();
+        }
       }
     }
 

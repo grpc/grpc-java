@@ -10236,9 +10236,11 @@ public class ExternalProcessorClientInterceptorTest {
             .build());
 
     try {
+      final AtomicInteger onCloseCallCount = new AtomicInteger(0);
       final CountDownLatch appCloseLatch = new CountDownLatch(1);
       ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
         @Override public void onClose(Status status, Metadata trailers) {
+          onCloseCallCount.incrementAndGet();
           appCloseLatch.countDown();
         }
       };
@@ -10265,6 +10267,7 @@ public class ExternalProcessorClientInterceptorTest {
         fakeClock.forwardTime(1, TimeUnit.SECONDS);
       }
       assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(onCloseCallCount.get()).isEqualTo(1);
 
       // At this point, app received onClose, but sidecar should NOT be completed yet
       assertThat(sidecarCompletedLatch.getCount()).isEqualTo(1);
