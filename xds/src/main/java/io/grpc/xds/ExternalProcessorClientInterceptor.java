@@ -849,13 +849,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      if (passThroughMode.get() || requestDrainComplete.get()) {
+      if (passThroughMode.get()) {
         super.sendMessage(message);
         return;
       }
 
       synchronized (streamLock) {
-        if (passThroughMode.get() || requestDrainComplete.get()) {
+        if (passThroughMode.get()) {
           super.sendMessage(message);
           return;
         }
@@ -1394,6 +1394,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       proceedWithHeaders();
       proceedWithSavedMessages();
       dataPlaneClientCall.drainPendingDrainingMessages();
+      onReadyNotify();
       proceedWithClose();
     }
 

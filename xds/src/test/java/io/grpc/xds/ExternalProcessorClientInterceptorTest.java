@@ -6070,11 +6070,11 @@ public class ExternalProcessorClientInterceptorTest {
     // 4. Assert that proxyCall.isReady() delegates directly to the downstream call
     downstreamReady.set(true);
     assertThat(proxyCall.isReady()).isTrue();
-    assertThat(downstreamIsReadyCallCount.get()).isEqualTo(1);
+    assertThat(downstreamIsReadyCallCount.get()).isEqualTo(2);
 
     downstreamReady.set(false);
     assertThat(proxyCall.isReady()).isFalse();
-    assertThat(downstreamIsReadyCallCount.get()).isEqualTo(2);
+    assertThat(downstreamIsReadyCallCount.get()).isEqualTo(3);
 
     proxyCall.cancel("cleanup", null);
     channelManager.close();
