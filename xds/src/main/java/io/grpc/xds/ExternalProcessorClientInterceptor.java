@@ -913,54 +913,60 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @Override
     public void halfClose() {
       clientHalfCloseStartNanos = System.nanoTime();
-      if (passThroughMode.get() || requestDrainComplete.get()) {
+      if (passThroughMode.get()) {
         if (requestSideClosed.compareAndSet(false, true)) {
           proceedWithHalfClose();
         }
         return;
       }
 
-      pendingHalfClose.set(true);
-
-      if (extProcStreamState.get().isCompleted()) {
+      synchronized (streamLock) {
         if (passThroughMode.get()) {
           if (requestSideClosed.compareAndSet(false, true)) {
             proceedWithHalfClose();
           }
+          return;
         }
-        return;
-      }
 
-      if (requestDraining.get()) {
-        boolean canProceed = false;
-        synchronized (streamLock) {
-          if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE
-              || (!bodyMessageSentToExtProc.get() && pendingDrainingMessages.isEmpty())) {
-            canProceed = true;
-          }
+        pendingHalfClose.set(true);
+
+        if (extProcStreamState.get().isCompleted()) {
+          return;
         }
-        if (canProceed) {
+
+        if (requestDraining.get() || requestDrainComplete.get()) {
+          boolean canProceed = false;
+          if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
+            canProceed = true;
+          } else if (pendingDrainingMessages.isEmpty()) {
+            if (requestDrainComplete.get() || !bodyMessageSentToExtProc.get()) {
+              canProceed = true;
+            }
+          }
+          
+          if (canProceed) {
+            if (requestSideClosed.compareAndSet(false, true)) {
+              proceedWithHalfClose();
+            }
+          }
+          return;
+        }
+
+        if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
           if (requestSideClosed.compareAndSet(false, true)) {
             proceedWithHalfClose();
           }
+          return;
         }
-        return;
-      }
 
-      if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
-        if (requestSideClosed.compareAndSet(false, true)) {
-          proceedWithHalfClose();
-        }
-        return;
+        // Mode is GRPC
+        sendToExtProc(ProcessingRequest.newBuilder()
+            .setRequestBody(HttpBody.newBuilder()
+                .setEndOfStreamWithoutMessage(true)
+                .build())
+            .build());
+        requestEosSent.set(true);
       }
-
-      // Mode is GRPC
-      sendToExtProc(ProcessingRequest.newBuilder()
-          .setRequestBody(HttpBody.newBuilder()
-              .setEndOfStreamWithoutMessage(true)
-              .build())
-          .build());
-      requestEosSent.set(true);
     }
 
     private void cancelDownstream(@Nullable String message, @Nullable Throwable cause) {
