@@ -9020,6 +9020,8 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     final CountDownLatch drainSentLatch = new CountDownLatch(1);
+    final CountDownLatch headersReceivedLatch = new CountDownLatch(1);
+    final CountDownLatch sendDrainLatch = new CountDownLatch(1);
     // External Processor Server
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -9032,10 +9034,20 @@ public class ExternalProcessorClientInterceptorTest {
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasRequestHeaders()) {
-              responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setRequestDrainResponses(true)
-                  .build());
-              drainSentLatch.countDown();
+              headersReceivedLatch.countDown();
+              new Thread(() -> {
+                try {
+                  sendDrainLatch.await();
+                  synchronized (responseObserver) {
+                    responseObserver.onNext(ProcessingResponse.newBuilder()
+                        .setRequestDrainResponses(true)
+                        .build());
+                  }
+                  drainSentLatch.countDown();
+                } catch (Exception e) {
+                  System.out.println("JetskiDebug: error in mock server: " + e);
+                }
+              }).start();
             }
           }
 
@@ -9094,14 +9106,20 @@ public class ExternalProcessorClientInterceptorTest {
     ClientCall<String, String> proxyCall =
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    
+    // Wait for headers to reach mock server
+    assertThat(headersReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // App requests messages early (before drain is received)
+    proxyCall.request(3);
+
+    // Now trigger drain
+    sendDrainLatch.countDown();
 
     // Wait for drain to be processed
     assertThat(drainSentLatch.await(5, TimeUnit.SECONDS)).isTrue();
     // proxyCall.isReady() should remain true during response drain (request path is NOT draining)
     assertThat(proxyCall.isReady()).isTrue();
-
-    // App requests more messages
-    proxyCall.request(3);
 
     // Verify requests are buffered and not sent to data plane
     assertThat(dataPlaneRequestCount.get()).isEqualTo(0);

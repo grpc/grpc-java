@@ -726,6 +726,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void drainPendingRequests() {
+      if (!isResponseSidecarReady()) {
+        return;
+      }
       int toRequest = pendingRequests.getAndSet(0);
       if (toRequest > 0) {
         super.request(toRequest);
@@ -826,6 +829,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (!config.getObservabilityMode() 
           && currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
         super.request(numMessages);
+        return;
+      }
+      if (dataPlaneCallState.get() == DataPlaneCallState.IDLE) {
+        pendingRequests.addAndGet(numMessages);
         return;
       }
       if (!isResponseSidecarReady()) {
@@ -1391,6 +1398,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
       proceedWithHeaders();
       proceedWithSavedMessages();
+      dataPlaneClientCall.drainPendingRequests();
       proceedWithClose();
     }
 
