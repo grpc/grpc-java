@@ -222,6 +222,23 @@ public class BlockingClientCallTest {
   }
 
   @Test
+  public void testCancelDrainsPendingReads() throws Exception {
+    biDiStream = ClientCalls.blockingBidiStreamingCall(channel, BIDI_STREAMING_METHOD,
+        CallOptions.DEFAULT);
+
+    // The server delivering a message queues a read-delivery task in the call executor, which
+    // only runs when the user reads/writes or the call is cancelled
+    testMethod.sendValueToClient(60);
+    assertThat(biDiStream.getExecutor()).isNotEmpty();
+
+    biDiStream.cancel("done reading", null);
+
+    // The queued read task must be processed by cancel() itself; when orphaned it holds the
+    // message's transport buffers, which leak (see #12355)
+    assertThat(biDiStream.getExecutor()).isEmpty();
+  }
+
+  @Test
   public void testIsActivityReady() throws Exception {
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);

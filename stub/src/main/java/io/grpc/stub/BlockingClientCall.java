@@ -241,7 +241,8 @@ public final class BlockingClientCall<ReqT, RespT> {
 
   /**
    * Cancel stream and stop any further writes.  Note that some reads that are in flight may still
-   * happen after the cancel.
+   * happen after the cancel.  Reads that have been received but not yet delivered are processed
+   * when cancelling, releasing their resources.
    *
    * @param message if not {@code null}, will appear as the description of the CANCELLED status
    * @param cause if not {@code null}, will appear as the cause of the CANCELLED status
@@ -249,6 +250,10 @@ public final class BlockingClientCall<ReqT, RespT> {
   public void cancel(String message, Throwable cause) {
     writeClosed = true;
     call.cancel(message, cause);
+    // Reads queued by the transport hold buffers that are only released when their delivery task
+    // runs and observes the cancelled stream.  Nothing else will drain the executor once the user
+    // abandons the call, so the queued tasks must be processed here.
+    executor.drain();
   }
 
   /**
@@ -276,6 +281,11 @@ public final class BlockingClientCall<ReqT, RespT> {
     executor.drain();
     CloseState state = closeState.get();
     return (state == null) ? null : state.status;
+  }
+
+  @VisibleForTesting
+  ThreadSafeThreadlessExecutor getExecutor() {
+    return executor;
   }
 
   /**
