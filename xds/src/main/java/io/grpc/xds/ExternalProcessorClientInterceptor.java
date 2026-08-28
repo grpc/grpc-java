@@ -1064,6 +1064,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (requestDraining.compareAndSet(true, false)) {
         requestDrainComplete.set(true);
         drainPendingDrainingMessages();
+        if (wrappedListener != null) {
+          wrappedListener.onReadyNotify();
+        }
       }
     }
 
@@ -1327,7 +1330,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     void onReadyNotify() {
-      dataPlaneClientCall.getCallContext().run(() -> delegate().onReady());
+      if (dataPlaneClientCall.isReady()) {
+        dataPlaneClientCall.getCallContext().run(() -> delegate().onReady());
+      }
     }
 
     void proceedWithHeaders() {

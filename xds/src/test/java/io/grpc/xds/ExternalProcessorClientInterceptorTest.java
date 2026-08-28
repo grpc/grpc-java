@@ -9185,6 +9185,8 @@ public class ExternalProcessorClientInterceptorTest {
     final CountDownLatch headersReceivedLatch = new CountDownLatch(1);
     final CountDownLatch sendDrainLatch = new CountDownLatch(1);
     final CountDownLatch filterSentDrainCompleteLatch = new CountDownLatch(1);
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
     // External Processor Server
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -9192,6 +9194,7 @@ public class ExternalProcessorClientInterceptorTest {
       @SuppressWarnings("unchecked")
       public StreamObserver<ProcessingRequest> process(
           final StreamObserver<ProcessingResponse> responseObserver) {
+        responseObserverRef.set(responseObserver);
         ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
         return new StreamObserver<ProcessingRequest>() {
           @Override
@@ -9203,6 +9206,7 @@ public class ExternalProcessorClientInterceptorTest {
                   sendDrainLatch.await();
                   synchronized (responseObserver) {
                     responseObserver.onNext(ProcessingResponse.newBuilder()
+                        .setRequestHeaders(HeadersResponse.newBuilder().build())
                         .setRequestDrainRequests(true)
                         .build());
                   }
@@ -9270,7 +9274,8 @@ public class ExternalProcessorClientInterceptorTest {
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    ClientCall.Listener<String> mockListener = Mockito.mock(ClientCall.Listener.class);
+    proxyCall.start(mockListener, new Metadata());
     
     // Wait for headers to reach mock server
     assertThat(headersReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
@@ -9289,9 +9294,30 @@ public class ExternalProcessorClientInterceptorTest {
 
     // Verify requests are now drained to data plane (request drain does not block response path)
     assertThat(dataPlaneRequestCount.get()).isEqualTo(3);
+
+    // Verify onReady was NOT called because request path is draining
+    Mockito.verify(mockListener, Mockito.never()).onReady();
     
     // Wait for filter to send drain_complete to mock server
     assertThat(filterSentDrainCompleteLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Echo drain_complete back to filter to complete handshake
+    synchronized (responseObserverRef.get()) {
+      responseObserverRef.get().onNext(ProcessingResponse.newBuilder()
+          .setRequestBody(BodyResponse.newBuilder()
+              .setResponse(CommonResponse.newBuilder()
+                  .setBodyMutation(BodyMutation.newBuilder()
+                      .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                          .setDrainComplete(true)
+                          .build())
+                      .build())
+                  .build())
+              .build())
+          .build());
+    }
+
+    // Verify onReady IS now called after request drain completes
+    Mockito.verify(mockListener, Mockito.timeout(5000)).onReady();
 
     proxyCall.cancel("Cleanup", null);
     channelManager.close();
