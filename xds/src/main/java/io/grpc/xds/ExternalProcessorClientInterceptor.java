@@ -622,23 +622,27 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         @Override
         public void onCompleted() {
-          boolean requestDrainRequired = currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC
-              && requestBodySentToExtProc.get()
-              && !requestDrainComplete.get()
-              && !requestEosSent.get();
+          boolean requestDrainRequired =
+              currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC
+                  && requestBodySentToExtProc.get()
+                  && !requestDrainComplete.get()
+                  && !requestEosSent.get();
 
-          boolean responseDrainRequired = currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
-              && responseBodySentToExtProc.get()
-              && !responseDrainComplete.get()
-              && !responseTrailersSent.get();
+          boolean responseDrainRequired =
+              currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
+                  && responseBodySentToExtProc.get()
+                  && !responseDrainComplete.get()
+                  && !responseTrailersSent.get();
 
           if (!config.getObservabilityMode() && (requestDrainRequired || responseDrainRequired)) {
             if (markExtProcStreamFailed(extProcStreamState)) {
               synchronized (streamLock) {
                 extProcClientCallRequestObserver = null;
               }
-              cancelDownstream("External processor stream completed without drain",
-                  Status.INTERNAL.withDescription("External processor stream completed without drain")
+              cancelDownstream(
+                  "External processor stream completed without drain",
+                  Status.INTERNAL
+                      .withDescription("External processor stream completed without drain")
                       .asRuntimeException());
               wrappedListener.proceedWithClose();
             }

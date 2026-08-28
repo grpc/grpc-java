@@ -9211,7 +9211,9 @@ public class ExternalProcessorClientInterceptorTest {
                         .build());
                   }
                   drainSentLatch.countDown();
-                } catch (Exception e) {}
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                }
               }).start();
             } else if (request.hasRequestBody()) {
               if (request.getRequestBody().getDrainComplete()) {
@@ -10447,7 +10449,8 @@ public class ExternalProcessorClientInterceptorTest {
     }
     assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
-    assertThat(closedStatus.get().getDescription()).contains("gRPC message compression not supported in ext_proc");
+    assertThat(closedStatus.get().getDescription())
+        .contains("gRPC message compression not supported in ext_proc");
     
     proxyCall.cancel("Cleanup", null);
     channelManager.close();
@@ -10589,7 +10592,8 @@ public class ExternalProcessorClientInterceptorTest {
     // Verify application receives INTERNAL with correct description
     assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
-    assertThat(closedStatus.get().getDescription()).contains("gRPC message compression not supported in ext_proc");
+    assertThat(closedStatus.get().getDescription())
+        .contains("gRPC message compression not supported in ext_proc");
     
     proxyCall.cancel("Cleanup", null);
     channelManager.close();
