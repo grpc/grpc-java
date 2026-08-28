@@ -9022,6 +9022,9 @@ public class ExternalProcessorClientInterceptorTest {
     final CountDownLatch drainSentLatch = new CountDownLatch(1);
     final CountDownLatch headersReceivedLatch = new CountDownLatch(1);
     final CountDownLatch sendDrainLatch = new CountDownLatch(1);
+    final CountDownLatch filterSentDrainCompleteLatch = new CountDownLatch(1);
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
     // External Processor Server
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -9029,6 +9032,7 @@ public class ExternalProcessorClientInterceptorTest {
       @SuppressWarnings("unchecked")
       public StreamObserver<ProcessingRequest> process(
           final StreamObserver<ProcessingResponse> responseObserver) {
+        responseObserverRef.set(responseObserver);
         ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
         return new StreamObserver<ProcessingRequest>() {
           @Override
@@ -9048,6 +9052,10 @@ public class ExternalProcessorClientInterceptorTest {
                   System.out.println("JetskiDebug: error in mock server: " + e);
                 }
               }).start();
+            } else if (request.hasResponseBody()) {
+              if (request.getResponseBody().getDrainComplete()) {
+                filterSentDrainCompleteLatch.countDown();
+              }
             }
           }
 
@@ -9123,6 +9131,27 @@ public class ExternalProcessorClientInterceptorTest {
 
     // Verify requests are buffered and not sent to data plane
     assertThat(dataPlaneRequestCount.get()).isEqualTo(0);
+
+    // Wait for filter to send drain_complete to mock server
+    assertThat(filterSentDrainCompleteLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Echo drain_complete back to filter to complete handshake
+    synchronized (responseObserverRef.get()) {
+      responseObserverRef.get().onNext(ProcessingResponse.newBuilder()
+          .setResponseBody(BodyResponse.newBuilder()
+              .setResponse(CommonResponse.newBuilder()
+                  .setBodyMutation(BodyMutation.newBuilder()
+                      .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                          .setDrainComplete(true)
+                          .build())
+                      .build())
+                  .build())
+              .build())
+          .build());
+    }
+
+    // Verify requests are now drained to data plane
+    assertThat(dataPlaneRequestCount.get()).isEqualTo(3);
     
     proxyCall.cancel("Cleanup", null);
     channelManager.close();
