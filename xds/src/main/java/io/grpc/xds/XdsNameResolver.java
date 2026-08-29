@@ -82,8 +82,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -415,7 +418,7 @@ final class XdsNameResolver extends NameResolver {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
       RoutingConfig routingCfg;
-      RouteData selectedRoute;
+      RefCountedRoute selectedRoute;
       String cluster;
       ClientInterceptor filters;
       Metadata headers = args.getHeaders();
@@ -426,8 +429,8 @@ final class XdsNameResolver extends NameResolver {
           return Result.forError(routingCfg.errorStatus);
         }
         selectedRoute = null;
-        for (RouteData route : routingCfg.routes) {
-          if (RoutingUtils.matchRoute(route.routeMatch, path, headers, random)) {
+        for (RefCountedRoute route : routingCfg.routes) {
+          if (RoutingUtils.matchRoute(route.getRouteData().routeMatch, path, headers, random)) {
             selectedRoute = route;
             break;
           }
@@ -436,14 +439,14 @@ final class XdsNameResolver extends NameResolver {
           return Result.forError(
               Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"));
         }
-        if (selectedRoute.routeAction == null) {
+        if (selectedRoute.getRouteData().routeAction == null) {
           return Result.forError(Status.UNAVAILABLE.withDescription(
               "Could not route RPC to Route with non-forwarding action"));
         }
-        RouteAction action = selectedRoute.routeAction;
+        RouteAction action = selectedRoute.getRouteData().routeAction;
         if (action.cluster() != null) {
           cluster = prefixedClusterName(action.cluster());
-          filters = selectedRoute.filterChoices.get(0);
+          filters = selectedRoute.getRouteData().filterChoices.get(0);
         } else if (action.weightedClusters() != null) {
           // XdsRouteConfigureResource verifies the total weight will not be 0 or exceed uint32
           long totalWeight = 0;
@@ -457,21 +460,29 @@ final class XdsNameResolver extends NameResolver {
             accumulator += weightedCluster.weight();
             if (select < accumulator) {
               cluster = prefixedClusterName(weightedCluster.name());
-              filters = selectedRoute.filterChoices.get(i);
+              filters = selectedRoute.getRouteData().filterChoices.get(i);
               break;
             }
           }
         } else if (action.namedClusterSpecifierPluginConfig() != null) {
           cluster =
               prefixedClusterSpecifierPluginName(action.namedClusterSpecifierPluginConfig().name());
-          filters = selectedRoute.filterChoices.get(0);
+          filters = selectedRoute.getRouteData().filterChoices.get(0);
         } else {
           // updateRoutes() discards routes with unknown actions
           throw new AssertionError();
         }
-      } while (!retainCluster(cluster));
+        if (!retainCluster(cluster)) {
+          continue;
+        }
+        if (!selectedRoute.retain()) {
+          releaseCluster(cluster);
+          continue;
+        }
+        break;
+      } while (true);
 
-      final RouteAction routeAction = selectedRoute.routeAction;
+      final RouteAction routeAction = selectedRoute.getRouteData().routeAction;
       Long timeoutNanos = null;
       if (enableTimeout) {
         timeoutNanos = routeAction.timeoutNano();
@@ -490,6 +501,7 @@ final class XdsNameResolver extends NameResolver {
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
         releaseCluster(cluster);
+        selectedRoute.release();
         return Result.forError(
             parsedServiceConfig.getError().augmentDescription(
                 "Failed to parse service config (method config)"));
@@ -537,12 +549,10 @@ final class XdsNameResolver extends NameResolver {
         }
       }
 
-      return
-          Result.newBuilder()
-              .setConfig(config)
-              .setInterceptor(combineInterceptors(
-                  ImmutableList.of(new ClusterSelectionInterceptor(), filters)))
-              .build();
+      ClientInterceptor refCountedRouteInterceptor = new RefCountedRouteInterceptor(selectedRoute);
+      return Result.newBuilder().setConfig(config).setInterceptor(combineInterceptors(
+          ImmutableList.of(refCountedRouteInterceptor, new ClusterSelectionInterceptor(), filters)))
+          .build();
     }
 
     private boolean retainCluster(String cluster) {
@@ -699,6 +709,10 @@ final class XdsNameResolver extends NameResolver {
       stopped = true;
       xdsDependencyManager.shutdown();
       updateActiveFilters(null);
+      RoutingConfig cfg = XdsNameResolver.this.routingConfig;
+      if (cfg != null) {
+        cfg.close();
+      }
     }
 
     @Override
@@ -767,7 +781,7 @@ final class XdsNameResolver extends NameResolver {
         long httpMaxStreamDurationNano,
         @Nullable List<NamedFilterConfig> filterConfigs) {
       List<Route> routes = virtualHost.routes();
-      ImmutableList.Builder<RouteData> routesData = ImmutableList.builder();
+      ImmutableList.Builder<RefCountedRoute> routesData = ImmutableList.builder();
 
       // Populate all clusters to which requests can be routed to through the virtual host.
       Set<String> clusters = new HashSet<>();
@@ -778,24 +792,32 @@ final class XdsNameResolver extends NameResolver {
       for (Route route : routes) {
         RouteAction action = route.routeAction();
         String prefixedName;
+
+        CleanupCollector collector = new CleanupCollector();
+
         if (action == null) {
-          routesData.add(new RouteData(route.routeMatch(), null, ImmutableList.of()));
+          RouteData pureRouteData = new RouteData(route.routeMatch(), null, ImmutableList.of());
+          routesData.add(new RefCountedRoute(pureRouteData, collector.tasks.build(), syncContext));
         } else if (action.cluster() != null) {
           prefixedName = prefixedClusterName(action.cluster());
           clusters.add(prefixedName);
           clusterNameMap.put(prefixedName, action.cluster());
-          ClientInterceptor filters = createFilters(filterConfigs, virtualHost, route, null);
-          routesData.add(new RouteData(route.routeMatch(), route.routeAction(), filters));
+          ClientInterceptor filters =
+              createFilters(filterConfigs, virtualHost, route, null, collector);
+          RouteData pureRouteData = new RouteData(route.routeMatch(), route.routeAction(), filters);
+          routesData.add(new RefCountedRoute(pureRouteData, collector.tasks.build(), syncContext));
         } else if (action.weightedClusters() != null) {
           ImmutableList.Builder<ClientInterceptor> filterList = ImmutableList.builder();
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
             prefixedName = prefixedClusterName(weightedCluster.name());
             clusters.add(prefixedName);
             clusterNameMap.put(prefixedName, weightedCluster.name());
-            filterList.add(createFilters(filterConfigs, virtualHost, route, weightedCluster));
+            filterList.add(
+                createFilters(filterConfigs, virtualHost, route, weightedCluster, collector));
           }
-          routesData.add(
-              new RouteData(route.routeMatch(), route.routeAction(), filterList.build()));
+          RouteData pureRouteData =
+              new RouteData(route.routeMatch(), route.routeAction(), filterList.build());
+          routesData.add(new RefCountedRoute(pureRouteData, collector.tasks.build(), syncContext));
         } else if (action.namedClusterSpecifierPluginConfig() != null) {
           PluginConfig pluginConfig = action.namedClusterSpecifierPluginConfig().config();
           if (pluginConfig instanceof RlsPluginConfig) {
@@ -804,8 +826,10 @@ final class XdsNameResolver extends NameResolver {
             clusters.add(prefixedName);
             rlsPluginConfigMap.put(prefixedName, (RlsPluginConfig) pluginConfig);
           }
-          ClientInterceptor filters = createFilters(filterConfigs, virtualHost, route, null);
-          routesData.add(new RouteData(route.routeMatch(), route.routeAction(), filters));
+          ClientInterceptor filters =
+              createFilters(filterConfigs, virtualHost, route, null, collector);
+          RouteData pureRouteData = new RouteData(route.routeMatch(), route.routeAction(), filters);
+          routesData.add(new RefCountedRoute(pureRouteData, collector.tasks.build(), syncContext));
         } else {
           // Discard route
         }
@@ -860,7 +884,12 @@ final class XdsNameResolver extends NameResolver {
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
-      routingConfig = new RoutingConfig(xdsConfig, httpMaxStreamDurationNano, routesData.build());
+      RoutingConfig oldConfig = XdsNameResolver.this.routingConfig;
+      XdsNameResolver.this.routingConfig =
+          new RoutingConfig(xdsConfig, httpMaxStreamDurationNano, routesData.build());
+      if (oldConfig != null) {
+        oldConfig.close();
+      }
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).refCount.decrementAndGet();
         if (count == 0) {
@@ -877,7 +906,8 @@ final class XdsNameResolver extends NameResolver {
         @Nullable List<NamedFilterConfig> filterConfigs,
         VirtualHost virtualHost,
         Route route,
-        @Nullable ClusterWeight weightedCluster) {
+        @Nullable ClusterWeight weightedCluster,
+        Filter.ResourceCleanupRegistry cleanupRegistry) {
       if (filterConfigs == null) {
         return new PassthroughClientInterceptor();
       }
@@ -899,7 +929,7 @@ final class XdsNameResolver extends NameResolver {
         Filter filter = activeFilters.get(filterKey);
         checkNotNull(filter, "activeFilters.get(%s)", filterKey);
         ClientInterceptor interceptor =
-            filter.buildClientInterceptor(config, overrideConfig, scheduler);
+            filter.buildClientInterceptor(config, overrideConfig, scheduler, cleanupRegistry);
 
         if (interceptor != null) {
           filterInterceptors.add(interceptor);
@@ -913,7 +943,11 @@ final class XdsNameResolver extends NameResolver {
     }
 
     private void cleanUpRoutes(Status error) {
-      routingConfig = new RoutingConfig(error);
+      RoutingConfig oldConfig = XdsNameResolver.this.routingConfig;
+      XdsNameResolver.this.routingConfig = new RoutingConfig(error);
+      if (oldConfig != null) {
+        oldConfig.close();
+      }
       if (existingClusters != null) {
         for (String cluster : existingClusters) {
           int count = clusterRefs.get(cluster).refCount.decrementAndGet();
@@ -941,11 +975,11 @@ final class XdsNameResolver extends NameResolver {
   private static class RoutingConfig {
     final XdsConfig xdsConfig;
     final long fallbackTimeoutNano;
-    final ImmutableList<RouteData> routes;
+    final ImmutableList<RefCountedRoute> routes;
     final Status errorStatus;
 
     private RoutingConfig(
-        XdsConfig xdsConfig, long fallbackTimeoutNano, ImmutableList<RouteData> routes) {
+        XdsConfig xdsConfig, long fallbackTimeoutNano, ImmutableList<RefCountedRoute> routes) {
       this.xdsConfig = checkNotNull(xdsConfig, "xdsConfig");
       this.fallbackTimeoutNano = fallbackTimeoutNano;
       this.routes = checkNotNull(routes, "routes");
@@ -958,6 +992,24 @@ final class XdsNameResolver extends NameResolver {
       this.routes = null;
       this.errorStatus = checkNotNull(errorStatus, "errorStatus");
       checkArgument(!errorStatus.isOk(), "errorStatus should not be okay");
+    }
+
+    void close() {
+      if (routes != null) {
+        for (RefCountedRoute route : routes) {
+          route.release();
+        }
+      }
+    }
+  }
+
+  /** Collects cleanup tasks registered by filters during route construction. */
+  private static final class CleanupCollector implements Filter.ResourceCleanupRegistry {
+    final ImmutableList.Builder<Runnable> tasks = ImmutableList.builder();
+
+    @Override
+    public void addCleanupTask(Runnable task) {
+      tasks.add(task);
     }
   }
 
@@ -1101,6 +1153,138 @@ final class XdsNameResolver extends NameResolver {
     @Override
     public XdsClient returnObject(XdsClient xdsClient) {
       return xdsClientPool.returnObject(xdsClient);
+    }
+  }
+
+  /**
+   * Wraps a RouteData with reference counting. Held by the control plane (refCount=1).
+   * In-flight RPCs retain +1. When refCount hits 0, runs registered cleanup tasks in syncContext.
+   */
+  @VisibleForTesting
+  static class RefCountedRoute {
+    private static final Logger routeLogger =
+        Logger.getLogger(RefCountedRoute.class.getName());
+    private final RouteData routeData;
+    private final ImmutableList<Runnable> cleanupTasks;
+    private final SynchronizationContext syncContext;
+    // Starts at 1 representing Control Plane configuration ownership
+    private final AtomicInteger refCount = new AtomicInteger(1);
+
+    public RefCountedRoute(
+        RouteData routeData, ImmutableList<Runnable> cleanupTasks,
+        SynchronizationContext syncContext) {
+      this.routeData = checkNotNull(routeData, "routeData");
+      this.cleanupTasks = checkNotNull(cleanupTasks, "cleanupTasks");
+      this.syncContext = checkNotNull(syncContext, "syncContext");
+    }
+
+    public RouteData getRouteData() {
+      return routeData;
+    }
+
+    public boolean retain() {
+      int count;
+      do {
+        count = refCount.get();
+        if (count == 0) {
+          routeLogger.log(
+              Level.WARNING,
+              "RefCountedRoute retain called on a dead route (refCount == 0), "
+                  + "ignoring redundant retain");
+          return false;
+        }
+      } while (!refCount.compareAndSet(count, count + 1));
+      return true;
+    }
+
+    public void release() {
+      int count = refCount.decrementAndGet();
+      if (count < 0) {
+        throw new AssertionError();
+      }
+      if (count == 0) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (refCount.get() != 0) {
+              throw new AssertionError();
+            }
+            for (Runnable task : cleanupTasks) {
+              try {
+                task.run();
+              } catch (Throwable t) {
+                routeLogger.log(
+                    Level.SEVERE, "Exception running cleanup task", t);
+              }
+            }
+          }
+        });
+      }
+    }
+  }
+
+  /**
+   * Standalone interceptor guaranteeing reliable RefCountedRoute release
+   * on stream close or early cancellation.
+   */
+  @VisibleForTesting
+  static final class RefCountedRouteInterceptor implements ClientInterceptor {
+    private final RefCountedRoute refCountedRoute;
+
+    RefCountedRouteInterceptor(RefCountedRoute refCountedRoute) {
+      this.refCountedRoute = refCountedRoute;
+    }
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      final AtomicBoolean released = new AtomicBoolean(false);
+
+      try {
+        ClientCall<ReqT, RespT> call = next.newCall(method, callOptions);
+        return new SimpleForwardingClientCall<ReqT, RespT>(call) {
+          @Override
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            try {
+              super.start(
+                  new SimpleForwardingClientCallListener<RespT>(responseListener) {
+                    @Override
+                    public void onClose(Status status, Metadata trailers) {
+                      try {
+                        super.onClose(status, trailers);
+                      } finally {
+                        if (released.compareAndSet(false, true)) {
+                          refCountedRoute.release();
+                        }
+                      }
+                    }
+                  },
+                  headers);
+            } catch (Throwable t) {
+              if (released.compareAndSet(false, true)) {
+                refCountedRoute.release();
+              }
+              throw t;
+            }
+          }
+
+          @Override
+          public void cancel(String message, Throwable cause) {
+            try {
+              super.cancel(message, cause);
+            } finally {
+              if (released.compareAndSet(false, true)) {
+                refCountedRoute.release();
+              }
+            }
+          }
+        };
+      } catch (Throwable t) {
+        if (released.compareAndSet(false, true)) {
+          refCountedRoute.release();
+        }
+        throw t;
+      }
     }
   }
 

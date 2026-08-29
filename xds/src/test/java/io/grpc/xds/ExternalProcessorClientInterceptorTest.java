@@ -317,7 +317,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorClientInterceptor interceptor = (ExternalProcessorClientInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler, task -> { });
 
     assertThat(interceptor.getFilterConfig().getExternalProcessor().getGrpcService()
         .getGoogleGrpc().getTargetUri()).isEqualTo("in-process:///override");
@@ -364,7 +364,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorClientInterceptor interceptor = (ExternalProcessorClientInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler, task -> { });
 
     assertThat(interceptor.getFilterConfig().getFailureModeAllow()).isTrue();
   }
@@ -406,7 +406,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorClientInterceptor interceptor = (ExternalProcessorClientInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler, task -> { });
     ExternalProcessor mergedProto = interceptor.getFilterConfig().getExternalProcessor();
 
     assertThat(mergedProto.getRequestAttributesList()).containsExactly("attr3");
@@ -445,7 +445,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorClientInterceptor interceptor = (ExternalProcessorClientInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler, task -> { });
 
     ProcessingMode mergedMode = 
         interceptor.getFilterConfig().getExternalProcessor().getProcessingMode();
@@ -492,7 +492,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorClientInterceptor interceptor = (ExternalProcessorClientInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler, task -> { });
 
     ExternalProcessorFilterConfig mergedConfig = interceptor.getFilterConfig();
     assertThat(mergedConfig.getFailureModeAllow()).isTrue();
@@ -527,7 +527,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorClientInterceptor interceptor = (ExternalProcessorClientInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler, task -> { });
 
     ExternalProcessorFilterConfig mergedConfig = interceptor.getFilterConfig();
     assertThat(mergedConfig.getFailureModeAllow()).isTrue();
@@ -558,7 +558,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorClientInterceptor interceptor = (ExternalProcessorClientInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler, task -> { });
 
     assertThat(interceptor.getFilterConfig().getDisableImmediateResponse()).isTrue();
   }
@@ -590,7 +590,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorClientInterceptor interceptor = (ExternalProcessorClientInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler, task -> { });
 
     assertThat(interceptor.getFilterConfig().getMutationRulesConfig().get().disallowAll())
         .isTrue();
@@ -618,7 +618,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorClientInterceptor interceptor = (ExternalProcessorClientInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler, task -> { });
 
     assertThat(interceptor.getFilterConfig().getDeferredCloseTimeoutNanos())
         .isEqualTo(TimeUnit.SECONDS.toNanos(10));
@@ -9011,7 +9011,8 @@ public class ExternalProcessorClientInterceptorTest {
         provider.parseFilterConfig(Any.pack(proto), filterContext);
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
-    ClientInterceptor interceptor = filter.buildClientInterceptor(filterConfig, null, scheduler);
+    ClientInterceptor interceptor =
+        filter.buildClientInterceptor(filterConfig, null, scheduler, task -> { });
 
     MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
     dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
@@ -9185,7 +9186,8 @@ public class ExternalProcessorClientInterceptorTest {
         provider.parseFilterConfig(Any.pack(proto), filterContext);
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
-    ClientInterceptor interceptor = filter.buildClientInterceptor(filterConfig, null, scheduler);
+    ClientInterceptor interceptor =
+        filter.buildClientInterceptor(filterConfig, null, scheduler, task -> { });
 
     MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
     dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
