@@ -1,0 +1,2 @@
+-dontnote io.grpc.okhttp.internal.Platform
+-dontnote io.grpc.okhttp.OkHttpProtocolNegotiator
