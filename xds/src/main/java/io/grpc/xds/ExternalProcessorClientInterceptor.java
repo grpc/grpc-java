@@ -390,13 +390,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       this.backendService = checkNotNull(backendService, "backendService");
     }
 
-    private void activateCall() {
+    private boolean activateCall() {
       if ((extProcStreamState.get() == ExtProcStreamState.FAILED
               && !config.getFailureModeAllow()
               && !config.getObservabilityMode())
           || !dataPlaneCallState.compareAndSet(
               DataPlaneCallState.IDLE, DataPlaneCallState.ACTIVE)) {
-        return;
+        return false;
       }
       if (clientHeadersStartNanos > 0) {
         long durationNanos = System.nanoTime() - clientHeadersStartNanos;
@@ -409,6 +409,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
       drainPendingRequests();
       onReadyNotify();
+      return true;
     }
 
     private void recordDuration(DoubleHistogramMetricInstrument instrument, long durationNanos) {
@@ -1348,8 +1349,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void handleFailOpen(DataPlaneListener listener) {
-      activateCall();
-      drainPendingRequests();
+      if (!activateCall()) {
+        drainPendingRequests();
+      }
       listener.unblockAfterStreamComplete();
       closeExtProcStream();
     }
