@@ -905,7 +905,10 @@ final class XdsNameResolver extends NameResolver {
       }
 
       ImmutableList.Builder<ClientInterceptor> withRawMessage = ImmutableList.builder();
-      withRawMessage.add(new RawMessageClientInterceptor());
+      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)
+          || GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", false)) {
+        withRawMessage.add(new RawMessageClientInterceptor());
+      }
       withRawMessage.addAll(filterInterceptors.build());
       return combineInterceptors(withRawMessage.build());
     }
