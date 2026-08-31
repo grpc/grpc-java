@@ -669,15 +669,13 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
     }
 
     void triggerEvent(Object event) {
-      ServerStreamListener localListener;
       synchronized (this) {
         if (isClosed()) {
           return;
         }
-        localListener = listener;
-      }
-      if (localListener != null) {
-        localListener.triggerEvent(event);
+        if (listener != null) {
+          listener.triggerEvent(event);
+        }
       }
     }
 
