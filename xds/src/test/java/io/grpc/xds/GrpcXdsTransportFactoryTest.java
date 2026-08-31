@@ -22,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
@@ -31,6 +32,7 @@ import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelConfigurator;
+import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompositeCallCredentials;
@@ -113,7 +115,7 @@ public class GrpcXdsTransportFactoryTest {
     XdsTransportFactory.XdsTransport xdsTransport =
         new GrpcXdsTransportFactory(null, null)
             .create(
-                Bootstrapper.ServerInfo.create(
+                createServerInfo(
                     "localhost:" + server.getPort(), InsecureChannelCredentials.create()));
     MethodDescriptor<DiscoveryRequest, DiscoveryResponse> methodDescriptor =
         AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod();
@@ -188,7 +190,7 @@ public class GrpcXdsTransportFactoryTest {
 
     // Create Transport
     XdsTransportFactory.XdsTransport transport = factory.create(
-        Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
+        createServerInfo("localhost:8080", InsecureChannelCredentials.create()));
 
     // Create a Call to trigger interceptors
     MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
@@ -224,7 +226,7 @@ public class GrpcXdsTransportFactoryTest {
 
     // Create Transport (triggers channel creation)
     XdsTransportFactory.XdsTransport transport = factory.create(
-        Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
+        createServerInfo("localhost:8080", InsecureChannelCredentials.create()));
 
     // Verify Configurer was accessed and applied
     assertThat(called[0]).isTrue();
@@ -267,7 +269,7 @@ public class GrpcXdsTransportFactoryTest {
       };
       GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(null, configurer);
       XdsTransportFactory.XdsTransport transport = factory.create(
-          Bootstrapper.ServerInfo.create(
+          createServerInfo(
               "test-xds-transport://localhost:8080", InsecureChannelCredentials.create()));
       assertNotNull(capturedArgs.get());
       ChannelConfigurator childConfigurator = capturedArgs.get().getChildChannelConfigurator();
@@ -295,7 +297,7 @@ public class GrpcXdsTransportFactoryTest {
 
     try {
       factory.create(
-          Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
+          createServerInfo("localhost:8080", InsecureChannelCredentials.create()));
       org.junit.Assert.fail("Expected RuntimeException");
     } catch (RuntimeException e) {
       assertThat(e).isSameInstanceAs(testException);
@@ -375,8 +377,11 @@ public class GrpcXdsTransportFactoryTest {
     // 1. Both factory and server callCredentials are non-null
     GrpcXdsTransportFactory factoryBoth = new GrpcXdsTransportFactory(factoryCreds, null);
     Bootstrapper.ServerInfo serverInfoBoth = Bootstrapper.ServerInfo.create(
-        "localhost:8080", InsecureChannelCredentials.create(),
-        false, false, false, false, serverCreds);
+        "localhost:8080",
+        ImmutableMap.of(
+            "grpc.channel_credentials", InsecureChannelCredentials.create(),
+            "grpc.call_credentials", serverCreds),
+        false, false, false, false);
     XdsTransportFactory.XdsTransport transportBoth = factoryBoth.create(serverInfoBoth);
     CallCredentials combined = getCallCredentials(transportBoth);
     assertThat(combined).isInstanceOf(CompositeCallCredentials.class);
@@ -387,7 +392,7 @@ public class GrpcXdsTransportFactoryTest {
 
     // 2. Server credentials are null -> resolves to factory credentials
     GrpcXdsTransportFactory factoryOnly = new GrpcXdsTransportFactory(factoryCreds, null);
-    Bootstrapper.ServerInfo serverInfoNoCreds = Bootstrapper.ServerInfo.create(
+    Bootstrapper.ServerInfo serverInfoNoCreds = createServerInfo(
         "localhost:8080", InsecureChannelCredentials.create());
     XdsTransportFactory.XdsTransport transportFactoryOnly = factoryOnly.create(serverInfoNoCreds);
     assertThat(getCallCredentials(transportFactoryOnly)).isSameInstanceAs(factoryCreds);
@@ -396,11 +401,20 @@ public class GrpcXdsTransportFactoryTest {
     // 3. Factory credentials are null -> resolves to server credentials
     GrpcXdsTransportFactory factoryNone = new GrpcXdsTransportFactory(null, null);
     Bootstrapper.ServerInfo serverInfoWithCreds = Bootstrapper.ServerInfo.create(
-        "localhost:8080", InsecureChannelCredentials.create(),
-        false, false, false, false, serverCreds);
+        "localhost:8080",
+        ImmutableMap.of(
+            "grpc.channel_credentials", InsecureChannelCredentials.create(),
+            "grpc.call_credentials", serverCreds),
+        false, false, false, false);
     XdsTransportFactory.XdsTransport transportServerOnly = factoryNone.create(serverInfoWithCreds);
     assertThat(getCallCredentials(transportServerOnly)).isSameInstanceAs(serverCreds);
     transportServerOnly.shutdown();
+  }
+
+  private static Bootstrapper.ServerInfo createServerInfo(
+      String target, ChannelCredentials credentials) {
+    return Bootstrapper.ServerInfo.create(
+        target, ImmutableMap.of("grpc.channel_credentials", credentials));
   }
 }
 

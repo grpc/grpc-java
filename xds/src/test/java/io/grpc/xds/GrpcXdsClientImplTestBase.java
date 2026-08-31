@@ -365,8 +365,8 @@ public abstract class GrpcXdsClientImplTestBase {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
-        true, false, false, null);
+    xdsServerInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
+        true, false, false);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -375,12 +375,12 @@ public abstract class GrpcXdsClientImplTestBase {
                 "authority.xds.com",
                 AuthorityInfo.create(
                     "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
@@ -1556,8 +1556,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void ldsResourceDeleted_failOnDataErrors_true() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
-        true, false, true, null);
+    xdsServerInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -1566,7 +1566,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of())
             .build();
@@ -1617,8 +1617,8 @@ public abstract class GrpcXdsClientImplTestBase {
   public void ldsResourceDeleted_failOnDataErrors_false() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
 
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
-        true, false, false, null);
+    xdsServerInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, false);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -1627,7 +1627,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of())
             .build();
@@ -1680,8 +1680,8 @@ public abstract class GrpcXdsClientImplTestBase {
   public void ldsResourceDeleted_failOnDataErrorsIgnoredWithoutEnvVar() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
 
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
-        true, false, true, null);
+    xdsServerInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -1690,7 +1690,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of())
             .build();
@@ -3243,8 +3243,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void cdsResourceDeleted_failOnDataErrors_true() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
-        true, false, true, null);
+    xdsServerInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -3253,7 +3253,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of())
             .build();
@@ -3302,8 +3302,8 @@ public abstract class GrpcXdsClientImplTestBase {
   public void cdsResourceDeleted_failOnDataErrors_false() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
     // Set failOnDataErrors to false for this test case.
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
-        true, false, false, null);
+    xdsServerInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, false);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -3312,7 +3312,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of())
             .build();
@@ -3369,8 +3369,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void ldsResourceNacked_withFailOnDataErrors_dropsResource() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
-        true, false, true, null);
+    xdsServerInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -3418,8 +3418,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void ldsResourceNacked_withFailOnDataErrorsDisabled_isAmbientError() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
-        true, false, false, null);
+    xdsServerInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, false);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -3851,8 +3851,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void resourceTimerIsTransientError_schedulesExtendedTimeout() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    ServerInfo serverInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS,
-        false, true, true, false, null);
+    ServerInfo serverInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS,
+        false, true, true, false);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(serverInfo))
@@ -3861,7 +3861,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of())
             .build();
@@ -3896,8 +3896,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void resourceTimerIsTransientError_callsOnErrorUnavailable() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
-        true, true, false, null);
+    xdsServerInfo = createServerInfo(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
+        true, true, false);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -3906,12 +3906,12 @@ public abstract class GrpcXdsClientImplTestBase {
                 "authority.xds.com",
                 AuthorityInfo.create(
                     "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
-                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    ImmutableList.of(createServerInfo(
                         SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.of())))
@@ -5126,8 +5126,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
   private BootstrapInfo buildBootStrap(String serverUri) {
 
-    ServerInfo xdsServerInfo = ServerInfo.create(serverUri, CHANNEL_CREDENTIALS,
-        ignoreResourceDeletion(), true, false, false, null);
+    ServerInfo xdsServerInfo = createServerInfo(serverUri, CHANNEL_CREDENTIALS,
+        ignoreResourceDeletion(), true, false, false);
 
     return Bootstrapper.BootstrapInfo.builder()
         .servers(Collections.singletonList(xdsServerInfo))
@@ -5136,12 +5136,12 @@ public abstract class GrpcXdsClientImplTestBase {
             "authority.xds.com",
             AuthorityInfo.create(
                 "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
-                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                ImmutableList.of(createServerInfo(
                     SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
             "",
             AuthorityInfo.create(
                 "xdstp:///envoy.config.listener.v3.Listener/%s",
-                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                ImmutableList.of(createServerInfo(
                     SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
         .certProviders(ImmutableMap.of("cert-instance-name",
             CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
@@ -5428,5 +5428,16 @@ public abstract class GrpcXdsClientImplTestBase {
     public int hashCode() {
       return Objects.hash(value);
     }
+  }
+
+  private static ServerInfo createServerInfo(String target, ChannelCredentials credentials) {
+    return ServerInfo.create(target, ImmutableMap.of("grpc.channel_credentials", credentials));
+  }
+
+  private static ServerInfo createServerInfo(String target, ChannelCredentials credentials,
+      boolean ignoreResourceDeletion, boolean useModernBootstrap, boolean enableFallback,
+      boolean failoverToNextServer) {
+    return ServerInfo.create(target, ImmutableMap.of("grpc.channel_credentials", credentials),
+        ignoreResourceDeletion, useModernBootstrap, enableFallback, failoverToNextServer);
   }
 }
