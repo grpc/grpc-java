@@ -343,10 +343,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final String backendService;
     private volatile Context callContext = Context.ROOT;
 
-    private long clientHeadersStartNanos;
-    private long clientHalfCloseStartNanos;
-    private long serverHeadersStartNanos;
-    private long serverTrailersStartNanos;
+    private volatile long clientHeadersStartNanos;
+    private volatile long clientHalfCloseStartNanos;
+    private volatile long serverHeadersStartNanos;
+    private volatile long serverTrailersStartNanos;
 
     private boolean protocolConfigSent = false;
     private ImmutableMap<String, Struct> collectedAttributes;
@@ -362,6 +362,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
     final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
     final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
+    private final AtomicBoolean downstreamCancelled = new AtomicBoolean(false);
 
     protected DataPlaneClientCall(
         DataPlaneDelayedCall<InputStream, InputStream> delayedCall,
@@ -449,7 +450,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           }
           activateCall();
           markExtProcStreamFailed(extProcStreamState);
-          delayedCall.cancel("gRPC message compression not supported in ext_proc", ex);
+          cancelDownstream("gRPC message compression not supported in ext_proc", ex);
           closeExtProcStream();
           return false;
         }
@@ -654,7 +655,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               handleFailOpen(wrappedListener);
             } else {
               String message = "External processor stream failed";
-              delayedCall.cancel(message, t);
+              cancelDownstream(message, t);
               wrappedListener.proceedWithClose();
             }
           }
@@ -851,7 +852,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           handleFailOpen(wrappedListener);
         } else {
           String message = "External processor stream failed";
-          delayedCall.cancel(message, t);
+          cancelDownstream(message, t);
           wrappedListener.proceedWithClose();
         }
       }
@@ -873,7 +874,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       boolean isPassThrough;
       boolean isCompleted;
       boolean isDraining;
-      
+
       synchronized (streamLock) {
         isPassThrough = passThroughMode.get();
         ExtProcStreamState state = extProcStreamState.get();
@@ -885,12 +886,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         onReadyNotify();
         return;
       }
-      
+
       if (isCompleted) {
         drainPendingDrainingMessages();
         return;
       }
-      
+
       // Normal or Draining operation
       drainPendingUpstreamBodyMessages();
       if (!isDraining) {
@@ -1079,7 +1080,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
 
       if (extProcStreamState.get().isCompleted()) {
-        pendingHalfClose.set(true);
+        if (passThroughMode.get()) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
+        } else {
+          pendingHalfClose.set(true);
+        }
         return;
       }
 
@@ -1111,6 +1118,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
+    private void cancelDownstream(@Nullable String message, @Nullable Throwable cause) {
+      if (downstreamCancelled.compareAndSet(false, true)) {
+        delayedCall.cancel(message, cause);
+      }
+    }
+
     @Override
     public void cancel(@Nullable String message, @Nullable Throwable cause) {
       synchronized (streamLock) {
@@ -1122,7 +1135,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                   .asRuntimeException());
         }
       }
-      super.cancel(message, cause);
+      cancelDownstream(message, cause);
     }
 
     private void handleRequestBodyResponse(BodyResponse bodyResponse) {

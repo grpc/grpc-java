@@ -101,6 +101,9 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
 
   @Override
   public void close() {
+    if (closed) {
+      return;
+    }
     closed = true;
     executorService = scheduledExecutorPool.returnObject(executorService);
     offloadExecutor = offloadExecutorPool.returnObject(offloadExecutor);

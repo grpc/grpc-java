@@ -248,7 +248,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     serverInfo =
         Bootstrapper.ServerInfo.create(
-            "test_target", Collections.emptyMap(), false, true, false, false);
+            "test_target", Collections.emptyMap(), false, true, false, false, null);
     
     filterContext = Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(bootstrapInfo)
@@ -19802,9 +19802,15 @@ public class ExternalProcessorClientInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                responseObserver.onNext(ProcessingResponse.newBuilder()
-                    .setRequestHeaders(HeadersResponse.newBuilder().build())
-                    .build());
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
               }
 
               @Override

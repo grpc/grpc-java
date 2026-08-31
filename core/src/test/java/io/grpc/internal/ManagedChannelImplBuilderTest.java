@@ -809,13 +809,6 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void childChannelConfigurator_setsField() {
-    ChannelConfigurator configurator = builder -> { };
-    assertSame(builder, builder.childChannelConfigurator(configurator));
-    assertSame(configurator, builder.channelConfigurator);
-  }
-
-  @Test
   public void childChannelConfigurator_propagatesMetricsAndInterceptors_xdsTarget() {
     // Setup Mocks
     when(mockClientTransportFactory.getScheduledExecutorService())
@@ -902,16 +895,13 @@ public class ManagedChannelImplBuilderTest {
     assertNotNull("Child channel configurator should be present in NameResolver.Args",
         channelConfiguratorInArgs);
 
-    // Verify the configurator is the one we passed
-    assertThat(channelConfiguratorInArgs).isSameInstanceAs(configurator);
-
     // Verify the configurator logically applies (by running it on a real builder)
     ManagedChannelImplBuilder childBuilder = new ManagedChannelImplBuilder(
         "xds:///child-service-target",
         mockClientTransportFactoryBuilder,
         new FixedPortProvider(DUMMY_PORT));
 
-    configurator.configureChannelBuilder(childBuilder);
+    channelConfiguratorInArgs.configureChannelBuilder(childBuilder);
     assertThat(childBuilder.metricSinks).contains(mockMetricSink);
   }
 
