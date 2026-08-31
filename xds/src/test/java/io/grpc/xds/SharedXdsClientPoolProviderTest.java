@@ -29,6 +29,7 @@ import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelConfigurator;
+import io.grpc.ChannelCredentials;
 import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -80,7 +81,7 @@ public class SharedXdsClientPoolProviderTest {
   @Deprecated
   @Test
   public void sharedXdsClientObjectPool_deprecated() throws XdsInitializationException {
-    ServerInfo server = ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create());
+    ServerInfo server = createServerInfo(SERVER_URI, InsecureChannelCredentials.create());
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
@@ -152,7 +153,7 @@ public class SharedXdsClientPoolProviderTest {
 
   @Test
   public void refCountedXdsClientObjectPool_getObjectCreatesNewInstanceIfAlreadyShutdown() {
-    ServerInfo server = ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create());
+    ServerInfo server = createServerInfo(SERVER_URI, InsecureChannelCredentials.create());
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider();
@@ -198,7 +199,7 @@ public class SharedXdsClientPoolProviderTest {
     String xdsServerUri = "localhost:" + xdsServer.getPort();
 
     // Set up bootstrap & xDS client pool provider
-    ServerInfo server = ServerInfo.create(xdsServerUri, InsecureChannelCredentials.create());
+    ServerInfo server = createServerInfo(xdsServerUri, InsecureChannelCredentials.create());
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider();
@@ -239,7 +240,7 @@ public class SharedXdsClientPoolProviderTest {
     String xdsServerUri = "localhost:" + xdsServer.getPort();
 
     // Set up bootstrap & xDS client pool provider
-    ServerInfo server = ServerInfo.create(xdsServerUri, InsecureChannelCredentials.create());
+    ServerInfo server = createServerInfo(xdsServerUri, InsecureChannelCredentials.create());
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider();
@@ -284,5 +285,10 @@ public class SharedXdsClientPoolProviderTest {
     // Clean up
     xdsClientPool.returnObject(xdsClient);
     xdsServer.shutdownNow();
+  }
+
+  private static ServerInfo createServerInfo(String target, ChannelCredentials credentials) {
+    return ServerInfo.create(
+        target, Collections.singletonMap("grpc.channel_credentials", credentials));
   }
 }

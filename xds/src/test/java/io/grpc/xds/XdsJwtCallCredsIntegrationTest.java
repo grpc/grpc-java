@@ -203,7 +203,7 @@ public class XdsJwtCallCredsIntegrationTest {
   }
 
   private static void setEnableXdsBootstrapCallCreds(boolean enable) {
-    io.grpc.xds.client.BootstrapperImpl.enableXdsBootstrapCallCreds = enable;
+    GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = enable;
   }
 
   private static Path generateTrustStore() throws Exception {

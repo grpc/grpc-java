@@ -381,8 +381,14 @@ public class XdsClientFallbackTest {
     XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
       @Override
       public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-        ChannelCredentials channelCredentials =
-            (ChannelCredentials) serverInfo.implSpecificConfig();
+        Object config = serverInfo.implSpecificConfig();
+        ChannelCredentials channelCredentials;
+        if (config instanceof Map) {
+          channelCredentials = (ChannelCredentials)
+              ((Map<?, ?>) config).get("grpc.channel_credentials");
+        } else {
+          channelCredentials = (ChannelCredentials) config;
+        }
         return new GrpcXdsTransportFactory.GrpcXdsTransport(
             Grpc.newChannelBuilder(serverInfo.target(), channelCredentials)
               .executor(executor)

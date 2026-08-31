@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.auth;
+package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -45,7 +45,7 @@ import java.util.logging.Logger;
  * A {@link CallCredentials} implementation that loads a JWT token from a file,
  * parses it to extract its expiration time, and caches/refreshes it.
  */
-public final class JwtTokenFileCallCredentials extends CallCredentials {
+final class JwtTokenFileCallCredentials extends CallCredentials {
   private static final int MAX_FILE_SIZE_BYTES = 1048576;
 
   private static final Logger log = Logger.getLogger(JwtTokenFileCallCredentials.class.getName());
@@ -87,7 +87,7 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
     }
   };
 
-  public JwtTokenFileCallCredentials(String filePath) {
+  JwtTokenFileCallCredentials(String filePath) {
     this(filePath, SYSTEM_TIME_PROVIDER);
   }
 

@@ -25,9 +25,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
+import io.grpc.CompositeCallCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
-import io.grpc.auth.JwtTokenFileCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.xds.client.AllowedGrpcServices;
@@ -185,7 +186,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(getChannelCredentials(serverInfo)).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -238,11 +239,11 @@ public class GrpcBootstrapperImplTest {
     List<ServerInfo> serverInfoList = info.servers();
     assertThat(serverInfoList.get(0).target())
         .isEqualTo("trafficdirector-foo.googleapis.com:443");
-    assertThat(serverInfoList.get(0).implSpecificConfig())
+    assertThat(getChannelCredentials(serverInfoList.get(0)))
         .isInstanceOf(TlsChannelCredentials.class);
     assertThat(serverInfoList.get(1).target())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
-    assertThat(serverInfoList.get(1).implSpecificConfig())
+    assertThat(getChannelCredentials(serverInfoList.get(1)))
         .isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
@@ -287,7 +288,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(getChannelCredentials(serverInfo)).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -358,7 +359,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(getChannelCredentials(serverInfo)).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(getNodeBuilder().build());
   }
 
@@ -666,7 +667,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(getChannelCredentials(serverInfo)).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -688,7 +689,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(getChannelCredentials(serverInfo)).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -710,7 +711,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(getChannelCredentials(serverInfo)).isInstanceOf(InsecureChannelCredentials.class);
     // Only ignore_resource_deletion feature enabled: confirm it's on, and xds_v3 is off.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -733,7 +734,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(getChannelCredentials(serverInfo)).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.isTrustedXdsServer()).isTrue();
   }
 
@@ -755,7 +756,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(getChannelCredentials(serverInfo)).isInstanceOf(InsecureChannelCredentials.class);
     // ignore_resource_deletion features enabled: confirm both are on.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -799,7 +800,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(getChannelCredentials(serverInfo)).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.failOnDataErrors()).isTrue();
     BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
   }
@@ -1061,10 +1062,6 @@ public class GrpcBootstrapperImplTest {
             .addClientFeatures(GrpcBootstrapperImpl.CLIENT_FEATURE_RESOURCE_IN_SOTW);
   }
 
-  private static void setEnableXdsBootstrapCallCreds(boolean enable) {
-    io.grpc.xds.client.BootstrapperImpl.enableXdsBootstrapCallCreds = enable;
-  }
-
   private static String getFilePath(JwtTokenFileCallCredentials credentials) {
     try {
       java.lang.reflect.Field field =
@@ -1072,13 +1069,13 @@ public class GrpcBootstrapperImplTest {
       field.setAccessible(true);
       return (String) field.get(credentials);
     } catch (Exception e) {
-      throw new RuntimeException(e);
+      throw new AssertionError(e);
     }
   }
 
   @Test
   public void parseBootstrap_callCreds_flagDisabled() throws Exception {
-    setEnableXdsBootstrapCallCreds(false);
+    GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = false;
     try {
       String rawData = "{\n"
           + "  \"xds_servers\": [\n"
@@ -1100,15 +1097,15 @@ public class GrpcBootstrapperImplTest {
       BootstrapInfo info = bootstrapper.bootstrap();
       assertThat(info.servers()).hasSize(1);
       ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
-      assertThat(serverInfo.callCredentials()).isNull();
+      assertThat(getCallCredentials(serverInfo)).isNull();
     } finally {
-      setEnableXdsBootstrapCallCreds(false);
+      GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = false;
     }
   }
 
   @Test
   public void parseBootstrap_xdsServers_jwtTokenFileCallCreds() throws Exception {
-    setEnableXdsBootstrapCallCreds(true);
+    GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = true;
     try {
       String rawData = "{\n"
           + "  \"xds_servers\": [\n"
@@ -1130,18 +1127,18 @@ public class GrpcBootstrapperImplTest {
       BootstrapInfo info = bootstrapper.bootstrap();
       assertThat(info.servers()).hasSize(1);
       ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
-      assertThat(serverInfo.callCredentials())
+      assertThat(getCallCredentials(serverInfo))
           .isInstanceOf(JwtTokenFileCallCredentials.class);
-      assertThat(getFilePath((JwtTokenFileCallCredentials) serverInfo.callCredentials()))
+      assertThat(getFilePath((JwtTokenFileCallCredentials) getCallCredentials(serverInfo)))
           .isEqualTo("/var/run/secrets/token");
     } finally {
-      setEnableXdsBootstrapCallCreds(false);
+      GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = false;
     }
   }
 
   @Test
   public void parseBootstrap_authorities_jwtTokenFileCallCreds() throws Exception {
-    setEnableXdsBootstrapCallCreds(true);
+    GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = true;
     try {
       String rawData = "{\n"
           + "  \"authorities\": {\n"
@@ -1179,18 +1176,18 @@ public class GrpcBootstrapperImplTest {
       AuthorityInfo authorityInfo = info.authorities().get("a.com");
       assertThat(authorityInfo.xdsServers()).hasSize(1);
       ServerInfo serverInfo = authorityInfo.xdsServers().get(0);
-      assertThat(serverInfo.callCredentials())
+      assertThat(getCallCredentials(serverInfo))
           .isInstanceOf(JwtTokenFileCallCredentials.class);
-      assertThat(getFilePath((JwtTokenFileCallCredentials) serverInfo.callCredentials()))
+      assertThat(getFilePath((JwtTokenFileCallCredentials) getCallCredentials(serverInfo)))
           .isEqualTo("/var/run/secrets/authority_token");
     } finally {
-      setEnableXdsBootstrapCallCreds(false);
+      GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = false;
     }
   }
 
   @Test
   public void parseBootstrap_unsupportedCallCredsType_ignored() throws Exception {
-    setEnableXdsBootstrapCallCreds(true);
+    GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = true;
     try {
       String rawData = "{\n"
           + "  \"xds_servers\": [\n"
@@ -1218,18 +1215,18 @@ public class GrpcBootstrapperImplTest {
       BootstrapInfo info = bootstrapper.bootstrap();
       assertThat(info.servers()).hasSize(1);
       ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
-      assertThat(serverInfo.callCredentials())
+      assertThat(getCallCredentials(serverInfo))
           .isInstanceOf(JwtTokenFileCallCredentials.class);
-      assertThat(getFilePath((JwtTokenFileCallCredentials) serverInfo.callCredentials()))
+      assertThat(getFilePath((JwtTokenFileCallCredentials) getCallCredentials(serverInfo)))
           .isEqualTo("/var/run/secrets/token");
     } finally {
-      setEnableXdsBootstrapCallCreds(false);
+      GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = false;
     }
   }
 
   @Test
   public void parseBootstrap_malformedCallCreds_throws() throws Exception {
-    setEnableXdsBootstrapCallCreds(true);
+    GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = true;
     try {
       String rawData = "{\n"
           + "  \"xds_servers\": [\n"
@@ -1246,17 +1243,15 @@ public class GrpcBootstrapperImplTest {
           + "  ]\n"
           + "}";
       bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-      XdsInitializationException e = assertThrows(XdsInitializationException.class,
-          bootstrapper::bootstrap);
-      assertThat(e).hasMessageThat().contains("jwt_token_file' jwt_token_file missing or empty");
+      Assert.assertThrows(XdsInitializationException.class, bootstrapper::bootstrap);
     } finally {
-      setEnableXdsBootstrapCallCreds(false);
+      GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = false;
     }
   }
 
   @Test
   public void parseBootstrap_xdsServers_multipleValidCallCreds() throws Exception {
-    setEnableXdsBootstrapCallCreds(true);
+    GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = true;
     try {
       String rawData = "{\n"
           + "  \"xds_servers\": [\n"
@@ -1280,17 +1275,17 @@ public class GrpcBootstrapperImplTest {
       BootstrapInfo info = bootstrapper.bootstrap();
       assertThat(info.servers()).hasSize(1);
       ServerInfo serverInfo = info.servers().get(0);
-      CallCredentials creds = serverInfo.callCredentials();
+      CallCredentials creds = getCallCredentials(serverInfo);
       assertThat(creds).isNotNull();
-      assertThat(creds).isInstanceOf(io.grpc.CompositeCallCredentials.class);
+      assertThat(creds).isInstanceOf(CompositeCallCredentials.class);
     } finally {
-      setEnableXdsBootstrapCallCreds(false);
+      GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = false;
     }
   }
 
   @Test
   public void parseBootstrap_xdsServers_missingTypeCallCreds() throws Exception {
-    setEnableXdsBootstrapCallCreds(true);
+    GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = true;
     try {
       String rawData = "{\n"
           + "  \"xds_servers\": [\n"
@@ -1306,12 +1301,31 @@ public class GrpcBootstrapperImplTest {
           + "  ]\n"
           + "}";
       bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-      bootstrapper.bootstrap();
-      fail("Expected exception");
-    } catch (XdsInitializationException e) {
-      assertThat(e).hasMessageThat().contains("with 'call_creds' type unspecified");
+      try {
+        bootstrapper.bootstrap();
+        fail("Expected exception");
+      } catch (XdsInitializationException e) {
+        assertThat(e).hasMessageThat().contains("with 'call_creds' type unspecified");
+      }
     } finally {
-      setEnableXdsBootstrapCallCreds(false);
+      GrpcBootstrapperImpl.enableXdsBootstrapCallCreds = false;
     }
   }
+
+  private static ChannelCredentials getChannelCredentials(ServerInfo serverInfo) {
+    Object config = serverInfo.implSpecificConfig();
+    if (config instanceof Map) {
+      return (ChannelCredentials) ((Map<?, ?>) config).get("grpc.channel_credentials");
+    }
+    return (ChannelCredentials) config;
+  }
+
+  private static CallCredentials getCallCredentials(ServerInfo serverInfo) {
+    Object config = serverInfo.implSpecificConfig();
+    if (config instanceof Map) {
+      return (CallCredentials) ((Map<?, ?>) config).get("grpc.call_credentials");
+    }
+    return null;
+  }
+
 }

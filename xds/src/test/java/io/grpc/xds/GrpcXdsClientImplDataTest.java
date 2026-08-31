@@ -169,7 +169,8 @@ public class GrpcXdsClientImplDataTest {
   private static final RouterFilter.Provider ROUTER_FILTER_PROVIDER = new RouterFilter.Provider();
 
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
+      ServerInfo.create("lrs.googleapis.com",
+          ImmutableMap.of("grpc.channel_credentials", InsecureChannelCredentials.create()));
   private static final String GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE =
       "GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE";
 
@@ -3628,7 +3629,9 @@ public class GrpcXdsClientImplDataTest {
 
   private XdsResourceType.Args getXdsResourceTypeArgs(boolean isTrustedServer) {
     return new XdsResourceType.Args(
-        ServerInfo.create("http://td", "", false, isTrustedServer, false, false, null), "1.0", null, XdsTestUtils.EMPTY_BOOTSTRAP, null, null
+        ServerInfo.create("http://td", Collections.emptyMap(), false, isTrustedServer,
+            false, false),
+        "1.0", null, XdsTestUtils.EMPTY_BOOTSTRAP, null, null
     );
   }
 }

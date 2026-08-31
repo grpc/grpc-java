@@ -49,7 +49,6 @@ dependencies {
             project(':grpc-core'),
             project(':grpc-util'),
             project(':grpc-services'),
-            project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.guava,
             libraries.gson,

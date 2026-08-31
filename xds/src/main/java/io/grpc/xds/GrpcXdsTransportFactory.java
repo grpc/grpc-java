@@ -34,6 +34,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.XdsTransportFactory;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
@@ -80,7 +81,14 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
                             CallCredentials callCredentials,
                             ChannelConfigurator channelConfigurator) {
       String target = serverInfo.target();
-      ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
+      Object implConfig = serverInfo.implSpecificConfig();
+      ChannelCredentials channelCredentials = null;
+      CallCredentials serverCallCredentials = null;
+      if (implConfig instanceof Map) {
+        Map<?, ?> configMap = (Map<?, ?>) implConfig;
+        channelCredentials = (ChannelCredentials) configMap.get("grpc.channel_credentials");
+        serverCallCredentials = (CallCredentials) configMap.get("grpc.call_credentials");
+      }
       ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES);
       if (channelConfigurator != null) {
@@ -88,11 +96,11 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
         channelBuilder.childChannelConfigurator(channelConfigurator);
       }
       this.channel = channelBuilder.build();
-      if (callCredentials != null && serverInfo.callCredentials() != null) {
+      if (callCredentials != null && serverCallCredentials != null) {
         this.callCredentials = new CompositeCallCredentials(
-            callCredentials, serverInfo.callCredentials());
-      } else if (serverInfo.callCredentials() != null) {
-        this.callCredentials = serverInfo.callCredentials();
+            callCredentials, serverCallCredentials);
+      } else if (serverCallCredentials != null) {
+        this.callCredentials = serverCallCredentials;
       } else {
         this.callCredentials = callCredentials;
       }

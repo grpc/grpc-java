@@ -21,6 +21,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
+import io.grpc.CompositeCallCredentials;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.client.AllowedGrpcServices;
 import io.grpc.xds.client.AllowedGrpcServices.AllowedGrpcService;
@@ -30,12 +32,17 @@ import io.grpc.xds.client.ConfiguredChannelCredentials.ChannelCredsConfig;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.annotation.Nullable;
 
 class GrpcBootstrapperImpl extends BootstrapperImpl {
+  @VisibleForTesting
+  public static boolean enableXdsBootstrapCallCreds = GrpcUtil.getFlag(
+      "GRPC_EXPERIMENTAL_XDS_BOOTSTRAP_CALL_CREDS", false);
+
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
   private static final String BOOTSTRAP_PATH_SYS_PROPERTY = "io.grpc.xds.bootstrap";
   private static final String BOOTSTRAP_CONFIG_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP_CONFIG";
@@ -104,7 +111,62 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   protected Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException {
     ConfiguredChannelCredentials configuredChannel = getChannelCredentials(serverConfig, serverUri);
-    return configuredChannel != null ? configuredChannel.channelCredentials() : null;
+    ChannelCredentials channelCredentials = configuredChannel != null
+        ? configuredChannel.channelCredentials() : null;
+
+    CallCredentials callCredentials = null;
+    List<?> rawCallCreds = JsonUtil.getList(serverConfig, "call_creds");
+    if (enableXdsBootstrapCallCreds && rawCallCreds != null) {
+      List<Map<String, ?>> callCredsList = JsonUtil.checkObjectList(rawCallCreds);
+      callCredentials = parseCallCredentials(callCredsList, serverUri);
+    }
+
+    ImmutableMap.Builder<String, Object> builder = ImmutableMap.builder();
+    if (channelCredentials != null) {
+      builder.put("grpc.channel_credentials", channelCredentials);
+    }
+    if (callCredentials != null) {
+      builder.put("grpc.call_credentials", callCredentials);
+    }
+    return builder.buildOrThrow();
+  }
+
+  @Nullable
+  private CallCredentials parseCallCredentials(List<Map<String, ?>> jsonList, String serverUri)
+      throws XdsInitializationException {
+    List<CallCredentials> parsedCreds = new ArrayList<>();
+    for (Map<String, ?> credJson : jsonList) {
+      String type = JsonUtil.getString(credJson, "type");
+      if (type == null) {
+        throw new XdsInitializationException(
+            "Invalid bootstrap: server " + serverUri + " with 'call_creds' type unspecified");
+      }
+      if ("jwt_token_file".equals(type)) {
+        Map<String, ?> config = JsonUtil.getObject(credJson, "config");
+        if (config == null) {
+          throw new XdsInitializationException(
+              "Invalid bootstrap: server " + serverUri + " with 'jwt_token_file' config missing");
+        }
+        String jwtTokenFile = JsonUtil.getString(config, "jwt_token_file");
+        if (jwtTokenFile == null || jwtTokenFile.isEmpty()) {
+          throw new XdsInitializationException(
+              "Invalid bootstrap: server " + serverUri
+                  + " with 'jwt_token_file' jwt_token_file missing or empty");
+        }
+        parsedCreds.add(new JwtTokenFileCallCredentials(jwtTokenFile));
+      } else {
+        logger.log(XdsLogger.XdsLogLevel.INFO,
+            "Skipping unsupported call credential type: {0}", type);
+      }
+    }
+    if (parsedCreds.isEmpty()) {
+      return null;
+    }
+    CallCredentials combined = parsedCreds.get(0);
+    for (int i = 1; i < parsedCreds.size(); i++) {
+      combined = new CompositeCallCredentials(combined, parsedCreds.get(i));
+    }
+    return combined;
   }
 
   @GuardedBy("GrpcBootstrapperImpl.class")
@@ -194,8 +256,8 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
       Optional<CallCredentials> callCredentials = Optional.empty();
       List<?> rawCallCredsList = JsonUtil.getList(serviceConfig, "call_creds");
       if (rawCallCredsList != null && !rawCallCredsList.isEmpty()) {
-        callCredentials =
-            parseCallCredentials(JsonUtil.checkObjectList(rawCallCredsList), targetUri);
+        callCredentials = Optional.ofNullable(
+            parseCallCredentials(JsonUtil.checkObjectList(rawCallCredsList), targetUri));
       }
 
       AllowedGrpcService.Builder b = AllowedGrpcService.builder()
@@ -208,16 +270,7 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
     return Optional.of(customConfig);
   }
 
-  @SuppressWarnings("unused")
-  private static Optional<CallCredentials> parseCallCredentials(List<Map<String, ?>> jsonList,
-                                                          String targetUri)
-      throws XdsInitializationException {
-    // TODO(sauravzg): Currently no xDS call credentials providers are implemented (no
-    // XdsCallCredentialsRegistry).
-    // As per A102/A97, we should just ignore unsupported call credentials types
-    // without throwing an exception.
-    return Optional.empty();
-  }
+
 
   private static final class JsonChannelCredsConfig implements ChannelCredsConfig {
     private final String type;
