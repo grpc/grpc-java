@@ -80,7 +80,7 @@ public class GrpcServiceConfigParserTest {
 
   private static ServerInfo dummyServerInfo(boolean isTrusted) {
     return ServerInfo.create("test_target", Collections.emptyMap(), false, isTrusted, false,
-        false, null);
+        false);
   }
 
   private static GrpcServiceConfig parse(

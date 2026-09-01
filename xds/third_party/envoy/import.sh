@@ -17,7 +17,7 @@
 
 set -e
 # import VERSION from the google internal go/envoy-import-status
-VERSION=a0b3df32ba54c92a08d3636a9a36013cb920e471
+VERSION=ddf9f6788e3b5c103c496784f04890acbc6628e5
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"

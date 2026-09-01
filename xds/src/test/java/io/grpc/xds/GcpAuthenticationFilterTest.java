@@ -525,7 +525,7 @@ public class GcpAuthenticationFilterTest {
             .node(Node.newBuilder().build())
             .build())
         .serverInfo(ServerInfo.create(
-            "test_target", Collections.emptyMap(), false, true, false, false, null))
+            "test_target", Collections.emptyMap(), false, true, false, false))
         .build();
   }
 }
