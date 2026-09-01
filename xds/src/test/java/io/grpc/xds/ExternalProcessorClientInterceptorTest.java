@@ -248,7 +248,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     serverInfo =
         Bootstrapper.ServerInfo.create(
-            "test_target", Collections.emptyMap(), false, true, false, false, null);
+            "test_target", Collections.emptyMap(), false, true, false, false);
     
     filterContext = Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(bootstrapInfo)
