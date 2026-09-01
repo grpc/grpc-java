@@ -1,9 +1,9 @@
 """Build rule for java_grpc_library."""
 
+load("@com_google_protobuf//bazel/common:proto_common.bzl", "proto_common")
 load("@com_google_protobuf//bazel/common:proto_info.bzl", "ProtoInfo")
 load("@com_google_protobuf//bazel/common:proto_lang_toolchain_info.bzl", "ProtoLangToolchainInfo")
 load("@rules_java//java:defs.bzl", "JavaInfo", "JavaPluginInfo", "java_common")
-load("@rules_proto//proto:defs.bzl", "proto_common")
 
 _JavaRpcToolchainInfo = provider(
     fields = [
