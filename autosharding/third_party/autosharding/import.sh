@@ -26,12 +26,14 @@ FILES=(
 autosharding/v1/autosharding.proto
 )
 
-pushd "$(git rev-parse --show-toplevel)/autosharding" > /dev/null
+pushd `git rev-parse --show-toplevel`/autosharding/third_party/autosharding > /dev/null
 
 # put the repo in a tmp directory
 tmpdir="$(mktemp -d)"
 trap "rm -rf ${tmpdir}" EXIT
 curl -Ls "${DOWNLOAD_URL}" | tar xz -C "${tmpdir}"
+
+cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/LICENSE" LICENSE
 
 rm -rf "${TARGET_PROTO_BASE_DIR}"
 mkdir -p "${TARGET_PROTO_BASE_DIR}"

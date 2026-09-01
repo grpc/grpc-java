@@ -14,6 +14,14 @@ tasks.named("jar").configure {
     }
 }
 
+sourceSets {
+    main {
+        proto {
+            srcDir 'third_party/autosharding/src/main/proto'
+        }
+    }
+}
+
 dependencies {
     implementation project(':grpc-util'),
             project(':grpc-core'),
