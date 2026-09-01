@@ -1600,7 +1600,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               sendResponseBodyToExtProc(bodyByteString, false);
               dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
             } catch (IOException e) {
-              rawCall.cancel("Failed to read buffered response body", e);
+              dataPlaneClientCall.cancelDownstream("Failed to read buffered response body", e);
             }
           }
         }
