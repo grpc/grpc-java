@@ -316,6 +316,14 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
     final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
     private final AtomicBoolean downstreamCancelled = new AtomicBoolean(false);
+    final AtomicBoolean requestDraining = new AtomicBoolean(false);
+    final AtomicBoolean responseDraining = new AtomicBoolean(false);
+    final AtomicBoolean requestDrainComplete = new AtomicBoolean(false);
+    final AtomicBoolean responseDrainComplete = new AtomicBoolean(false);
+    final AtomicBoolean requestEosSent = new AtomicBoolean(false);
+    final AtomicBoolean responseTrailersSent = new AtomicBoolean(false);
+    final AtomicBoolean requestBodySentToExtProc = new AtomicBoolean(false);
+    final AtomicBoolean responseBodySentToExtProc = new AtomicBoolean(false);
 
     protected DataPlaneClientCall(
         DataPlaneDelayedCall<InputStream, InputStream> delayedCall,
@@ -502,10 +510,25 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               }
             }
 
-            if (response.getRequestDrain()) {
-              extProcStreamState.set(ExtProcStreamState.DRAINING);
-              halfCloseExtProcStream();
-              activateCall();
+            if (response.getRequestDrainRequests()) {
+              if (!requestEosSent.get() && requestDraining.compareAndSet(false, true)) {
+                activateCall();
+                sendToExtProc(ProcessingRequest.newBuilder()
+                    .setRequestBody(HttpBody.newBuilder()
+                        .setDrainComplete(true)
+                        .build())
+                    .build());
+              }
+            }
+            if (response.getRequestDrainResponses()) {
+              if (!responseTrailersSent.get() && responseDraining.compareAndSet(false, true)) {
+                activateCall();
+                sendToExtProc(ProcessingRequest.newBuilder()
+                    .setResponseBody(HttpBody.newBuilder()
+                        .setDrainComplete(true)
+                        .build())
+                    .build());
+              }
             }
 
             // 1. Client Headers
@@ -599,6 +622,33 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         @Override
         public void onCompleted() {
+          boolean requestDrainRequired =
+              currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC
+                  && requestBodySentToExtProc.get()
+                  && !requestDrainComplete.get()
+                  && !requestEosSent.get();
+
+          boolean responseDrainRequired =
+              currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
+                  && responseBodySentToExtProc.get()
+                  && !responseDrainComplete.get()
+                  && !responseTrailersSent.get();
+
+          if (!config.getObservabilityMode() && (requestDrainRequired || responseDrainRequired)) {
+            if (markExtProcStreamFailed(extProcStreamState)) {
+              synchronized (streamLock) {
+                extProcClientCallRequestObserver = null;
+              }
+              cancelDownstream(
+                  "External processor stream completed without drain",
+                  Status.INTERNAL
+                      .withDescription("External processor stream completed without drain")
+                      .asRuntimeException());
+              wrappedListener.proceedWithClose();
+            }
+            return;
+          }
+
           if (markExtProcStreamCompleted(extProcStreamState)) {
             handleFailOpen(wrappedListener);
           }
@@ -680,6 +730,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void drainPendingRequests() {
+      if (!isResponseSidecarReady()) {
+        return;
+      }
       int toRequest = pendingRequests.getAndSet(0);
       if (toRequest > 0) {
         super.request(toRequest);
@@ -719,24 +772,32 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
-    private void halfCloseExtProcStream() {
-      synchronized (streamLock) {
-        if (!extProcStreamState.get().isCompleted() && extProcClientCallRequestObserver != null) {
-          extProcClientCallRequestObserver.onCompleted();
-        }
-      }
-    }
+
 
     private void onReadyNotify() {
       wrappedListener.onReadyNotify();
     }
 
-    private boolean isSidecarReady() {
+    private boolean isRequestSidecarReady() {
       ExtProcStreamState state = extProcStreamState.get();
       if (state.isCompleted()) {
         return true;
       }
-      if (state.isDraining()) {
+      if (requestDraining.get()) {
+        return false;
+      }
+      synchronized (streamLock) {
+        ClientCallStreamObserver<ProcessingRequest> observer = extProcClientCallRequestObserver;
+        return observer != null && observer.isReady();
+      }
+    }
+
+    private boolean isResponseSidecarReady() {
+      ExtProcStreamState state = extProcStreamState.get();
+      if (state.isCompleted()) {
+        return true;
+      }
+      if (responseDraining.get()) {
         return false;
       }
       synchronized (streamLock) {
@@ -756,7 +817,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (dataPlaneCallState.get() == DataPlaneCallState.IDLE && !config.getObservabilityMode()) {
         return false;
       }
-      boolean sidecarReady = isSidecarReady();
+      boolean sidecarReady = isRequestSidecarReady();
       if (config.getObservabilityMode()) {
         return super.isReady() && sidecarReady;
       }
@@ -774,7 +835,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         super.request(numMessages);
         return;
       }
-      if (!isSidecarReady()) {
+      if (dataPlaneCallState.get() == DataPlaneCallState.IDLE) {
+        pendingRequests.addAndGet(numMessages);
+        return;
+      }
+      if (!isResponseSidecarReady()) {
         pendingRequests.addAndGet(numMessages);
         return;
       }
@@ -800,7 +865,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
 
         ExtProcStreamState state = extProcStreamState.get();
-        if (state.isDraining() || state.isCompleted()) {
+        if (requestDraining.get() || state.isCompleted()) {
           if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
             super.sendMessage(message);
             return;
@@ -829,6 +894,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 .setEndOfStream(false)
                 .build())
             .build());
+        requestBodySentToExtProc.set(true);
         bodyMessageSentToExtProc.set(true);
 
         if (config.getObservabilityMode()) {
@@ -858,46 +924,53 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      pendingHalfClose.set(true);
-
-      if (extProcStreamState.get().isCompleted()) {
+      synchronized (streamLock) {
         if (passThroughMode.get()) {
           if (requestSideClosed.compareAndSet(false, true)) {
             proceedWithHalfClose();
           }
+          return;
         }
-        return;
-      }
 
-      if (extProcStreamState.get().isDraining()) {
-        boolean canProceed = false;
-        synchronized (streamLock) {
-          if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE
-              || (!bodyMessageSentToExtProc.get() && pendingDrainingMessages.isEmpty())) {
-            canProceed = true;
-          }
+        pendingHalfClose.set(true);
+
+        if (extProcStreamState.get().isCompleted()) {
+          return;
         }
-        if (canProceed) {
+
+        if (requestDraining.get() || requestDrainComplete.get()) {
+          boolean canProceed = false;
+          if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
+            canProceed = true;
+          } else if (pendingDrainingMessages.isEmpty()) {
+            if (requestDrainComplete.get() || !bodyMessageSentToExtProc.get()) {
+              canProceed = true;
+            }
+          }
+          
+          if (canProceed) {
+            if (requestSideClosed.compareAndSet(false, true)) {
+              proceedWithHalfClose();
+            }
+          }
+          return;
+        }
+
+        if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
           if (requestSideClosed.compareAndSet(false, true)) {
             proceedWithHalfClose();
           }
+          return;
         }
-        return;
-      }
 
-      if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
-        if (requestSideClosed.compareAndSet(false, true)) {
-          proceedWithHalfClose();
-        }
-        return;
+        // Mode is GRPC
+        sendToExtProc(ProcessingRequest.newBuilder()
+            .setRequestBody(HttpBody.newBuilder()
+                .setEndOfStreamWithoutMessage(true)
+                .build())
+            .build());
+        requestEosSent.set(true);
       }
-
-      // Mode is GRPC
-      sendToExtProc(ProcessingRequest.newBuilder()
-          .setRequestBody(HttpBody.newBuilder()
-              .setEndOfStreamWithoutMessage(true)
-              .build())
-          .build());
     }
 
     private void cancelDownstream(@Nullable String message, @Nullable Throwable cause) {
@@ -925,7 +998,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
-          if (!streamed.getEndOfStreamWithoutMessage()) {
+          if (streamed.getDrainComplete()) {
+            handleRequestDrainComplete();
+          } else if (!streamed.getEndOfStreamWithoutMessage()) {
             super.sendMessage(new KnownLengthInputStream(streamed.getBody()));
           }
           if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
@@ -943,7 +1018,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
-          listener.onExternalBody(streamed.getBody());
+          if (streamed.getDrainComplete()) {
+            handleResponseDrainComplete();
+          } else {
+            listener.onExternalBody(streamed.getBody());
+          }
         }
       }
     }
@@ -988,6 +1067,23 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             proceedWithHalfClose();
           }
         }
+      }
+    }
+
+    private void handleRequestDrainComplete() {
+      if (requestDraining.compareAndSet(true, false)) {
+        requestDrainComplete.set(true);
+        drainPendingDrainingMessages();
+        if (wrappedListener != null) {
+          wrappedListener.onReadyNotify();
+        }
+      }
+    }
+
+    private void handleResponseDrainComplete() {
+      if (responseDraining.compareAndSet(true, false)) {
+        responseDrainComplete.set(true);
+        wrappedListener.unblockAfterResponseDrain();
       }
     }
 
@@ -1111,7 +1207,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           || dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
               == ProcessingMode.HeaderSendMode.DEFAULT;
 
-      if (dataPlaneClientCall.getExtProcStreamState().get().isDraining() && sendResponseHeaders) {
+
+      if (dataPlaneClientCall.responseDraining.get() && sendResponseHeaders) {
         this.savedHeaders = headers;
         return;
       }
@@ -1144,7 +1241,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           return;
         }
 
-        boolean checkDrain = dataPlaneClientCall.getExtProcStreamState().get().isDraining()
+        boolean checkDrain = dataPlaneClientCall.responseDraining.get()
             && dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
                 == ProcessingMode.BodySendMode.GRPC;
 
@@ -1174,6 +1271,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       try {
         ByteString bodyByteString = ByteString.readFrom(message);
         sendResponseBodyToExtProc(bodyByteString, false);
+        dataPlaneClientCall.responseBodySentToExtProc.set(true);
         dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
 
         if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
@@ -1198,8 +1296,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           && (!dataPlaneClientCall.getConfig().getFailureModeAllow()
               || dataPlaneClientCall.bodyMessageSentToExtProc.get())) {
         if (markDataPlaneCallClosed(dataPlaneClientCall.dataPlaneCallState)) {
-          proceedWithClose(Status.INTERNAL.withDescription("External processor stream failed")
-              .withCause(status.getCause()), new Metadata());
+          Status finalStatus = Status.INTERNAL.withCause(status.getCause());
+          if (status.getDescription() != null) {
+            finalStatus = finalStatus.withDescription(status.getDescription());
+          } else {
+            finalStatus = finalStatus.withDescription("External processor stream failed");
+          }
+          proceedWithClose(finalStatus, new Metadata());
         }
         return;
       }
@@ -1225,7 +1328,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           dataPlaneClientCall.getCurrentProcessingMode().getResponseTrailerMode()
               == ProcessingMode.HeaderSendMode.SEND;
 
-      if (dataPlaneClientCall.getExtProcStreamState().get().isDraining() && sendResponseTrailers) {
+      if (dataPlaneClientCall.responseDraining.get() && sendResponseTrailers) {
         return;
       }
 
@@ -1237,7 +1340,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     void onReadyNotify() {
-      dataPlaneClientCall.getCallContext().run(() -> delegate().onReady());
+      if (dataPlaneClientCall.isReady()) {
+        dataPlaneClientCall.getCallContext().run(() -> delegate().onReady());
+      }
     }
 
     void proceedWithHeaders() {
@@ -1245,7 +1350,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         proceedWithHeaders(savedHeaders);
         synchronized (savedMessages) {
           savedHeaders = null;
-          if (!dataPlaneClientCall.getExtProcStreamState().get().isDraining()) {
+          if (!dataPlaneClientCall.responseDraining.get()) {
             InputStream msg;
             while ((msg = savedMessages.poll()) != null) {
               onMessage(msg);
@@ -1299,6 +1404,17 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       proceedWithHeaders();
       proceedWithSavedMessages();
       dataPlaneClientCall.drainPendingDrainingMessages();
+      onReadyNotify();
+      proceedWithClose();
+    }
+
+    void unblockAfterResponseDrain() {
+      synchronized (savedMessages) {
+        inboundPassThrough = true;
+      }
+      proceedWithHeaders();
+      proceedWithSavedMessages();
+      dataPlaneClientCall.drainPendingRequests();
       proceedWithClose();
     }
 
@@ -1319,57 +1435,63 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      boolean sendResponseHeaders =
-          dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
-              == ProcessingMode.HeaderSendMode.SEND
-          || dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
-              == ProcessingMode.HeaderSendMode.DEFAULT;
+      boolean closeNow = dataPlaneClientCall.getConfig().getObservabilityMode();
 
-      boolean sendResponseTrailers =
-          dataPlaneClientCall.getCurrentProcessingMode().getResponseTrailerMode()
-              == ProcessingMode.HeaderSendMode.SEND;
+      if (dataPlaneClientCall.responseDrainComplete.get()) {
+        closeNow = true;
+      } else {
+        boolean sendResponseHeaders =
+            dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
+                == ProcessingMode.HeaderSendMode.SEND
+            || dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
+                == ProcessingMode.HeaderSendMode.DEFAULT;
 
-      if (trailersOnly.get()) {
-        if (sendResponseHeaders) {
+        boolean sendResponseTrailers =
+            dataPlaneClientCall.getCurrentProcessingMode().getResponseTrailerMode()
+                == ProcessingMode.HeaderSendMode.SEND;
+
+        if (trailersOnly.get()) {
+          if (sendResponseHeaders) {
+            dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
+                .setResponseHeaders(HttpHeaders.newBuilder()
+                    .setHeaders(
+                        toHeaderMap(
+                            savedTrailers,
+                            dataPlaneClientCall.getConfig().getForwardRulesConfig()))
+                    .setEndOfStream(true)
+                    .build())
+                .build());
+            dataPlaneClientCall.responseTrailersSent.set(true);
+          } else {
+            closeNow = true;
+          }
+        } else if (sendResponseTrailers) {
+          dataPlaneClientCall.getIsProcessingTrailers().set(true);
           dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
-              .setResponseHeaders(HttpHeaders.newBuilder()
-                  .setHeaders(
+              .setResponseTrailers(HttpTrailers.newBuilder()
+                  .setTrailers(
                       toHeaderMap(
                           savedTrailers,
                           dataPlaneClientCall.getConfig().getForwardRulesConfig()))
-                  .setEndOfStream(true)
                   .build())
               .build());
+          dataPlaneClientCall.responseTrailersSent.set(true);
         } else {
-          proceedWithClose();
-          if (!dataPlaneClientCall.getConfig().getObservabilityMode()) {
-            dataPlaneClientCall.closeExtProcStream();
-          }
-        }
-      } else if (sendResponseTrailers) {
-        dataPlaneClientCall.getIsProcessingTrailers().set(true);
-        dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
-            .setResponseTrailers(HttpTrailers.newBuilder()
-                .setTrailers(
-                    toHeaderMap(
-                        savedTrailers,
-                        dataPlaneClientCall.getConfig().getForwardRulesConfig()))
-                .build())
-            .build());
-      } else {
-        proceedWithClose();
-        if (!dataPlaneClientCall.getConfig().getObservabilityMode()) {
-          dataPlaneClientCall.closeExtProcStream();
+          closeNow = true;
         }
       }
 
-      if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
+      if (closeNow) {
         proceedWithClose();
-        @SuppressWarnings("unused")
-        ScheduledFuture<?> unused = dataPlaneClientCall.getScheduler().schedule(
-            dataPlaneClientCall::closeExtProcStream,
-            dataPlaneClientCall.getConfig().getDeferredCloseTimeoutNanos(),
-            TimeUnit.NANOSECONDS);
+        if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
+          @SuppressWarnings("unused")
+          ScheduledFuture<?> unused = dataPlaneClientCall.getScheduler().schedule(
+              dataPlaneClientCall::closeExtProcStream,
+              dataPlaneClientCall.getConfig().getDeferredCloseTimeoutNanos(),
+              TimeUnit.NANOSECONDS);
+        } else {
+          dataPlaneClientCall.closeExtProcStream();
+        }
       }
     }
 
