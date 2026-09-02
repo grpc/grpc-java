@@ -256,7 +256,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void triggerEvent(Object event) {
-    stream.triggerEvent(event);
+    try (TaskCloseable ignore = PerfMark.traceTask("ServerCall.triggerEvent")) {
+      PerfMark.attachTag(tag);
+      stream.triggerEvent(event);
+    }
   }
 
   @Override
@@ -403,10 +406,13 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
     @Override
     public void triggerEvent(Object event) {
-      if (call.cancelled) {
-        return;
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.triggerEvent")) {
+        PerfMark.attachTag(call.tag);
+        if (call.cancelled) {
+          return;
+        }
+        listener.onEvent(event);
       }
-      listener.onEvent(event);
     }
   }
 }
