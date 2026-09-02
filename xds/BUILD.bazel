@@ -1,9 +1,9 @@
 load("@bazel_jar_jar//:jar_jar.bzl", "jar_jar")
 load("@com_google_protobuf//bazel:java_proto_library.bzl", "java_proto_library")
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load("@com_google_protobuf//bazel/toolchains:proto_lang_toolchain.bzl", "proto_lang_toolchain")
 load("@rules_java//java:defs.bzl", "java_binary", "java_library", "java_test")
 load("@rules_jvm_external//:defs.bzl", "artifact")
-load("@com_google_protobuf//bazel/toolchains:proto_lang_toolchain.bzl", "proto_lang_toolchain")
 load("//:java_grpc_library.bzl", "INTERNAL_java_grpc_library_for_xds", "java_grpc_library")
 
 # Mirrors the dependencies included in the artifact on Maven Central for usage
