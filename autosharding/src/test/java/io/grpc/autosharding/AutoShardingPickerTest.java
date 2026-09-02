@@ -256,4 +256,28 @@ public class AutoShardingPickerTest {
     assertThat(result.getStatus().getDescription())
         .contains("No valid endpoints in slice and fallback disabled");
   }
+
+  @Test
+  public void pick_emptySliceEndpoints_fallbackEnabled_routesToFallbackPool() {
+    PickResult fallbackReadyResult = PickResult.withNoResult();
+    PickerEndpoint ep0 = new PickerEndpoint(
+        ConnectivityState.READY, new FakePicker(fallbackReadyResult), NOOP);
+
+    // Gap slice with empty endpoints list
+    SliceEntry gapSlice = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.emptyList());
+    // Fallback pool has ep0
+    SliceMap sliceMap = new SliceMap(
+        Collections.singletonList(gapSlice), Collections.singletonList(0), 1L);
+
+    AutoShardingPicker picker = new AutoShardingPicker(
+        sliceMap, Collections.singletonList(ep0), true, "x-key");
+
+    Metadata headers = new Metadata();
+    headers.put(
+        Metadata.Key.of("x-key", Metadata.ASCII_STRING_MARSHALLER), "anyKey");
+
+    PickResult result = picker.pickSubchannel(createArgs(headers));
+    assertThat(result).isSameInstanceAs(fallbackReadyResult);
+  }
 }

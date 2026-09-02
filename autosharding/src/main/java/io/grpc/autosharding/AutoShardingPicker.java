@@ -48,23 +48,23 @@ final class AutoShardingPicker extends SubchannelPicker {
   private final List<PickerEndpoint> endpoints;
   private final boolean[] sliceInFallback;
   private final boolean fallbackEnabled;
-  private final Metadata.Key<byte[]> sliceKeyHeader;
+  private final Metadata.Key<byte[]> keyHeader;
 
   AutoShardingPicker(
       SliceMap sliceMap,
       List<PickerEndpoint> endpoints,
       boolean fallbackEnabled,
-      String sliceKeyHeaderName) {
+      String keyHeaderName) {
     this.sliceMap = sliceMap;
     this.endpoints = Collections.unmodifiableList(new ArrayList<>(endpoints));
     this.fallbackEnabled = fallbackEnabled;
 
-    if (sliceKeyHeaderName == null || sliceKeyHeaderName.isEmpty()) {
-      this.sliceKeyHeader = null;
-    } else if (sliceKeyHeaderName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-      this.sliceKeyHeader = Metadata.Key.of(sliceKeyHeaderName, Metadata.BINARY_BYTE_MARSHALLER);
+    if (keyHeaderName == null || keyHeaderName.isEmpty()) {
+      this.keyHeader = null;
+    } else if (keyHeaderName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+      this.keyHeader = Metadata.Key.of(keyHeaderName, Metadata.BINARY_BYTE_MARSHALLER);
     } else {
-      this.sliceKeyHeader = InternalMetadata.keyOf(sliceKeyHeaderName, RAW_ASCII_MARSHALLER);
+      this.keyHeader = InternalMetadata.keyOf(keyHeaderName, RAW_ASCII_MARSHALLER);
     }
 
     this.sliceInFallback = new boolean[sliceMap.getSlices().size()];
@@ -147,8 +147,8 @@ final class AutoShardingPicker extends SubchannelPicker {
   }
 
   private byte[] extractKeyBytes(Metadata headers) {
-    if (sliceKeyHeader != null) {
-      byte[] val = headers.get(sliceKeyHeader);
+    if (keyHeader != null) {
+      byte[] val = headers.get(keyHeader);
       return val != null ? val : EMPTY_BYTES;
     }
     return EMPTY_BYTES;
