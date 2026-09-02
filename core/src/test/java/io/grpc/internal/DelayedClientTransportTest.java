@@ -972,6 +972,86 @@ public class DelayedClientTransportTest {
     assertEquals(1, fakeTracer.delayEndedCount);
   }
 
+  @Test
+  public void streamDelayMetrics_allBranchCombinations() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    // 1. Initial stream with no picker set (initialType defaults to "connecting")
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    stream.start(streamListener);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(Collections.singletonList("client channel: waiting for picker"),
+        fakeTracer.startedDelayReasons);
+
+    // 2. Reprocess with same delay type ("connecting") but new reason ("attempting to connect")
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "attempting to connect")));
+    assertEquals(Collections.singletonList("attempting to connect"),
+        fakeTracer.changedDelayReasons);
+
+    // 3. Reprocess with a different delay type ("rls_lookup_pending")
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("rls_lookup_pending", "RLS pending")));
+    assertEquals(1, fakeTracer.delayEndedCount);
+    assertEquals(Arrays.asList("connecting", "rls_lookup_pending"), fakeTracer.startedDelayTypes);
+
+    // 4. Reprocess with default PickResult.withNoResult() (defaults to "connecting")
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult()));
+    assertEquals(2, fakeTracer.delayEndedCount);
+
+    // 5. Cancel stream ends active delay
+    stream.cancel(Status.CANCELLED);
+    assertEquals(3, fakeTracer.delayEndedCount);
+
+    // 6. Direct updateDelay with null type and null reason
+    fakeTracer = new FakeStreamTracer();
+    customTracers = new ClientStreamTracer[] { fakeTracer };
+    ClientStream stream2 = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    fakeTracer.startedDelayTypes.clear();
+    stream2.start(streamListener);
+    
+    // Explicitly update delay to null
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult()));
+    
+    // 7. Cancel stream2 (endDelay when activeDelayType is null)
+    stream2.cancel(Status.CANCELLED);
+  }
+
+  @Test
+  public void streamDelayMetrics_emptyTracersAndNullInitialReason() {
+    ClientStreamTracer[] emptyTracers = new ClientStreamTracer[0];
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult("resolving", "")));
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, emptyTracers);
+    stream.start(streamListener);
+
+    // Update delay with empty tracers and empty reason
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult("connecting", "")));
+    stream.cancel(Status.CANCELLED);
+  }
+
+  @Test
+  public void streamDelayMetrics_delayEndedWhileRealStreamNull_updateDelayReturnsEarly() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    DelayedClientTransport.PendingStream pendingStream =
+        (DelayedClientTransport.PendingStream) delayedTransport.newStream(
+            method, headers, callOptions, customTracers);
+    pendingStream.start(streamListener);
+
+    // End delay directly while realStream is still null (sets delayEnded = true)
+    pendingStream.endDelay();
+    assertEquals(1, fakeTracer.delayEndedCount);
+
+    // updateDelay after delayEnded when getRealStream() == null should return early
+    // without starting a new delay segment
+    pendingStream.updateDelay("connecting", "new reason");
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(1, fakeTracer.delayEndedCount);
+  }
+
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
     return new TransportProvider() {
       @Override

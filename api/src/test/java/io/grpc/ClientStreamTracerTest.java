@@ -57,4 +57,17 @@ public class ClientStreamTracerTest {
     StreamInfo info2 = info1.toBuilder().build();
     assertThat(info2.getCallOptions()).isSameInstanceAs(callOptions);
   }
+
+  @Test
+  public void defaultDelayMethodsNoOp() {
+    ClientStreamTracer tracer = new ClientStreamTracer() {};
+    tracer.recordAttemptDelayStart("connecting", "test");
+    tracer.recordAttemptDelayReasonChanged("test2");
+    tracer.recordAttemptDelayEnd();
+
+    ClientStreamTracer.Factory factory = new ClientStreamTracer.Factory() {};
+    factory.recordCallDelayStart("resolving", "test");
+    factory.recordCallDelayReasonChanged("test2");
+    factory.recordCallDelayEnd();
+  }
 }
