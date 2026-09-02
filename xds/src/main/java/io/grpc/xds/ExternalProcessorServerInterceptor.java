@@ -1627,6 +1627,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
   static final class DataPlaneServerListener extends ServerCall.Listener<InputStream> {
     private final DataPlaneServerCall dataPlaneServerCall;
     final Queue<InputStream> savedMessages = new ConcurrentLinkedQueue<>();
+    final Queue<Object> savedEvents = new ConcurrentLinkedQueue<>();
     private volatile boolean halfCloseReceived;
     private volatile boolean halfCloseDeferred;
     private volatile ServerCall.Listener<InputStream> delegate;
@@ -1642,6 +1643,10 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     private void handleSetDelegate(ServerCall.Listener<InputStream> delegate) {
       this.delegate = delegate;
       dataPlaneServerCall.callContext.run(() -> {
+        Object evt;
+        while ((evt = savedEvents.poll()) != null) {
+          delegate.onEvent(evt);
+        }
         InputStream msg;
         while ((msg = savedMessages.poll()) != null) {
           delegate.onMessage(msg);
@@ -1668,6 +1673,13 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         dataPlaneServerCall.onExtProcStreamReady();
       } else if (event instanceof SetDelegateEvent) {
         handleSetDelegate(((SetDelegateEvent) event).getDelegate());
+      } else {
+        ServerCall.Listener<InputStream> del = delegate;
+        if (del != null) {
+          dataPlaneServerCall.callContext.run(() -> del.onEvent(event));
+        } else {
+          savedEvents.add(event);
+        }
       }
     }
 
@@ -1675,6 +1687,10 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
       ServerCall.Listener<InputStream> del = delegate;
       if (del != null) {
         dataPlaneServerCall.callContext.run(() -> {
+          Object evt;
+          while ((evt = savedEvents.poll()) != null) {
+            del.onEvent(evt);
+          }
           InputStream msg;
           while ((msg = savedMessages.poll()) != null) {
             del.onMessage(msg);

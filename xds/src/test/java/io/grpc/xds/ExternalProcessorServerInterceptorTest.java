@@ -40,6 +40,7 @@ import io.grpc.ClientCall;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.ForwardingServerCall;
+import io.grpc.ForwardingServerCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricRecorder;
@@ -18519,6 +18520,184 @@ public class ExternalProcessorServerInterceptorTest {
     } catch (Exception e) {
       org.junit.Assert.fail("Should not throw when isReady is called after close: " + e);
     }
+
+    channelManager.close();
+  }
+
+  @Test
+  public void serverInterceptor_customEventPropagation() throws Exception {
+    final CountDownLatch extProcHeadersReceived = new CountDownLatch(1);
+    final AtomicReference<StreamObserver<ProcessingResponse>> extProcResponseObserverRef =
+        new AtomicReference<>();
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            extProcResponseObserverRef.set(responseObserver);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  extProcHeadersReceived.countDown();
+                } else if (request.hasResponseTrailers()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setResponseTrailers(TrailersResponse.newBuilder().build())
+                          .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setResponseHeaders(HeadersResponse.newBuilder().build())
+                          .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+
+    grpcCleanup.register(
+        InProcessServerBuilder.forName(extProcServerName)
+            .addService(extProcImpl)
+            .directExecutor()
+            .build()
+            .start());
+
+    ExternalProcessor proto =
+        createBaseProto(extProcServerName)
+            .setProcessingMode(
+                ProcessingMode.newBuilder()
+                    .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+                    .build())
+            .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    CachedChannelManager channelManager =
+        new CachedChannelManager(
+            config ->
+                grpcCleanup.register(
+                    InProcessChannelBuilder.forName(extProcServerName)
+                        .directExecutor()
+                        .build()));
+
+    ExternalProcessorServerInterceptor interceptor =
+        new ExternalProcessorServerInterceptor(filterConfig, channelManager, FAKE_CONTEXT);
+
+    final List<Object> receivedEvents = Collections.synchronizedList(new ArrayList<>());
+    final CountDownLatch eventsLatch = new CountDownLatch(2);
+    final String earlyEvent = "early-event";
+    final String activeEvent = "active-event";
+
+    final AtomicReference<ServerCall<InputStream, InputStream>> upstreamRawCall =
+        new AtomicReference<>();
+    ServerInterceptor upstreamInterceptor =
+        new ServerInterceptor() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call,
+              Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+            upstreamRawCall.set((ServerCall<InputStream, InputStream>) call);
+            return next.startCall(call, headers);
+          }
+        };
+
+    final AtomicReference<ServerCall<InputStream, InputStream>> capturedServerCall =
+        new AtomicReference<>();
+    ServerInterceptor downstreamCapturingInterceptor =
+        new ServerInterceptor() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call,
+              Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+            capturedServerCall.set((ServerCall<InputStream, InputStream>) call);
+            ServerCall.Listener<ReqT> inner = next.startCall(call, headers);
+            return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(
+                inner) {
+              @Override
+              public void onEvent(Object event) {
+                receivedEvents.add(event);
+                eventsLatch.countDown();
+                super.onEvent(event);
+              }
+            };
+          }
+        };
+
+    final AtomicReference<StreamObserver<InputStream>> responseObserverRef =
+        new AtomicReference<>();
+    final CountDownLatch requestReceivedLatch = new CountDownLatch(1);
+    dataPlaneHandler =
+        new DataPlaneServiceHandler() {
+          @Override
+          public void sayHello(InputStream request, StreamObserver<InputStream> responseObserver) {
+            responseObserverRef.set(responseObserver);
+            requestReceivedLatch.countDown();
+          }
+        };
+
+    startDataPlane(downstreamCapturingInterceptor, interceptor, upstreamInterceptor);
+
+    io.grpc.ClientCall<InputStream, InputStream> clientCall =
+        dataPlaneChannel.newCall(METHOD_SAY_HELLO_RAW, io.grpc.CallOptions.DEFAULT);
+
+    final CountDownLatch callClosedLatch = new CountDownLatch(1);
+    clientCall.start(
+        new io.grpc.ClientCall.Listener<InputStream>() {
+          @Override
+          public void onClose(Status status, Metadata trailers) {
+            callClosedLatch.countDown();
+          }
+        },
+        new Metadata());
+    clientCall.request(1);
+
+    // 1. Wait until ext-proc receives request headers. At this point, delegate is not yet set.
+    assertThat(extProcHeadersReceived.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(upstreamRawCall.get()).isNotNull();
+
+    // Trigger an early event while delegate is null; this must be buffered in savedEvents.
+    upstreamRawCall.get().triggerEvent(earlyEvent);
+
+    // 2. Ext-proc responds to request headers, which starts data plane call and sets delegate.
+    extProcResponseObserverRef.get().onNext(
+        ProcessingResponse.newBuilder()
+            .setRequestHeaders(HeadersResponse.newBuilder().build())
+            .build());
+
+    // 3. Client sends request body
+    clientCall.sendMessage(
+        new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)));
+    clientCall.halfClose();
+
+    assertThat(requestReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(capturedServerCall.get()).isNotNull();
+
+    // 4. Trigger an active event while the stream is active; this is dispatched immediately.
+    capturedServerCall.get().triggerEvent(activeEvent);
+
+    assertThat(eventsLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(receivedEvents).containsExactly(earlyEvent, activeEvent).inOrder();
+
+    // 5. Complete the call
+    responseObserverRef.get().onNext(
+        new ByteArrayInputStream("response".getBytes(StandardCharsets.UTF_8)));
+    responseObserverRef.get().onCompleted();
+
+    assertThat(callClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     channelManager.close();
   }
