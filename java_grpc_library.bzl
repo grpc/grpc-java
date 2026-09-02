@@ -87,41 +87,25 @@ def _java_rpc_library_impl(ctx):
         print(("in srcs attribute of {0}: Proto source with label {1} should be in " +
                "same package as consuming rule").format(ctx.label, ctx.attr.srcs[0].label))
 
+    srcjar = ctx.actions.declare_file("%s-proto-gensrc.jar" % ctx.label.name)
+
     if ProtoLangToolchainInfo in ctx.attr._toolchain:
         toolchain = ctx.attr._toolchain[ProtoLangToolchainInfo]
-        srcs = ctx.attr.srcs[0][ProtoInfo]
-
-        srcjar = ctx.actions.declare_file("%s-proto-gensrc.jar" % ctx.label.name)
-
         proto_common.compile(
             actions = ctx.actions,
-            proto_info = srcs,
+            proto_info = ctx.attr.srcs[0][ProtoInfo],
             proto_lang_toolchain_info = toolchain,
             generated_files = [srcjar],
             plugin_output = srcjar.path,
         )
-
-        deps_java_info = java_common.merge([dep[JavaInfo] for dep in ctx.attr.deps])
-
-        java_info = java_common.compile(
-            ctx,
-            java_toolchain = ctx.toolchains["@bazel_tools//tools/jdk:toolchain_type"].java,
-            source_jars = [srcjar],
-            output = ctx.outputs.jar,
-            output_source_jar = ctx.outputs.srcjar,
-            deps = [
-                java_common.make_non_strict(deps_java_info),
-            ] + ([toolchain.runtime[JavaInfo]] if toolchain.runtime else []),
-        )
-
-        return [java_info]
+        java_toolchain = ctx.toolchains["@bazel_tools//tools/jdk:toolchain_type"].java
+        java_plugins = []
+        runtime_deps = [toolchain.runtime[JavaInfo]] if toolchain.runtime else []
     else:
         # Legacy support for java_rpc_toolchain
         toolchain = ctx.attr._toolchain[_JavaRpcToolchainInfo]
         srcs = ctx.attr.srcs[0][ProtoInfo].direct_sources
         descriptor_set_in = ctx.attr.srcs[0][ProtoInfo].transitive_descriptor_sets
-
-        srcjar = ctx.actions.declare_file("%s-proto-gensrc.jar" % ctx.label.name)
 
         args = ctx.actions.args()
         args.add(toolchain.plugin[DefaultInfo].files_to_run.executable, format = "--plugin=protoc-gen-rpc-plugin=%s")
@@ -137,22 +121,25 @@ def _java_rpc_library_impl(ctx):
             use_default_shell_env = True,
             toolchain = None,
         )
+        java_toolchain = toolchain.java_toolchain[java_common.JavaToolchainInfo]
+        java_plugins = [plugin[JavaPluginInfo] for plugin in toolchain.java_plugins]
+        runtime_deps = [dep[JavaInfo] for dep in toolchain.runtime]
 
-        deps_java_info = java_common.merge([dep[JavaInfo] for dep in ctx.attr.deps])
+    deps_java_info = java_common.merge([dep[JavaInfo] for dep in ctx.attr.deps])
 
-        java_info = java_common.compile(
-            ctx,
-            java_toolchain = toolchain.java_toolchain[java_common.JavaToolchainInfo],
-            source_jars = [srcjar],
-            output = ctx.outputs.jar,
-            output_source_jar = ctx.outputs.srcjar,
-            plugins = [plugin[JavaPluginInfo] for plugin in toolchain.java_plugins],
-            deps = [
-                java_common.make_non_strict(deps_java_info),
-            ] + [dep[JavaInfo] for dep in toolchain.runtime],
-        )
+    java_info = java_common.compile(
+        ctx,
+        java_toolchain = java_toolchain,
+        source_jars = [srcjar],
+        output = ctx.outputs.jar,
+        output_source_jar = ctx.outputs.srcjar,
+        plugins = java_plugins,
+        deps = [
+            java_common.make_non_strict(deps_java_info),
+        ] + runtime_deps,
+    )
 
-        return [java_info]
+    return [java_info]
 
 _java_grpc_library = rule(
     attrs = {
