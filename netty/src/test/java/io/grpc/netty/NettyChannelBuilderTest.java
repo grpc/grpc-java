@@ -26,6 +26,7 @@ import static org.mockito.Mockito.mock;
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
@@ -36,8 +37,11 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.handler.ssl.SslContext;
+import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Arrays;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
 import org.junit.Test;
@@ -48,6 +52,71 @@ import org.junit.runners.JUnit4;
 public class NettyChannelBuilderTest {
 
   private final SslContext noSslContext = null;
+
+  @Test
+  public void neverIndexMetadataKeyIsFluentAndAdditive() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+    Metadata.Key<String> key =
+        Metadata.Key.of("X-High-Cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<String> sameNormalizedKey =
+        Metadata.Key.of("x-high-cardinality", Metadata.ASCII_STRING_MARSHALLER);
+
+    assertThat(builder.neverIndexMetadataKey(key)).isSameInstanceAs(builder);
+    assertThat(builder.neverIndexMetadataKey(sameNormalizedKey)).isSameInstanceAs(builder);
+  }
+
+  @Test
+  public void neverIndexMetadataKeyRejectsNull() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> builder.neverIndexMetadataKey(null));
+
+    assertThat(exception).hasMessageThat().isEqualTo("key");
+  }
+
+  @Test
+  public void neverIndexMetadataKeysIsFluentAdditiveAndIgnoresDuplicates() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+    Metadata.Key<String> stringKey =
+        Metadata.Key.of("x-high-cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<String> duplicateStringKey =
+        Metadata.Key.of("X-High-Cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<byte[]> binaryKey =
+        Metadata.Key.of("trace-bin", Metadata.BINARY_BYTE_MARSHALLER);
+
+    assertThat(builder.neverIndexMetadataKey(stringKey)).isSameInstanceAs(builder);
+    assertThat(builder.neverIndexMetadataKeys(
+        Arrays.asList(stringKey, duplicateStringKey, binaryKey)))
+        .isSameInstanceAs(builder);
+  }
+
+  @Test
+  public void neverIndexMetadataKeysRejectsNullCollection() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> builder.neverIndexMetadataKeys(null));
+
+    assertThat(exception).hasMessageThat().isEqualTo("keys");
+  }
+
+  @Test
+  public void neverIndexMetadataKeysRejectsNullElementWithoutPartialMutation() throws Exception {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+    Metadata.Key<String> validKey =
+        Metadata.Key.of("valid-key", Metadata.ASCII_STRING_MARSHALLER);
+
+    NullPointerException exception = assertThrows(
+        NullPointerException.class,
+        () -> builder.neverIndexMetadataKeys(
+            Arrays.<Metadata.Key<?>>asList(validKey, null)));
+
+    assertThat(exception).hasMessageThat().isEqualTo("key");
+    Field field = NettyChannelBuilder.class.getDeclaredField("neverIndexedMetadataKeys");
+    field.setAccessible(true);
+    assertThat((Set<?>) field.get(builder)).isEmpty();
+  }
 
   private void shutdown(ManagedChannel mc) throws Exception {
     mc.shutdownNow();

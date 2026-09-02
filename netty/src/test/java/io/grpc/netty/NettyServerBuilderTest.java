@@ -22,11 +22,16 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
+import io.netty.util.AsciiString;
+import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -39,6 +44,61 @@ import org.junit.runners.JUnit4;
 public class NettyServerBuilderTest {
 
   private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
+
+  @Test
+  public void neverIndexMetadataKeysAreFluentAdditiveAndIgnoreDuplicates() throws Exception {
+    Metadata.Key<String> stringKey =
+        Metadata.Key.of("x-high-cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<String> duplicateStringKey =
+        Metadata.Key.of("X-High-Cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<byte[]> binaryKey =
+        Metadata.Key.of("trace-bin", Metadata.BINARY_BYTE_MARSHALLER);
+
+    assertThat(builder.neverIndexMetadataKey(stringKey)).isSameInstanceAs(builder);
+    assertThat(builder.neverIndexMetadataKeys(
+        Arrays.asList(duplicateStringKey, binaryKey)))
+        .isSameInstanceAs(builder);
+    assertThat(neverIndexedMetadataKeys(builder))
+        .containsExactly(AsciiString.of("x-high-cardinality"), AsciiString.of("trace-bin"));
+  }
+
+  @Test
+  public void neverIndexMetadataKeyRejectsNull() {
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> builder.neverIndexMetadataKey(null));
+
+    assertThat(exception).hasMessageThat().isEqualTo("key");
+  }
+
+  @Test
+  public void neverIndexMetadataKeysRejectsNullCollection() {
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> builder.neverIndexMetadataKeys(null));
+
+    assertThat(exception).hasMessageThat().isEqualTo("keys");
+  }
+
+  @Test
+  public void neverIndexMetadataKeysRejectsNullElementWithoutPartialMutation() throws Exception {
+    Metadata.Key<String> validKey =
+        Metadata.Key.of("valid-key", Metadata.ASCII_STRING_MARSHALLER);
+
+    NullPointerException exception = assertThrows(
+        NullPointerException.class,
+        () -> builder.neverIndexMetadataKeys(
+            Arrays.<Metadata.Key<?>>asList(validKey, null)));
+
+    assertThat(exception).hasMessageThat().isEqualTo("key");
+    assertThat(neverIndexedMetadataKeys(builder)).isEmpty();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Set<AsciiString> neverIndexedMetadataKeys(NettyServerBuilder builder)
+      throws Exception {
+    Field field = NettyServerBuilder.class.getDeclaredField("neverIndexedMetadataKeys");
+    field.setAccessible(true);
+    return (Set<AsciiString>) field.get(builder);
+  }
 
   @Test
   public void addMultipleListenAddresses() {
