@@ -104,6 +104,11 @@ public class UtilServerInterceptorsTest {
       public void onReady() {
         throw exception;
       }
+
+      @Override
+      public void onEvent(Object event) {
+        throw exception;
+      }
     };
 
     ServerServiceDefinition intercepted = ServerInterceptors.intercept(
@@ -116,7 +121,36 @@ public class UtilServerInterceptorsTest {
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onComplete();
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onHalfClose();
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onReady();
-    assertEquals(5, call.numCloses);
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers)
+        .onEvent(new Object());
+    assertEquals(6, call.numCloses);
+  }
+
+  @Test
+  public void statusRuntimeExceptionTransmitter_serializingServerCall_triggerEvent() {
+    final java.util.concurrent.atomic.AtomicReference<Object> eventRef =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    FakeServerCall<Void, Void> call = new FakeServerCall<Void, Void>(Status.OK, new Metadata()) {
+      @Override
+      public void triggerEvent(Object event) {
+        eventRef.set(event);
+      }
+    };
+    final java.util.concurrent.atomic.AtomicReference<ServerCall<Void, Void>> interceptedCall =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    listener = new VoidCallListener() {
+      @Override
+      public void onCall(ServerCall<Void, Void> call, Metadata headers) {
+        interceptedCall.set(call);
+      }
+    };
+    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
+        serviceDefinition,
+        Arrays.asList(TransmitStatusRuntimeExceptionInterceptor.instance()));
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
+    Object testEvent = new Object();
+    interceptedCall.get().triggerEvent(testEvent);
+    assertEquals(testEvent, eventRef.get());
   }
 
   @Test
