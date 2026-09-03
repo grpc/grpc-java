@@ -23,22 +23,22 @@ import com.google.protobuf.Timestamp;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.HeaderMap;
 import io.envoyproxy.envoy.config.core.v3.HeaderValue;
-import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.service.auth.v3.AttributeContext;
 import io.envoyproxy.envoy.service.auth.v3.CheckRequest;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
+import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.xds.internal.Matchers;
 import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.Locale;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.net.ssl.SSLPeerUnverifiedException;
@@ -74,7 +74,6 @@ public class CheckRequestBuilder {
         throws CertificateEncodingException, UnsupportedEncodingException;
   }
 
-  private static final Logger logger = Logger.getLogger(CheckRequestBuilder.class.getName());
   private static final BaseEncoding BASE64_NO_PAD = BaseEncoding.base64().omitPadding();
 
 
@@ -123,7 +122,7 @@ public class CheckRequestBuilder {
    */
   public CheckRequest buildRequest(MethodDescriptor<?, ?> methodDescriptor, Metadata headers,
       Timestamp requestTime) {
-    return build(methodDescriptor, headers, requestTime, null, null, null);
+    return build(methodDescriptor, headers, requestTime, null, null);
   }
 
 
@@ -134,42 +133,47 @@ public class CheckRequestBuilder {
    * @param headers The initial metadata headers.
    * @param requestTime The timestamp when the request was initiated.
    * @return The constructed {@link CheckRequest}.
+   * @throws StatusException If peer certificate URL-PEM encoding fails when configured.
    */
   public CheckRequest buildRequest(ServerCall<?, ?> serverCall, Metadata headers,
-      Timestamp requestTime) {
-    java.net.SocketAddress localAddress =
+      Timestamp requestTime) throws StatusException {
+    SocketAddress localAddress =
         serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR);
-    java.net.SocketAddress remoteAddress =
+    SocketAddress remoteAddress =
         serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
     SSLSession sslSession = serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
-    return build(serverCall.getMethodDescriptor(), headers, requestTime, localAddress,
-        remoteAddress, sslSession);
+    AttributeContext.Peer source =
+        remoteAddress != null ? buildSource(remoteAddress, sslSession) : null;
+    AttributeContext.Peer destination =
+        localAddress != null ? buildDestination(localAddress, sslSession) : null;
+    return build(serverCall.getMethodDescriptor(), headers, requestTime, source, destination);
   }
 
   private CheckRequest build(MethodDescriptor<?, ?> methodDescriptor, Metadata headers,
-      Timestamp requestTime, @Nullable java.net.SocketAddress localAddress,
-      @Nullable java.net.SocketAddress remoteAddress, @Nullable SSLSession sslSession) {
+      Timestamp requestTime, @Nullable AttributeContext.Peer source,
+      @Nullable AttributeContext.Peer destination) {
     AttributeContext.Builder attrBuilder = AttributeContext.newBuilder();
-    if (remoteAddress != null) {
-      attrBuilder.setSource(buildSource(remoteAddress, sslSession));
+    if (source != null) {
+      attrBuilder.setSource(source);
     }
-    if (localAddress != null) {
-      attrBuilder.setDestination(buildDestination(localAddress, sslSession));
+    if (destination != null) {
+      attrBuilder.setDestination(destination);
     }
     attrBuilder.setRequest(
         buildAttributeRequest(headers, methodDescriptor.getFullMethodName(), requestTime));
     return CheckRequest.newBuilder().setAttributes(attrBuilder).build();
   }
 
-  private AttributeContext.Peer buildSource(java.net.SocketAddress socketAddress,
-      @Nullable SSLSession sslSession) {
+  private AttributeContext.Peer buildSource(SocketAddress socketAddress,
+      @Nullable SSLSession sslSession) throws StatusException {
     AttributeContext.Peer.Builder peerBuilder = buildPeer(socketAddress).toBuilder();
     if (sslSession != null) {
       Certificate[] certs = null;
       try {
         certs = sslSession.getPeerCertificates();
       } catch (SSLPeerUnverifiedException e) {
-        logger.log(Level.FINE, "Peer is not authenticated; omitting principal and certificate.", e);
+        // Peer is not authenticated (e.g. non-mTLS or one-way TLS).
+        // This is expected, so omit principal and certificate cleanly without logging.
       }
       if (certs != null && certs.length > 0 && certs[0] instanceof X509Certificate) {
         X509Certificate cert = (X509Certificate) certs[0];
@@ -178,7 +182,10 @@ public class CheckRequestBuilder {
           try {
             peerBuilder.setCertificate(certificateProvider.getUrlPemEncodedCertificate(cert));
           } catch (UnsupportedEncodingException | CertificateEncodingException e) {
-            logger.log(Level.FINE, "Error encoding peer certificate; omitting from request.", e);
+            throw Status.INTERNAL
+                .withDescription("Failed to encode peer certificate for external authorization")
+                .withCause(e)
+                .asException();
           }
         }
       }
@@ -186,7 +193,7 @@ public class CheckRequestBuilder {
     return peerBuilder.build();
   }
 
-  private AttributeContext.Peer buildDestination(java.net.SocketAddress socketAddress,
+  private AttributeContext.Peer buildDestination(SocketAddress socketAddress,
       @Nullable SSLSession sslSession) {
     AttributeContext.Peer.Builder peerBuilder = buildPeer(socketAddress).toBuilder();
     if (sslSession != null) {
@@ -198,7 +205,7 @@ public class CheckRequestBuilder {
     return peerBuilder.build();
   }
 
-  private AttributeContext.Peer buildPeer(java.net.SocketAddress socketAddress) {
+  private AttributeContext.Peer buildPeer(SocketAddress socketAddress) {
     AttributeContext.Peer.Builder peerBuilder = AttributeContext.Peer.newBuilder();
     if (socketAddress instanceof InetSocketAddress) {
       InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
@@ -218,7 +225,7 @@ public class CheckRequestBuilder {
       }
       peerBuilder
           .setAddress(Address.newBuilder()
-              .setSocketAddress(SocketAddress.newBuilder()
+              .setSocketAddress(io.envoyproxy.envoy.config.core.v3.SocketAddress.newBuilder()
                   .setAddress(address)
                   .setPortValue(inetSocketAddress.getPort()))
               .build());

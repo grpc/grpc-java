@@ -17,6 +17,7 @@
 package io.grpc.xds.internal.extauthz;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -30,6 +31,8 @@ import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.extauthz.ExtAuthzTestHelper.TestServerCall;
@@ -135,7 +138,7 @@ public class CheckRequestBuilderTest {
   }
 
   @Test
-  public void buildRequest_forServer_noTransportAttrs() {
+  public void buildRequest_forServer_noTransportAttrs() throws Exception {
     serverCall = new TestServerCall<>(Attributes.EMPTY, methodDescriptor);
     Metadata headers = new Metadata();
 
@@ -189,7 +192,7 @@ public class CheckRequestBuilderTest {
   }
 
   @Test
-  public void buildRequest_forServer_noSslSession() {
+  public void buildRequest_forServer_noSslSession() throws Exception {
     SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
     SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
     Attributes attributes =
@@ -314,7 +317,7 @@ public class CheckRequestBuilderTest {
   }
 
   @Test
-  public void buildRequest_forServer_nonInetSocketAddress() {
+  public void buildRequest_forServer_nonInetSocketAddress() throws Exception {
     SocketAddress remoteAddress = mock(SocketAddress.class);
     serverCall = new TestServerCall<>(
         Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress).build(),
@@ -325,7 +328,7 @@ public class CheckRequestBuilderTest {
   }
 
   @Test
-  public void buildRequest_forServer_unresolvedInetSocketAddress() {
+  public void buildRequest_forServer_unresolvedInetSocketAddress() throws Exception {
     SocketAddress localAddress =
         InetSocketAddress.createUnresolved("local-hostname", 443);
     SocketAddress remoteAddress =
@@ -352,7 +355,7 @@ public class CheckRequestBuilderTest {
   }
 
   @Test
-  public void buildRequest_forServer_handlesCertificateEncodingException() throws Exception {
+  public void buildRequest_forServer_throwsWhenCertificateEncodingFails() throws Exception {
     SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
     SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
     Attributes attributes =
@@ -368,12 +371,12 @@ public class CheckRequestBuilderTest {
     when(certificateProvider.getUrlPemEncodedCertificate(peerCert))
         .thenThrow(new java.security.cert.CertificateEncodingException("encoding error"));
 
-    CheckRequest request =
-        checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
-
-    AttributeContext.Peer source = request.getAttributes().getSource();
-    assertThat(source.getPrincipal()).isEqualTo("peer-principal");
-    assertThat(source.getCertificate()).isEmpty();
+    StatusException exception = assertThrows(
+        StatusException.class,
+        () -> checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime));
+    assertThat(exception.getStatus().getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(exception.getStatus().getDescription())
+        .isEqualTo("Failed to encode peer certificate for external authorization");
   }
 
   @Test
