@@ -256,6 +256,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void triggerEvent(Object event) {
+    if (closeCalled) {
+      return;
+    }
     try (TaskCloseable ignore = PerfMark.traceTask("ServerCall.triggerEvent")) {
       PerfMark.attachTag(tag);
       stream.triggerEvent(event);

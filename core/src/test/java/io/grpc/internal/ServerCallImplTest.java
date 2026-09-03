@@ -501,6 +501,14 @@ public class ServerCallImplTest {
   }
 
   @Test
+  public void triggerEvent_afterClose_noop() {
+    call.close(Status.OK, new Metadata());
+    Object event = new Object();
+    call.triggerEvent(event);
+    verify(stream, never()).triggerEvent(event);
+  }
+
+  @Test
   public void streamListener_triggerEvent() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
