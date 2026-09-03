@@ -49,7 +49,9 @@ public final class OpenTelemetryUtil {
     properties.put("otel.bsp.schedule.delay", "100");
     if (otelCollectorAddress != null && !otelCollectorAddress.isEmpty()) {
       String endpoint = otelCollectorAddress;
-      if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+      if (endpoint.startsWith("https://")) {
+        endpoint = "http://" + endpoint.substring(8);
+      } else if (!endpoint.startsWith("http://")) {
         endpoint = "http://" + endpoint;
       }
       properties.put("otel.exporter.otlp.endpoint", endpoint);
