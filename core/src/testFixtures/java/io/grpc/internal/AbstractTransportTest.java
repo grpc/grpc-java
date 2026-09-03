@@ -2114,7 +2114,7 @@ public abstract class AbstractTransportTest {
     assertEquals(event, receivedEvent);
 
     // Cleanup
-    clientStream.cancel(Status.CANCELLED);
+    serverStream.close(Status.OK, new Metadata());
   }
 
   @Test
