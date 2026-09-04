@@ -116,9 +116,23 @@ final class AutoShardingPicker extends SubchannelPicker {
     this.keyHeader = keyHeader;
     this.random = checkNotNull(random, "random");
 
+    boolean hasTransientFailure = false;
+    for (int i = 0; i < this.endpoints.size(); i++) {
+      if (this.endpoints.get(i).getState() == ConnectivityState.TRANSIENT_FAILURE) {
+        hasTransientFailure = true;
+        break;
+      }
+    }
+
     this.sliceInFallback = new boolean[sliceMap.getSlices().size()];
-    for (int i = 0; i < sliceInFallback.length; i++) {
-      this.sliceInFallback[i] = isPoolInFallback(sliceMap.getSlices().get(i).getEndpoints());
+    if (!hasTransientFailure) {
+      for (int i = 0; i < sliceInFallback.length; i++) {
+        this.sliceInFallback[i] = sliceMap.getSlices().get(i).getEndpoints().isEmpty();
+      }
+    } else {
+      for (int i = 0; i < sliceInFallback.length; i++) {
+        this.sliceInFallback[i] = isPoolInFallback(sliceMap.getSlices().get(i).getEndpoints());
+      }
     }
   }
 
