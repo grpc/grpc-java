@@ -1,7 +1,7 @@
+load("@com_google_protobuf//bazel/toolchains:proto_lang_toolchain.bzl", "proto_lang_toolchain")
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 load("@rules_java//java:defs.bzl", "java_library")
 load("@rules_jvm_external//:defs.bzl", "artifact")
-load("//:java_grpc_library.bzl", "java_rpc_toolchain")
 
 # This should not generally be referenced. Users should use java_grpc_library
 cc_binary(
@@ -42,17 +42,20 @@ java_library(
     ],
 )
 
-java_rpc_toolchain(
+proto_lang_toolchain(
     name = "java_grpc_library_toolchain",
+    command_line = "--rpc-plugin_out=%s",
     plugin = "//compiler:grpc_java_plugin",
-    runtime = [":java_grpc_library_deps__do_not_reference"],
+    plugin_format_flag = "--plugin=protoc-gen-rpc-plugin=%s",
+    runtime = ":java_grpc_library_deps__do_not_reference",
     visibility = ["//visibility:public"],
 )
 
-java_rpc_toolchain(
+proto_lang_toolchain(
     name = "java_lite_grpc_library_toolchain",
+    command_line = "--rpc-plugin_out=lite:%s",
     plugin = "//compiler:grpc_java_plugin",
-    plugin_arg = "lite",
-    runtime = [":java_lite_grpc_library_deps__do_not_reference"],
+    plugin_format_flag = "--plugin=protoc-gen-rpc-plugin=%s",
+    runtime = ":java_lite_grpc_library_deps__do_not_reference",
     visibility = ["//visibility:public"],
 )

@@ -1,6 +1,8 @@
 """Build rule for java_grpc_library."""
 
+load("@com_google_protobuf//bazel/common:proto_common.bzl", "proto_common")
 load("@com_google_protobuf//bazel/common:proto_info.bzl", "ProtoInfo")
+load("@com_google_protobuf//bazel/common:proto_lang_toolchain_info.bzl", "ProtoLangToolchainInfo")
 load("@rules_java//java:defs.bzl", "JavaInfo", "JavaPluginInfo", "java_common")
 
 _JavaRpcToolchainInfo = provider(
@@ -85,39 +87,56 @@ def _java_rpc_library_impl(ctx):
         print(("in srcs attribute of {0}: Proto source with label {1} should be in " +
                "same package as consuming rule").format(ctx.label, ctx.attr.srcs[0].label))
 
-    toolchain = ctx.attr._toolchain[_JavaRpcToolchainInfo]
-    srcs = ctx.attr.srcs[0][ProtoInfo].direct_sources
-    descriptor_set_in = ctx.attr.srcs[0][ProtoInfo].transitive_descriptor_sets
-
     srcjar = ctx.actions.declare_file("%s-proto-gensrc.jar" % ctx.label.name)
 
-    args = ctx.actions.args()
-    args.add(toolchain.plugin[DefaultInfo].files_to_run.executable, format = "--plugin=protoc-gen-rpc-plugin=%s")
-    args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
-    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.configuration.host_path_separator)
-    args.add_all(srcs, map_each = _path_ignoring_repository)
+    if ProtoLangToolchainInfo in ctx.attr._toolchain:
+        toolchain = ctx.attr._toolchain[ProtoLangToolchainInfo]
+        proto_common.compile(
+            actions = ctx.actions,
+            proto_info = ctx.attr.srcs[0][ProtoInfo],
+            proto_lang_toolchain_info = toolchain,
+            generated_files = [srcjar],
+            plugin_output = srcjar.path,
+        )
+        java_toolchain = ctx.toolchains["@bazel_tools//tools/jdk:toolchain_type"].java
+        java_plugins = []
+        runtime_deps = [toolchain.runtime[JavaInfo]] if toolchain.runtime else []
+    else:
+        # Legacy support for java_rpc_toolchain
+        toolchain = ctx.attr._toolchain[_JavaRpcToolchainInfo]
+        srcs = ctx.attr.srcs[0][ProtoInfo].direct_sources
+        descriptor_set_in = ctx.attr.srcs[0][ProtoInfo].transitive_descriptor_sets
 
-    ctx.actions.run(
-        inputs = depset(srcs, transitive = [descriptor_set_in, toolchain.plugin[DefaultInfo].files]),
-        outputs = [srcjar],
-        executable = toolchain.protoc[DefaultInfo].files_to_run,
-        arguments = [args],
-        use_default_shell_env = True,
-        toolchain = None,
-    )
+        args = ctx.actions.args()
+        args.add(toolchain.plugin[DefaultInfo].files_to_run.executable, format = "--plugin=protoc-gen-rpc-plugin=%s")
+        args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
+        args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.configuration.host_path_separator)
+        args.add_all(srcs, map_each = _path_ignoring_repository)
+
+        ctx.actions.run(
+            inputs = depset(srcs, transitive = [descriptor_set_in, toolchain.plugin[DefaultInfo].files]),
+            outputs = [srcjar],
+            executable = toolchain.protoc[DefaultInfo].files_to_run,
+            arguments = [args],
+            use_default_shell_env = True,
+            toolchain = None,
+        )
+        java_toolchain = toolchain.java_toolchain[java_common.JavaToolchainInfo]
+        java_plugins = [plugin[JavaPluginInfo] for plugin in toolchain.java_plugins]
+        runtime_deps = [dep[JavaInfo] for dep in toolchain.runtime]
 
     deps_java_info = java_common.merge([dep[JavaInfo] for dep in ctx.attr.deps])
 
     java_info = java_common.compile(
         ctx,
-        java_toolchain = toolchain.java_toolchain[java_common.JavaToolchainInfo],
+        java_toolchain = java_toolchain,
         source_jars = [srcjar],
         output = ctx.outputs.jar,
         output_source_jar = ctx.outputs.srcjar,
-        plugins = [plugin[JavaPluginInfo] for plugin in toolchain.java_plugins],
+        plugins = java_plugins,
         deps = [
             java_common.make_non_strict(deps_java_info),
-        ] + [dep[JavaInfo] for dep in toolchain.runtime],
+        ] + runtime_deps,
     )
 
     return [java_info]
