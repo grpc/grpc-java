@@ -147,8 +147,7 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
   public abstract void setOnReadyHandler(Runnable onReadyHandler);
 
   /**
-   * Requests the peer to produce {@code count} more messages to be delivered to the 'inbound'
-   * {@link StreamObserver}.
+   * Requests that {@code count} more messages be delivered to the 'inbound' {@link StreamObserver}.
    *
    * <p>This method is safe to call from multiple threads without external synchronization.
    *

@@ -663,8 +663,11 @@ final class XdsServerWrapper extends Server {
     private boolean ipAddressesMatch(String ldsAddress) {
       HostAndPort ldsAddressHnP = HostAndPort.fromString(ldsAddress);
       HostAndPort listenerAddressHnP = HostAndPort.fromString(listenerAddress);
+      // A port value of 0 in the xDS Listener matches any listening port, but the
+      // listener address itself must still match exactly.
       if (!ldsAddressHnP.hasPort() || !listenerAddressHnP.hasPort()
-          || ldsAddressHnP.getPort() != listenerAddressHnP.getPort()) {
+          || (ldsAddressHnP.getPort() != 0
+              && ldsAddressHnP.getPort() != listenerAddressHnP.getPort())) {
         return false;
       }
       InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
