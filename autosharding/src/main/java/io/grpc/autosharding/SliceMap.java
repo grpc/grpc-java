@@ -16,8 +16,10 @@
 
 package io.grpc.autosharding;
 
+import com.google.common.primitives.UnsignedBytes;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -33,6 +35,8 @@ final class SliceMap {
     }
   }
 
+  private static final Comparator<byte[]> UNSIGNED_BYTES_COMPARATOR =
+      UnsignedBytes.lexicographicalComparator();
   private static final byte[] EMPTY_BYTES = new byte[0];
 
   private final List<SliceEntry> slices;
@@ -41,7 +45,7 @@ final class SliceMap {
 
   SliceMap(List<SliceEntry> slices, List<Integer> fallbackPool, long generation) {
     List<SliceEntry> sortedSlices = new ArrayList<>(slices);
-    sortedSlices.sort((e1, e2) -> compareUnsigned(e1.startKey, e2.startKey));
+    sortedSlices.sort((e1, e2) -> UNSIGNED_BYTES_COMPARATOR.compare(e1.startKey, e2.startKey));
     this.slices = Collections.unmodifiableList(sortedSlices);
     this.fallbackPool = Collections.unmodifiableList(new ArrayList<>(fallbackPool));
     this.generation = generation;
@@ -62,7 +66,7 @@ final class SliceMap {
 
     while (low <= high) {
       int mid = (low + high) >>> 1;
-      int cmp = compareUnsigned(slices.get(mid).startKey, searchKey);
+      int cmp = UNSIGNED_BYTES_COMPARATOR.compare(slices.get(mid).startKey, searchKey);
 
       if (cmp < 0) {
         low = mid + 1;
@@ -78,17 +82,6 @@ final class SliceMap {
       return -1;
     }
     return low - 1;
-  }
-
-  private static int compareUnsigned(byte[] a, byte[] b) {
-    int minLength = Math.min(a.length, b.length);
-    for (int i = 0; i < minLength; i++) {
-      int result = (a[i] & 0xFF) - (b[i] & 0xFF);
-      if (result != 0) {
-        return result;
-      }
-    }
-    return a.length - b.length;
   }
 
   List<SliceEntry> getSlices() {
