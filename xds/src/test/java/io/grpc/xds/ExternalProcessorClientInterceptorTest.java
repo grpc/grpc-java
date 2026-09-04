@@ -128,8 +128,7 @@ public class ExternalProcessorClientInterceptorTest {
   private ExternalProcessorFilter.Provider provider;
   private static final Filter.FilterContext FAKE_CONTEXT = Filter.FilterContext.create(
       "test-filter", new io.grpc.MetricRecorder() {});
-  private static final CallOptions DEFAULT_CALL_OPTIONS = CallOptions.DEFAULT
-      .withOption(XdsNameResolver.CLUSTER_SELECTION_KEY, "backend-service-metric");
+  private static final CallOptions DEFAULT_CALL_OPTIONS = CallOptions.DEFAULT;
   private Filter.FilterConfigParseContext filterContext;
   private Bootstrapper.BootstrapInfo bootstrapInfo;
   private Bootstrapper.ServerInfo serverInfo;
@@ -13523,8 +13522,7 @@ public class ExternalProcessorClientInterceptorTest {
     ClientCall<String, String> proxyCall =
         interceptCall(interceptor, 
             METHOD_SAY_HELLO,
-            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor())
-                .withOption(XdsNameResolver.CLUSTER_SELECTION_KEY, "backend-service-metric"),
+            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
 
     proxyCall.start(new ClientCall.Listener<String>() {
@@ -13555,25 +13553,25 @@ public class ExternalProcessorClientInterceptorTest {
         Mockito.eq(ExternalProcessorClientInterceptor.clientHeadersDuration),
         Mockito.anyDouble(),
         Mockito.eq(com.google.common.collect.ImmutableList.of("xds:///target-service-metric")),
-        Mockito.eq(com.google.common.collect.ImmutableList.of("backend-service-metric")));
+        Mockito.eq(com.google.common.collect.ImmutableList.of()));
 
     Mockito.verify(mockMetricRecorder, Mockito.times(1)).recordDoubleHistogram(
         Mockito.eq(ExternalProcessorClientInterceptor.clientHalfCloseDuration),
         Mockito.anyDouble(),
         Mockito.eq(com.google.common.collect.ImmutableList.of("xds:///target-service-metric")),
-        Mockito.eq(com.google.common.collect.ImmutableList.of("backend-service-metric")));
+        Mockito.eq(com.google.common.collect.ImmutableList.of()));
 
     Mockito.verify(mockMetricRecorder, Mockito.times(1)).recordDoubleHistogram(
         Mockito.eq(ExternalProcessorClientInterceptor.serverHeadersDuration),
         Mockito.anyDouble(),
         Mockito.eq(com.google.common.collect.ImmutableList.of("xds:///target-service-metric")),
-        Mockito.eq(com.google.common.collect.ImmutableList.of("backend-service-metric")));
+        Mockito.eq(com.google.common.collect.ImmutableList.of()));
 
     Mockito.verify(mockMetricRecorder, Mockito.times(1)).recordDoubleHistogram(
         Mockito.eq(ExternalProcessorClientInterceptor.serverTrailersDuration),
         Mockito.anyDouble(),
         Mockito.eq(com.google.common.collect.ImmutableList.of("xds:///target-service-metric")),
-        Mockito.eq(com.google.common.collect.ImmutableList.of("backend-service-metric")));
+        Mockito.eq(com.google.common.collect.ImmutableList.of()));
 
     channelManager.close();
     realScheduler.shutdown();
@@ -13690,8 +13688,7 @@ public class ExternalProcessorClientInterceptorTest {
     ClientCall<String, String> proxyCall =
         interceptCall(interceptor, 
             METHOD_SAY_HELLO,
-            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor())
-                .withOption(XdsNameResolver.CLUSTER_SELECTION_KEY, "backend-service-metric-fail"),
+            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
 
     proxyCall.start(new ClientCall.Listener<String>() {
@@ -13725,25 +13722,25 @@ public class ExternalProcessorClientInterceptorTest {
         Mockito.eq(ExternalProcessorClientInterceptor.clientHeadersDuration),
         Mockito.anyDouble(),
         Mockito.eq(com.google.common.collect.ImmutableList.of("xds:///target-service-metric-fail")),
-        Mockito.eq(com.google.common.collect.ImmutableList.of("backend-service-metric-fail")));
+        Mockito.eq(com.google.common.collect.ImmutableList.of()));
 
     Mockito.verify(mockMetricRecorder, Mockito.times(1)).recordDoubleHistogram(
         Mockito.eq(ExternalProcessorClientInterceptor.clientHalfCloseDuration),
         Mockito.anyDouble(),
         Mockito.eq(com.google.common.collect.ImmutableList.of("xds:///target-service-metric-fail")),
-        Mockito.eq(com.google.common.collect.ImmutableList.of("backend-service-metric-fail")));
+        Mockito.eq(com.google.common.collect.ImmutableList.of()));
 
     Mockito.verify(mockMetricRecorder, Mockito.times(1)).recordDoubleHistogram(
         Mockito.eq(ExternalProcessorClientInterceptor.serverHeadersDuration),
         Mockito.anyDouble(),
         Mockito.eq(com.google.common.collect.ImmutableList.of("xds:///target-service-metric-fail")),
-        Mockito.eq(com.google.common.collect.ImmutableList.of("backend-service-metric-fail")));
+        Mockito.eq(com.google.common.collect.ImmutableList.of()));
 
     Mockito.verify(mockMetricRecorder, Mockito.times(1)).recordDoubleHistogram(
         Mockito.eq(ExternalProcessorClientInterceptor.serverTrailersDuration),
         Mockito.anyDouble(),
         Mockito.eq(com.google.common.collect.ImmutableList.of("xds:///target-service-metric-fail")),
-        Mockito.eq(com.google.common.collect.ImmutableList.of("backend-service-metric-fail")));
+        Mockito.eq(com.google.common.collect.ImmutableList.of()));
 
     channelManager.close();
     realScheduler.shutdown();
