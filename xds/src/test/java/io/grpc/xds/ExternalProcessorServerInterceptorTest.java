@@ -15913,16 +15913,13 @@ public class ExternalProcessorServerInterceptorTest {
           @Override
           public StreamObserver<ProcessingRequest> process(
               final StreamObserver<ProcessingResponse> responseObserver) {
-            System.out.println("extProcImpl.process called");
             ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 receivedRequests.add(request);
                 extProcLatch.countDown();
                 if (request.hasRequestHeaders()) {
-                  System.out.println("extProcImpl: responding to request headers");
                   responseObserver.onNext(
                       ProcessingResponse.newBuilder()
                           .setRequestHeaders(HeadersResponse.newBuilder().build())
@@ -15970,13 +15967,11 @@ public class ExternalProcessorServerInterceptorTest {
                             .build());
                   }
                 } else if (request.hasResponseHeaders()) {
-                  System.out.println("extProcImpl: responding to response headers");
                   responseObserver.onNext(
                       ProcessingResponse.newBuilder()
                           .setResponseHeaders(HeadersResponse.newBuilder().build())
                           .build());
                 } else if (request.hasResponseBody()) {
-                  System.out.println("extProcImpl: responding to response body");
                   responseObserver.onNext(
                       ProcessingResponse.newBuilder()
                           .setResponseBody(
@@ -15995,7 +15990,6 @@ public class ExternalProcessorServerInterceptorTest {
                                   .build())
                           .build());
                 } else if (request.hasResponseTrailers()) {
-                  System.out.println("extProcImpl: responding to response trailers");
                   responseObserver.onNext(
                       ProcessingResponse.newBuilder()
                           .setResponseTrailers(TrailersResponse.newBuilder().build())
@@ -16004,13 +15998,10 @@ public class ExternalProcessorServerInterceptorTest {
               }
 
               @Override
-              public void onError(Throwable t) {
-                System.out.println("extProcImpl.onError: " + t);
-              }
+              public void onError(Throwable t) {}
 
               @Override
               public void onCompleted() {
-                System.out.println("extProcImpl.onCompleted");
                 responseObserver.onCompleted();
               }
             };
@@ -16040,18 +16031,13 @@ public class ExternalProcessorServerInterceptorTest {
     clientCall.start(
         new ClientCall.Listener<InputStream>() {
           @Override
-          public void onHeaders(Metadata headers) {
-            System.out.println("clientCall.onHeaders");
-          }
+          public void onHeaders(Metadata headers) {}
 
           @Override
-          public void onMessage(InputStream message) {
-            System.out.println("clientCall.onMessage");
-          }
+          public void onMessage(InputStream message) {}
 
           @Override
           public void onClose(Status status, Metadata trailers) {
-            System.out.println("clientCall.onClose: " + status);
             callCompletedLatch.countDown();
           }
         },
@@ -16132,7 +16118,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 receivedRequests.add(request);
                 if (request.hasRequestHeaders()) {
                   responseObserver.onNext(
@@ -17009,7 +16994,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 receivedRequests.add(request);
                 if (request.hasResponseHeaders()) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
@@ -17187,7 +17171,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 receivedRequests.add(request);
                 if (request.hasResponseHeaders()) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
@@ -17366,7 +17349,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 if (request.hasRequestHeaders()) {
                   responseObserver.onNext(
                       ProcessingResponse.newBuilder()
@@ -17567,7 +17549,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 receivedRequests.add(request);
                 if (request.hasResponseHeaders()) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
@@ -17738,7 +17719,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 if (request.hasResponseHeaders()) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setResponseHeaders(HeadersResponse.newBuilder().build())
@@ -17918,7 +17898,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 if (request.hasResponseHeaders()) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setResponseHeaders(HeadersResponse.newBuilder().build())
@@ -18085,15 +18064,9 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 if (request.hasRequestBody()) {
                   if (request.getRequestBody().getEndOfStream()
                       && request.getRequestBody().getEndOfStreamWithoutMessage()) {
-                    System.out.println(
-                        "extProcImpl sending EOS response: eos="
-                            + request.getRequestBody().getEndOfStream()
-                            + ", eos_no_msg="
-                            + request.getRequestBody().getEndOfStreamWithoutMessage());
                     responseObserver.onNext(
                         ProcessingResponse.newBuilder()
                             .setRequestBody(
@@ -18195,7 +18168,6 @@ public class ExternalProcessorServerInterceptorTest {
 
           @Override
           public void onCompleted() {
-            System.out.println("DataPlaneServiceHandler.onCompleted");
             responseObserver.onCompleted();
           }
         };
@@ -18268,7 +18240,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 if (request.hasRequestBody()) {
                   if (request.getRequestBody().getEndOfStream()
                       && request.getRequestBody().getEndOfStreamWithoutMessage()) {
@@ -18477,7 +18448,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 if (request.hasRequestHeaders()) {
                   responseObserver.onNext(
                       ProcessingResponse.newBuilder()
@@ -18681,7 +18651,6 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
-                System.out.println("extProcImpl.onNext:\n" + request);
                 if (request.hasRequestHeaders()) {
                   responseObserver.onNext(
                       ProcessingResponse.newBuilder()
