@@ -17,7 +17,6 @@
 package io.grpc.autosharding;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertThrows;
 
 import io.grpc.autosharding.SliceMap.SliceEntry;
 import java.nio.charset.StandardCharsets;
@@ -129,11 +128,10 @@ public class SliceMapTest {
     assertThat(sliceMap.getSlices()).hasSize(1);
     assertThat(sliceMap.getSlices().get(0).endpoints).containsExactly(0, 1).inOrder();
 
-    // Verify immutability
-    assertThrows(UnsupportedOperationException.class, () -> sliceMap.getSlices().clear());
-    assertThrows(UnsupportedOperationException.class, () -> sliceMap.getFallbackPool().clear());
-    assertThrows(
-        UnsupportedOperationException.class,
-        () -> sliceMap.getSlices().get(0).endpoints.clear());
+    // Verify defensive copying: mutating input collections does not affect sliceMap
+    slices.clear();
+    fallback.clear();
+    assertThat(sliceMap.getSlices()).hasSize(1);
+    assertThat(sliceMap.getFallbackPool()).containsExactly(0, 1).inOrder();
   }
 }

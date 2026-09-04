@@ -16,9 +16,11 @@
 
 package io.grpc.autosharding;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.collect.ImmutableList;
 import com.google.common.primitives.UnsignedBytes;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -27,11 +29,11 @@ final class SliceMap {
 
   static final class SliceEntry {
     final byte[] startKey;
-    final List<Integer> endpoints;
+    final ImmutableList<Integer> endpoints;
 
     SliceEntry(byte[] startKey, List<Integer> endpoints) {
-      this.startKey = startKey;
-      this.endpoints = Collections.unmodifiableList(new ArrayList<>(endpoints));
+      this.startKey = checkNotNull(startKey, "startKey");
+      this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
     }
   }
 
@@ -39,15 +41,15 @@ final class SliceMap {
       UnsignedBytes.lexicographicalComparator();
   private static final byte[] EMPTY_BYTES = new byte[0];
 
-  private final List<SliceEntry> slices;
-  private final List<Integer> fallbackPool;
+  private final ImmutableList<SliceEntry> slices;
+  private final ImmutableList<Integer> fallbackPool;
   private final long generation;
 
   SliceMap(List<SliceEntry> slices, List<Integer> fallbackPool, long generation) {
-    List<SliceEntry> sortedSlices = new ArrayList<>(slices);
+    List<SliceEntry> sortedSlices = new ArrayList<>(checkNotNull(slices, "slices"));
     sortedSlices.sort((e1, e2) -> UNSIGNED_BYTES_COMPARATOR.compare(e1.startKey, e2.startKey));
-    this.slices = Collections.unmodifiableList(sortedSlices);
-    this.fallbackPool = Collections.unmodifiableList(new ArrayList<>(fallbackPool));
+    this.slices = ImmutableList.copyOf(sortedSlices);
+    this.fallbackPool = ImmutableList.copyOf(checkNotNull(fallbackPool, "fallbackPool"));
     this.generation = generation;
   }
 
@@ -84,11 +86,11 @@ final class SliceMap {
     return low - 1;
   }
 
-  List<SliceEntry> getSlices() {
+  ImmutableList<SliceEntry> getSlices() {
     return slices;
   }
 
-  List<Integer> getFallbackPool() {
+  ImmutableList<Integer> getFallbackPool() {
     return fallbackPool;
   }
 

@@ -16,6 +16,7 @@
 
 package io.grpc.autosharding;
 
+import com.google.common.collect.ImmutableList;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalMetadata;
 import io.grpc.LoadBalancer.PickResult;
@@ -23,8 +24,6 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -45,7 +44,7 @@ final class AutoShardingPicker extends SubchannelPicker {
       };
 
   private final SliceMap sliceMap;
-  private final List<PickerEndpoint> endpoints;
+  private final ImmutableList<PickerEndpoint> endpoints;
   private final boolean[] sliceInFallback;
   private final boolean fallbackEnabled;
   private final Metadata.Key<byte[]> keyHeader;
@@ -56,7 +55,7 @@ final class AutoShardingPicker extends SubchannelPicker {
       boolean fallbackEnabled,
       String keyHeaderName) {
     this.sliceMap = sliceMap;
-    this.endpoints = Collections.unmodifiableList(new ArrayList<>(endpoints));
+    this.endpoints = ImmutableList.copyOf(endpoints);
     this.fallbackEnabled = fallbackEnabled;
 
     if (keyHeaderName == null || keyHeaderName.isEmpty()) {
