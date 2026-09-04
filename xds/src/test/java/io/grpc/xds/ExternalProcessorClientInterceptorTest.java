@@ -5210,7 +5210,8 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.halfClose();
 
     assertThat(dataPlaneHalfClosedLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
-    // Since both end_of_stream and end_of_stream_without_message are true, the body must NOT be delivered
+    // Since both end_of_stream and end_of_stream_without_message are true,
+    // the body must NOT be delivered
     assertThat(serverReceivedMessages).isEmpty();
 
     proxyCall.cancel("Cleanup", null);
@@ -5377,7 +5378,7 @@ public class ExternalProcessorClientInterceptorTest {
   @Test
   @SuppressWarnings("unchecked")
   public void
-      clientInterceptor_extProcResponse_eosTrue_eosWithoutMessageFalse_emptyBody_deliveredAsMessage()
+      clientInterceptor_extProcResponse_eosTrue_eosWithoutMsgFalse_emptyBody_deliveredAsMessage()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
@@ -5512,7 +5513,8 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.halfClose();
 
     assertThat(dataPlaneHalfClosedLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
-    // Since end_of_stream is true and end_of_stream_without_message is false, empty body is delivered as a message
+    // Since end_of_stream is true and end_of_stream_without_message is false,
+    // empty body is delivered as a message
     assertThat(serverReceivedMessages).containsExactly("");
 
     proxyCall.cancel("Cleanup", null);
@@ -5658,7 +5660,8 @@ public class ExternalProcessorClientInterceptorTest {
 
     assertThat(messageDeliveredLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
     assertThat(serverReceivedMessages).containsExactly("normal-body");
-    // Since end_of_stream was false, end_of_stream_without_message is ignored, so data plane must NOT be half-closed
+    // Since end_of_stream was false, end_of_stream_without_message is ignored,
+    // so data plane must NOT be half-closed
     assertThat(dataPlaneHalfClosedLatch.getCount()).isEqualTo(1);
 
     proxyCall.cancel("Cleanup", null);
