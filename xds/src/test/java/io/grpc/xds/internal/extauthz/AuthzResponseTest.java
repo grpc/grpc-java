@@ -58,6 +58,10 @@ public class AuthzResponseTest {
     assertThat(response.decision()).isEqualTo(Decision.ALLOW);
     assertThat(response.requestHeaderMutations()).isEqualTo(requestMutations);
     assertThat(response.responseHeaderMutations()).isEqualTo(responseMutations);
+
+    AuthzResponse responseWithDirectMutations =
+        AuthzResponse.allow(requestMutations, responseMutations).build();
+    assertThat(responseWithDirectMutations).isEqualTo(response);
   }
 
   @Test
@@ -87,5 +91,9 @@ public class AuthzResponseTest {
     assertThat(response.status()).hasValue(status);
     assertThat(response.responseHeaderMutations()).isEqualTo(responseMutations);
     assertThat(response.requestHeaderMutations().headers()).isEmpty();
+
+    AuthzResponse responseWithDirectMutations =
+        AuthzResponse.deny(status, responseMutations).build();
+    assertThat(responseWithDirectMutations).isEqualTo(response);
   }
 }

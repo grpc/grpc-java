@@ -45,15 +45,28 @@ abstract class AuthzResponse {
    * mutations.
    */
   static Builder allow(HeaderMutations requestHeaderMutations) {
+    return allow(requestHeaderMutations, EMPTY_MUTATIONS);
+  }
+
+  /**
+   * Creates a builder for an ALLOW response with both request and response header mutations.
+   */
+  static Builder allow(
+      HeaderMutations requestHeaderMutations, HeaderMutations responseHeaderMutations) {
     return new AutoValue_AuthzResponse.Builder().setDecision(Decision.ALLOW)
-        .setResponseHeaderMutations(EMPTY_MUTATIONS)
-        .setRequestHeaderMutations(requestHeaderMutations);
+        .setRequestHeaderMutations(requestHeaderMutations)
+        .setResponseHeaderMutations(responseHeaderMutations);
   }
 
   /** Creates a builder for a DENY response, initializing with the specified status. */
   static Builder deny(Status status) {
+    return deny(status, EMPTY_MUTATIONS);
+  }
+
+  /** Creates a builder for a DENY response with status and response trailer mutations. */
+  static Builder deny(Status status, HeaderMutations responseHeaderMutations) {
     return new AutoValue_AuthzResponse.Builder().setDecision(Decision.DENY)
-        .setResponseHeaderMutations(EMPTY_MUTATIONS)
+        .setResponseHeaderMutations(responseHeaderMutations)
         .setRequestHeaderMutations(EMPTY_MUTATIONS)
         .setStatus(status);
   }
