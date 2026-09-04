@@ -104,6 +104,15 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
         }
       }
 
+      @Override
+      public void onEvent(Object event) {
+        try {
+          super.onEvent(event);
+        } catch (StatusRuntimeException e) {
+          closeWithException(e);
+        }
+      }
+
       private void closeWithException(StatusRuntimeException t) {
         Metadata metadata = t.getTrailers();
         if (metadata == null) {
@@ -275,6 +284,16 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       } catch (ExecutionException e) {
         throw new RuntimeException(ERROR_MSG, e);
       }
+    }
+
+    @Override
+    public void triggerEvent(final Object event) {
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          SerializingServerCall.super.triggerEvent(event);
+        }
+      });
     }
   }
 }
