@@ -890,6 +890,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       // Mode is GRPC
       sendToExtProc(ProcessingRequest.newBuilder()
           .setRequestBody(HttpBody.newBuilder()
+              .setEndOfStream(true)
               .setEndOfStreamWithoutMessage(true)
               .build())
           .build());
@@ -914,10 +915,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
-          if (!streamed.getEndOfStreamWithoutMessage()) {
+          boolean isEndOfStream = streamed.getEndOfStream();
+          boolean isEndOfStreamWithoutMessage =
+              isEndOfStream && streamed.getEndOfStreamWithoutMessage();
+          if (!isEndOfStreamWithoutMessage) {
             super.sendMessage(new KnownLengthInputStream(streamed.getBody()));
           }
-          if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
+          if (isEndOfStream) {
             if (requestSideClosed.compareAndSet(false, true)) {
               proceedWithHalfClose();
             }

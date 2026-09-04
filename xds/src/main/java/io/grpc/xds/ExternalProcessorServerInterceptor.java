@@ -1335,7 +1335,9 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
             break;
           }
           StreamedBodyResponse peeked = pendingMutatedRequestBodies.peek();
-          if (peeked.getEndOfStreamWithoutMessage()) {
+          boolean isEosWithoutMessage =
+              peeked.getEndOfStream() && peeked.getEndOfStreamWithoutMessage();
+          if (isEosWithoutMessage) {
             toDeliver.add(pendingMutatedRequestBodies.poll());
           } else if (pendingAppRequests.get() > 0) {
             pendingAppRequests.decrementAndGet();
@@ -1350,10 +1352,13 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         final int bodySize = streamed.getBody().size();
         callContext.run(() -> {
           try {
-            if (!finalStreamed.getEndOfStreamWithoutMessage()) {
+            boolean isEndOfStream = finalStreamed.getEndOfStream();
+            boolean isEndOfStreamWithoutMessage =
+                isEndOfStream && finalStreamed.getEndOfStreamWithoutMessage();
+            if (!isEndOfStreamWithoutMessage) {
               wrappedListener.onExternalBody(finalStreamed.getBody());
             }
-            if (finalStreamed.getEndOfStream() || finalStreamed.getEndOfStreamWithoutMessage()) {
+            if (isEndOfStream) {
               wrappedListener.proceedWithHalfClose();
             }
           } finally {
@@ -1484,10 +1489,13 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
       for (StreamedBodyResponse streamed : mutatedToDeliver) {
         final StreamedBodyResponse finalStreamed = streamed;
         callContext.run(() -> {
-          if (!finalStreamed.getEndOfStreamWithoutMessage()) {
+          boolean isEndOfStream = finalStreamed.getEndOfStream();
+          boolean isEndOfStreamWithoutMessage =
+              isEndOfStream && finalStreamed.getEndOfStreamWithoutMessage();
+          if (!isEndOfStreamWithoutMessage) {
             wrappedListener.onExternalBody(finalStreamed.getBody());
           }
-          if (finalStreamed.getEndOfStream() || finalStreamed.getEndOfStreamWithoutMessage()) {
+          if (isEndOfStream) {
             wrappedListener.proceedWithHalfClose();
           }
         });
@@ -1908,6 +1916,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
       }
 
       HttpBody.Builder bodyBuilder = HttpBody.newBuilder()
+          .setEndOfStream(true)
           .setEndOfStreamWithoutMessage(true);
 
       ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
