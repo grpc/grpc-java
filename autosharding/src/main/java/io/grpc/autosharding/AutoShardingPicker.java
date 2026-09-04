@@ -16,6 +16,8 @@
 
 package io.grpc.autosharding;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.collect.ImmutableList;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalMetadata;
@@ -26,6 +28,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import javax.annotation.Nullable;
 
 /**
  * Subchannel picker for the auto-sharding load balancing policy.
@@ -53,7 +56,24 @@ final class AutoShardingPicker extends SubchannelPicker {
   private final ImmutableList<PickerEndpoint> endpoints;
   private final boolean[] sliceInFallback;
   private final boolean fallbackEnabled;
-  private final Metadata.Key<byte[]> keyHeader;
+  @Nullable private final Metadata.Key<byte[]> keyHeader;
+
+  /**
+   * Pre-creates a {@link Metadata.Key} for the given key header name.
+   *
+   * @param keyHeaderName the metadata header name, or {@code null}/empty if no header routing
+   * @return the pre-computed {@link Metadata.Key}, or {@code null} if keyHeaderName is null/empty
+   */
+  @Nullable
+  static Metadata.Key<byte[]> createKeyHeader(@Nullable String keyHeaderName) {
+    if (keyHeaderName == null || keyHeaderName.isEmpty()) {
+      return null;
+    } else if (keyHeaderName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+      return Metadata.Key.of(keyHeaderName, Metadata.BINARY_BYTE_MARSHALLER);
+    } else {
+      return InternalMetadata.keyOf(keyHeaderName, RAW_ASCII_MARSHALLER);
+    }
+  }
 
   /**
    * Constructs an {@link AutoShardingPicker}.
@@ -61,24 +81,17 @@ final class AutoShardingPicker extends SubchannelPicker {
    * @param sliceMap the pre-built, immutable mapping from key ranges to endpoint indices
    * @param endpoints the list of endpoint snapshots corresponding 1:1 to endpoint indices
    * @param fallbackEnabled whether fallback routing to all resolved endpoints is enabled
-   * @param keyHeaderName the metadata header name used to extract the routing key
+   * @param keyHeader the pre-parsed metadata header key used to extract the routing key
    */
   AutoShardingPicker(
       SliceMap sliceMap,
       List<PickerEndpoint> endpoints,
       boolean fallbackEnabled,
-      String keyHeaderName) {
-    this.sliceMap = sliceMap;
-    this.endpoints = ImmutableList.copyOf(endpoints);
+      @Nullable Metadata.Key<byte[]> keyHeader) {
+    this.sliceMap = checkNotNull(sliceMap, "sliceMap");
+    this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
     this.fallbackEnabled = fallbackEnabled;
-
-    if (keyHeaderName == null || keyHeaderName.isEmpty()) {
-      this.keyHeader = null;
-    } else if (keyHeaderName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-      this.keyHeader = Metadata.Key.of(keyHeaderName, Metadata.BINARY_BYTE_MARSHALLER);
-    } else {
-      this.keyHeader = InternalMetadata.keyOf(keyHeaderName, RAW_ASCII_MARSHALLER);
-    }
+    this.keyHeader = keyHeader;
 
     this.sliceInFallback = new boolean[sliceMap.getSlices().size()];
     for (int i = 0; i < sliceInFallback.length; i++) {

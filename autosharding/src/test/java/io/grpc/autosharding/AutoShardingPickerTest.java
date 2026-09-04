@@ -75,7 +75,10 @@ public class AutoShardingPickerTest {
     SliceMap emptySliceMap = new SliceMap(
         Collections.emptyList(), Collections.singletonList(0), 1L);
     AutoShardingPicker picker = new AutoShardingPicker(
-        emptySliceMap, Collections.singletonList(ep0), true, "x-slice-key");
+        emptySliceMap,
+        Collections.singletonList(ep0),
+        true,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
 
     Metadata headers = new Metadata();
     headers.put(
@@ -93,7 +96,10 @@ public class AutoShardingPickerTest {
     SliceMap emptySliceMap = new SliceMap(
         Collections.emptyList(), Collections.singletonList(0), 1L);
     AutoShardingPicker picker = new AutoShardingPicker(
-        emptySliceMap, Collections.singletonList(ep0), false, "x-slice-key");
+        emptySliceMap,
+        Collections.singletonList(ep0),
+        false,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
 
     Metadata headers = new Metadata();
     PickResult result = picker.pickSubchannel(createArgs(headers));
@@ -115,7 +121,10 @@ public class AutoShardingPickerTest {
         Collections.singletonList(slice), Collections.singletonList(0), 1L);
 
     AutoShardingPicker picker = new AutoShardingPicker(
-        sliceMap, Collections.singletonList(ep0), false, "x-slice-key");
+        sliceMap,
+        Collections.singletonList(ep0),
+        false,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
 
     Metadata headers = new Metadata();
     headers.put(
@@ -139,7 +148,10 @@ public class AutoShardingPickerTest {
         Collections.singletonList(slice), Collections.singletonList(0), 1L);
 
     AutoShardingPicker picker = new AutoShardingPicker(
-        sliceMap, Collections.singletonList(ep0), false, "x-slice-key");
+        sliceMap,
+        Collections.singletonList(ep0),
+        false,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
 
     PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
 
@@ -161,7 +173,10 @@ public class AutoShardingPickerTest {
         Collections.singletonList(slice), Collections.singletonList(0), 1L);
 
     AutoShardingPicker picker = new AutoShardingPicker(
-        sliceMap, Collections.singletonList(ep0), false, "x-slice-key");
+        sliceMap,
+        Collections.singletonList(ep0),
+        false,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
 
     PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
 
@@ -187,7 +202,10 @@ public class AutoShardingPickerTest {
         Collections.singletonList(slice0), Collections.singletonList(1), 1L);
 
     AutoShardingPicker picker = new AutoShardingPicker(
-        sliceMap, Arrays.asList(ep0, ep1), true, "x-slice-key");
+        sliceMap,
+        Arrays.asList(ep0, ep1),
+        true,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
 
     PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
     assertThat(result).isSameInstanceAs(fallbackReadyResult);
@@ -207,7 +225,10 @@ public class AutoShardingPickerTest {
         Collections.singletonList(slice0), Collections.singletonList(0), 1L);
 
     AutoShardingPicker picker = new AutoShardingPicker(
-        sliceMap, Collections.singletonList(ep0), false, "x-slice-key");
+        sliceMap,
+        Collections.singletonList(ep0),
+        false,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
 
     PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
     assertThat(result.getStatus()).isEqualTo(epError);
@@ -228,7 +249,10 @@ public class AutoShardingPickerTest {
     SliceMap sliceMap = new SliceMap(Arrays.asList(s0, s1), Arrays.asList(0, 1), 1L);
 
     AutoShardingPicker picker = new AutoShardingPicker(
-        sliceMap, Arrays.asList(ep0, ep1), false, "slice-key-bin");
+        sliceMap,
+        Arrays.asList(ep0, ep1),
+        false,
+        AutoShardingPicker.createKeyHeader("slice-key-bin"));
 
     Metadata headers = new Metadata();
     headers.put(
@@ -250,7 +274,10 @@ public class AutoShardingPickerTest {
         Collections.singletonList(emptySlice), Collections.singletonList(0), 1L);
 
     AutoShardingPicker picker = new AutoShardingPicker(
-        sliceMap, Collections.singletonList(ep0), false, "x-slice-key");
+        sliceMap,
+        Collections.singletonList(ep0),
+        false,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
 
     PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
     assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
@@ -272,7 +299,10 @@ public class AutoShardingPickerTest {
         Collections.singletonList(gapSlice), Collections.singletonList(0), 1L);
 
     AutoShardingPicker picker = new AutoShardingPicker(
-        sliceMap, Collections.singletonList(ep0), true, "x-key");
+        sliceMap,
+        Collections.singletonList(ep0),
+        true,
+        AutoShardingPicker.createKeyHeader("x-key"));
 
     Metadata headers = new Metadata();
     headers.put(
@@ -295,5 +325,25 @@ public class AutoShardingPickerTest {
 
     ep.requestConnection();
     assertThat(count.get()).isEqualTo(1);
+  }
+
+  @Test
+  public void createKeyHeader_nullOrEmpty_returnsNull() {
+    assertThat(AutoShardingPicker.createKeyHeader(null)).isNull();
+    assertThat(AutoShardingPicker.createKeyHeader("")).isNull();
+  }
+
+  @Test
+  public void createKeyHeader_asciiHeader() {
+    Metadata.Key<byte[]> key = AutoShardingPicker.createKeyHeader("x-slice-key");
+    assertThat(key).isNotNull();
+    assertThat(key.name()).isEqualTo("x-slice-key");
+  }
+
+  @Test
+  public void createKeyHeader_binaryHeader() {
+    Metadata.Key<byte[]> key = AutoShardingPicker.createKeyHeader("x-slice-key-bin");
+    assertThat(key).isNotNull();
+    assertThat(key.name()).isEqualTo("x-slice-key-bin");
   }
 }
