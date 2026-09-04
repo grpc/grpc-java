@@ -76,24 +76,62 @@ public class CheckResponseHandlerTest {
 
   @Test
   public void handleResponse_okWithMutations() {
-    HeaderValueOption option =
+    HeaderValueOption option1 =
         HeaderValueOption.newBuilder().setHeader(HeaderValue
-            .newBuilder().setKey("test-key").setValue("test-value")).build();
-    io.grpc.xds.internal.headermutations.HeaderValueOption expectedOption =
+            .newBuilder().setKey("test-key-1").setValue("val-1"))
+            .setAppendAction(HeaderValueOption.HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD)
+            .build();
+    HeaderValueOption option2 =
+        HeaderValueOption.newBuilder().setHeader(HeaderValue
+            .newBuilder().setKey("test-key-2").setValue("val-2"))
+            .setAppendAction(HeaderValueOption.HeaderAppendAction.ADD_IF_ABSENT)
+            .build();
+    HeaderValueOption option3 =
+        HeaderValueOption.newBuilder().setHeader(HeaderValue
+            .newBuilder().setKey("test-key-3").setValue("val-3"))
+            .setAppendAction(HeaderValueOption.HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD)
+            .build();
+    HeaderValueOption option4 =
+        HeaderValueOption.newBuilder().setHeader(HeaderValue
+            .newBuilder().setKey("test-key-4").setValue("val-4"))
+            .setAppendAction(HeaderValueOption.HeaderAppendAction.OVERWRITE_IF_EXISTS)
+            .build();
+
+    io.grpc.xds.internal.headermutations.HeaderValueOption expectedOption1 =
         io.grpc.xds.internal.headermutations.HeaderValueOption.create(
-            io.grpc.xds.internal.grpcservice.HeaderValue.create("test-key", "test-value"),
+            io.grpc.xds.internal.grpcservice.HeaderValue.create("test-key-1", "val-1"),
             HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
+    io.grpc.xds.internal.headermutations.HeaderValueOption expectedOption2 =
+        io.grpc.xds.internal.headermutations.HeaderValueOption.create(
+            io.grpc.xds.internal.grpcservice.HeaderValue.create("test-key-2", "val-2"),
+            HeaderAppendAction.ADD_IF_ABSENT);
+    io.grpc.xds.internal.headermutations.HeaderValueOption expectedOption3 =
+        io.grpc.xds.internal.headermutations.HeaderValueOption.create(
+            io.grpc.xds.internal.grpcservice.HeaderValue.create("test-key-3", "val-3"),
+            HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD);
+    io.grpc.xds.internal.headermutations.HeaderValueOption expectedOption4 =
+        io.grpc.xds.internal.headermutations.HeaderValueOption.create(
+            io.grpc.xds.internal.grpcservice.HeaderValue.create("test-key-4", "val-4"),
+            HeaderAppendAction.OVERWRITE_IF_EXISTS);
+
     CheckResponse checkResponse = CheckResponse.newBuilder()
         .setStatus(com.google.rpc.Status.newBuilder().setCode(Code.OK_VALUE).build())
-        .setOkResponse(OkHttpResponse.newBuilder().addHeaders(option)
-            .addHeadersToRemove("remove-key").addResponseHeadersToAdd(option).build())
+        .setOkResponse(OkHttpResponse.newBuilder()
+            .addHeaders(option1)
+            .addHeaders(option2)
+            .addHeaders(option3)
+            .addHeaders(option4)
+            .addHeadersToRemove("remove-key")
+            .addResponseHeadersToAdd(option1)
+            .build())
         .build();
     AuthzResponse authzResponse = responseHandler.handleResponse(checkResponse);
     assertThat(authzResponse.decision()).isEqualTo(Decision.ALLOW);
     HeaderMutations expectedRequestMutations = HeaderMutations.create(
-        ImmutableList.of(expectedOption), ImmutableList.of("remove-key"));
+        ImmutableList.of(expectedOption1, expectedOption2, expectedOption3, expectedOption4),
+        ImmutableList.of("remove-key"));
     HeaderMutations expectedResponseMutations = HeaderMutations.create(
-        ImmutableList.of(expectedOption), ImmutableList.of());
+        ImmutableList.of(expectedOption1), ImmutableList.of());
     assertThat(authzResponse.requestHeaderMutations()).isEqualTo(expectedRequestMutations);
     assertThat(authzResponse.responseHeaderMutations())
         .isEqualTo(expectedResponseMutations);
@@ -175,7 +213,7 @@ public class CheckResponseHandlerTest {
   }
 
   @Test
-  public void handleResponse_ok_edgeCaseHeaders() {
+  public void handleResponse_ok_binaryHeadersPreservedAndDisallowedHeadersDropped() {
     HeaderValueOption binaryOption =
         HeaderValueOption.newBuilder().setHeader(HeaderValue.newBuilder().setKey("test-bin")
             .setRawValue(com.google.protobuf.ByteString.copyFromUtf8("test"))).build();

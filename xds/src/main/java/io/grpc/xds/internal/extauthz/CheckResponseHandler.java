@@ -36,10 +36,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * authorization decision and applying any necessary header mutations.
  */
 @ThreadSafe
-public class CheckResponseHandler {
+class CheckResponseHandler {
   private final HeaderMutationFilter headerMutationFilter;
 
-  public CheckResponseHandler(HeaderMutationFilter headerMutationFilter) {
+  CheckResponseHandler(HeaderMutationFilter headerMutationFilter) {
     this.headerMutationFilter = headerMutationFilter;
   }
 
@@ -61,11 +61,11 @@ public class CheckResponseHandler {
       return AuthzResponse.allow(
           HeaderMutations.create(ImmutableList.of(), ImmutableList.of())).build();
     }
-    OkHttpResponse okResponse = response.getOkResponse();
-    CheckResponseMutations allowedMutations = buildHeaderMutationsFromOkResponse(okResponse);
+    CheckResponseMutations allowedMutations =
+        buildHeaderMutationsFromOkResponse(response.getOkResponse());
 
-    return AuthzResponse.allow(allowedMutations.requestMutations())
-        .setResponseHeaderMutations(allowedMutations.responseMutations()).build();
+    return AuthzResponse.allow(
+        allowedMutations.requestMutations(), allowedMutations.responseMutations()).build();
   }
 
   private CheckResponseMutations buildHeaderMutationsFromOkResponse(OkHttpResponse okResponse)
@@ -91,28 +91,21 @@ public class CheckResponseHandler {
       return AuthzResponse.deny(Status.PERMISSION_DENIED.withDescription(description)).build();
     }
     DeniedHttpResponse deniedResponse = response.getDeniedResponse();
-    CheckResponseMutations allowedMutations =
-        buildHeaderMutationsFromDeniedResponse(deniedResponse);
+    HeaderMutations responseMutations = buildResponseTrailerMutations(deniedResponse);
 
     Status status = Status.PERMISSION_DENIED;
     if (deniedResponse.hasStatus()) {
       status = GrpcUtil.httpStatusToGrpcStatus(deniedResponse.getStatus().getCodeValue());
     }
     // Per gRFC A92: deniedResponse.body is ignored for gRPC (doesn't apply to gRPC).
-    return AuthzResponse.deny(status.withDescription(description))
-        .setResponseHeaderMutations(allowedMutations.responseMutations()).build();
+    return AuthzResponse.deny(status.withDescription(description), responseMutations).build();
   }
 
-  private CheckResponseMutations buildHeaderMutationsFromDeniedResponse(
+  private HeaderMutations buildResponseTrailerMutations(
       DeniedHttpResponse deniedResponse) throws HeaderMutationDisallowedException {
-    HeaderMutations requestMutations =
-        HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
-    HeaderMutations responseMutations = HeaderMutations.create(
+    return headerMutationFilter.filter(HeaderMutations.create(
         convertHeaders(deniedResponse.getHeadersList()),
-        ImmutableList.of());
-    return CheckResponseMutations.create(
-        headerMutationFilter.filter(requestMutations),
-        headerMutationFilter.filter(responseMutations));
+        ImmutableList.of()));
   }
 
   private ImmutableList<HeaderValueOption> convertHeaders(
