@@ -568,7 +568,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
               .setFlowControlInit(ProcessingRequest.FlowControlInit.newBuilder()
                   .setInitialWindowDownstreamToSidestream(DEFAULT_INITIAL_WINDOW_SIZE)
                   .setInitialWindowSidestreamToUpstream(DEFAULT_INITIAL_WINDOW_SIZE)
-                  .setInitialWindowUpstreamToSidestreama(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .setInitialWindowUpstreamToSidestream(DEFAULT_INITIAL_WINDOW_SIZE)
                   .setInitialWindowSidestreamToDownstream(DEFAULT_INITIAL_WINDOW_SIZE)
                   .build())
               .build();

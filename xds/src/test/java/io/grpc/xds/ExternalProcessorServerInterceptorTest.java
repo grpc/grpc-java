@@ -351,7 +351,7 @@ public class ExternalProcessorServerInterceptorTest {
 
     serverInfo =
         Bootstrapper.ServerInfo.create(
-            "test_target", Collections.emptyMap(), false, true, false, false, null);
+            "test_target", Collections.emptyMap(), false, true, false, false);
 
     filterContext =
         Filter.FilterConfigParseContext.builder()
@@ -16078,6 +16078,10 @@ public class ExternalProcessorServerInterceptorTest {
     assertThat(firstRequest.getFlowControlInit().getInitialWindowDownstreamToSidestream())
         .isEqualTo(65536);
     assertThat(firstRequest.getFlowControlInit().getInitialWindowSidestreamToUpstream())
+        .isEqualTo(65536);
+    assertThat(firstRequest.getFlowControlInit().getInitialWindowUpstreamToSidestream())
+        .isEqualTo(65536);
+    assertThat(firstRequest.getFlowControlInit().getInitialWindowSidestreamToDownstream())
         .isEqualTo(65536);
 
     assertThat(secondRequest.hasRequestBody()).isTrue();
