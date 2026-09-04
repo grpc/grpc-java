@@ -34,6 +34,7 @@ import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Detachable;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
@@ -45,6 +46,9 @@ import io.grpc.StatusRuntimeException;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -288,6 +292,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     private final ServerCallImpl<ReqT, ?> call;
     private final ServerCall.Listener<ReqT> listener;
     private final Context.CancellableContext context;
+    private InputStream delayedMessage;
 
     public ServerStreamListenerImpl(
         ServerCallImpl<ReqT, ?> call, ServerCall.Listener<ReqT> listener,
@@ -320,6 +325,20 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       }
     }
 
+    private static InputStream bufferMessage(InputStream is) throws IOException {
+      if (is instanceof Detachable) {
+        return ((Detachable) is).detach();
+      }
+      // Fallback: copy to byte array
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      byte[] buffer = new byte[4096];
+      int bytesRead;
+      while ((bytesRead = is.read(buffer)) != -1) {
+        baos.write(buffer, 0, bytesRead);
+      }
+      return new ByteArrayInputStream(baos.toByteArray());
+    }
+
     @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
     private void messagesAvailableInternal(final MessageProducer producer) {
       if (call.cancelled) {
@@ -330,13 +349,31 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       InputStream message;
       try {
         while ((message = producer.next()) != null) {
-          try {
-            listener.onMessage(call.method.parseRequest(message));
-          } catch (Throwable t) {
-            GrpcUtil.closeQuietly(message);
-            throw t;
+          if (call.method.getType().clientSendsOneMessage()) {
+            if (delayedMessage != null) {
+              GrpcUtil.closeQuietly(message);
+              call.stream.cancel(Status.INTERNAL.withDescription("Too many requests"));
+              GrpcUtil.closeQuietly(delayedMessage);
+              delayedMessage = null;
+              closedInternal(Status.INTERNAL.withDescription("Too many requests"));
+              return;
+            }
+            try {
+              delayedMessage = bufferMessage(message);
+            } catch (Throwable t) {
+              GrpcUtil.closeQuietly(message);
+              throw t;
+            }
+            message.close();
+          } else {
+            try {
+              listener.onMessage(call.method.parseRequest(message));
+            } catch (Throwable t) {
+              GrpcUtil.closeQuietly(message);
+              throw t;
+            }
+            message.close();
           }
-          message.close();
         }
       } catch (Throwable t) {
         GrpcUtil.closeQuietly(producer);
@@ -353,6 +390,19 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           return;
         }
 
+        if (delayedMessage != null) {
+          InputStream message = delayedMessage;
+          delayedMessage = null;
+          try {
+            listener.onMessage(call.method.parseRequest(message));
+          } catch (Throwable t) {
+            GrpcUtil.closeQuietly(message);
+            Throwables.throwIfUnchecked(t);
+            throw new RuntimeException(t);
+          }
+          GrpcUtil.closeQuietly(message);
+        }
+
         listener.onHalfClose();
       }
     }
@@ -366,6 +416,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     }
 
     private void closedInternal(Status status) {
+      if (delayedMessage != null) {
+        GrpcUtil.closeQuietly(delayedMessage);
+        delayedMessage = null;
+      }
       Throwable cancelCause = null;
       try {
         if (status.isOk()) {
