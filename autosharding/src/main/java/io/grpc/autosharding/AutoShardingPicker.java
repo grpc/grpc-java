@@ -18,6 +18,7 @@ package io.grpc.autosharding;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalMetadata;
@@ -29,6 +30,7 @@ import io.grpc.Status;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Subchannel picker for the auto-sharding load balancing policy.
@@ -38,6 +40,15 @@ import javax.annotation.Nullable;
  */
 final class AutoShardingPicker extends SubchannelPicker {
   private static final byte[] EMPTY_BYTES = new byte[0];
+
+  @ThreadSafe
+  @FunctionalInterface
+  interface ThreadSafeRandom {
+    int nextInt(int bound);
+  }
+
+  private static final ThreadSafeRandom DEFAULT_RANDOM =
+      bound -> ThreadLocalRandom.current().nextInt(bound);
 
   private static final InternalMetadata.TrustedAsciiMarshaller<byte[]> RAW_ASCII_MARSHALLER =
       new InternalMetadata.TrustedAsciiMarshaller<byte[]>() {
@@ -57,6 +68,7 @@ final class AutoShardingPicker extends SubchannelPicker {
   private final boolean[] sliceInFallback;
   private final boolean fallbackEnabled;
   @Nullable private final Metadata.Key<byte[]> keyHeader;
+  private final ThreadSafeRandom random;
 
   /**
    * Pre-creates a {@link Metadata.Key} for the given key header name.
@@ -88,10 +100,21 @@ final class AutoShardingPicker extends SubchannelPicker {
       List<PickerEndpoint> endpoints,
       boolean fallbackEnabled,
       @Nullable Metadata.Key<byte[]> keyHeader) {
+    this(sliceMap, endpoints, fallbackEnabled, keyHeader, DEFAULT_RANDOM);
+  }
+
+  @VisibleForTesting
+  AutoShardingPicker(
+      SliceMap sliceMap,
+      List<PickerEndpoint> endpoints,
+      boolean fallbackEnabled,
+      @Nullable Metadata.Key<byte[]> keyHeader,
+      ThreadSafeRandom random) {
     this.sliceMap = checkNotNull(sliceMap, "sliceMap");
     this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
     this.fallbackEnabled = fallbackEnabled;
     this.keyHeader = keyHeader;
+    this.random = checkNotNull(random, "random");
 
     this.sliceInFallback = new boolean[sliceMap.getSlices().size()];
     for (int i = 0; i < sliceInFallback.length; i++) {
@@ -142,7 +165,7 @@ final class AutoShardingPicker extends SubchannelPicker {
     }
 
     int size = indices.size();
-    int firstIndex = ThreadLocalRandom.current().nextInt(size);
+    int firstIndex = random.nextInt(size);
     boolean requestedConnection = false;
     boolean foundConnecting = false;
 

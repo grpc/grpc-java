@@ -346,4 +346,39 @@ public class AutoShardingPickerTest {
     assertThat(key).isNotNull();
     assertThat(key.name()).isEqualTo("x-slice-key-bin");
   }
+
+  @Test
+  public void pick_deterministicRandom_selectsExpectedEndpoint() {
+    PickResult ready0 = PickResult.withNoResult();
+    PickResult ready1 = PickResult.withNoResult();
+    PickerEndpoint ep0 = new PickerEndpoint(
+        ConnectivityState.READY, new FakePicker(ready0), NOOP_EXIT_IDLER);
+    PickerEndpoint ep1 = new PickerEndpoint(
+        ConnectivityState.READY, new FakePicker(ready1), NOOP_EXIT_IDLER);
+
+    SliceEntry slice = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Arrays.asList(0, 1));
+    SliceMap sliceMap = new SliceMap(
+        Collections.singletonList(slice), Arrays.asList(0, 1), 1L);
+
+    // Test picking index 0
+    AutoShardingPicker picker0 = new AutoShardingPicker(
+        sliceMap,
+        Arrays.asList(ep0, ep1),
+        false,
+        AutoShardingPicker.createKeyHeader("x-key"),
+        bound -> 0);
+    PickResult result0 = picker0.pickSubchannel(createArgs(new Metadata()));
+    assertThat(result0).isSameInstanceAs(ready0);
+
+    // Test picking index 1
+    AutoShardingPicker picker1 = new AutoShardingPicker(
+        sliceMap,
+        Arrays.asList(ep0, ep1),
+        false,
+        AutoShardingPicker.createKeyHeader("x-key"),
+        bound -> 1);
+    PickResult result1 = picker1.pickSubchannel(createArgs(new Metadata()));
+    assertThat(result1).isSameInstanceAs(ready1);
+  }
 }
