@@ -6294,7 +6294,7 @@ public class ExternalProcessorServerInterceptorTest {
 
   @Test
   public void
-      serverInterceptor_extProcResponse_eosTrue_eosWithoutMessageFalse_emptyBody_deliveredAsMessage()
+      serverInterceptor_extProcResponse_eosTrue_eosWithoutMsgFalse_emptyBody_deliveredAsMessage()
           throws Exception {
     ExternalProcessor proto =
         createBaseProto(extProcServerName)
@@ -6581,7 +6581,8 @@ public class ExternalProcessorServerInterceptorTest {
       assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
       // Body is delivered as a regular message
       assertThat(serverReceivedMessages).containsExactly("normal-body");
-      // Since end_of_stream was false, end_of_stream_without_message is ignored, so app must NOT receive half-close
+      // Since end_of_stream was false, end_of_stream_without_message is ignored,
+      // so app must NOT receive half-close
       assertThat(appHalfCloseLatch.await(500, TimeUnit.MILLISECONDS)).isFalse();
     } finally {
       clientCall.cancel("Cleanup", null);
