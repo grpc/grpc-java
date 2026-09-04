@@ -280,4 +280,19 @@ public class AutoShardingPickerTest {
     PickResult result = picker.pickSubchannel(createArgs(headers));
     assertThat(result).isSameInstanceAs(fallbackReadyResult);
   }
+
+  @Test
+  public void pickerEndpoint_gettersAndToString() {
+    FakePicker fakePicker = new FakePicker(PickResult.withNoResult());
+    AtomicInteger count = new AtomicInteger();
+    PickerEndpoint ep = new PickerEndpoint(
+        ConnectivityState.IDLE, fakePicker, count::incrementAndGet);
+
+    assertThat(ep.getState()).isEqualTo(ConnectivityState.IDLE);
+    assertThat(ep.getPicker()).isSameInstanceAs(fakePicker);
+    assertThat(ep.toString()).contains("state=IDLE");
+
+    ep.requestConnection();
+    assertThat(count.get()).isEqualTo(1);
+  }
 }

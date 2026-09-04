@@ -27,6 +27,12 @@ import io.grpc.Status;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * Subchannel picker for the auto-sharding load balancing policy.
+ *
+ * <p>Routes RPCs to backend endpoints based on a request metadata header key, matching against
+ * an immutable {@link SliceMap}.
+ */
 final class AutoShardingPicker extends SubchannelPicker {
   private static final byte[] EMPTY_BYTES = new byte[0];
 
@@ -49,6 +55,14 @@ final class AutoShardingPicker extends SubchannelPicker {
   private final boolean fallbackEnabled;
   private final Metadata.Key<byte[]> keyHeader;
 
+  /**
+   * Constructs an {@link AutoShardingPicker}.
+   *
+   * @param sliceMap the pre-built, immutable mapping from key ranges to endpoint indices
+   * @param endpoints the list of endpoint snapshots corresponding 1:1 to endpoint indices
+   * @param fallbackEnabled whether fallback routing to all resolved endpoints is enabled
+   * @param keyHeaderName the metadata header name used to extract the routing key
+   */
   AutoShardingPicker(
       SliceMap sliceMap,
       List<PickerEndpoint> endpoints,
@@ -68,7 +82,7 @@ final class AutoShardingPicker extends SubchannelPicker {
 
     this.sliceInFallback = new boolean[sliceMap.getSlices().size()];
     for (int i = 0; i < sliceInFallback.length; i++) {
-      this.sliceInFallback[i] = isPoolInFallback(sliceMap.getSlices().get(i).endpoints);
+      this.sliceInFallback[i] = isPoolInFallback(sliceMap.getSlices().get(i).getEndpoints());
     }
   }
 
@@ -77,7 +91,7 @@ final class AutoShardingPicker extends SubchannelPicker {
       return true;
     }
     for (int idx : indices) {
-      if (endpoints.get(idx).state != ConnectivityState.TRANSIENT_FAILURE) {
+      if (endpoints.get(idx).getState() != ConnectivityState.TRANSIENT_FAILURE) {
         return false;
       }
     }
@@ -104,7 +118,7 @@ final class AutoShardingPicker extends SubchannelPicker {
     }
 
     SliceMap.SliceEntry sliceEntry = sliceMap.getSlices().get(sliceIdx);
-    return pickFromEndpointIndices(sliceEntry.endpoints, args);
+    return pickFromEndpointIndices(sliceEntry.getEndpoints(), args);
   }
 
   private PickResult pickFromEndpointIndices(
@@ -123,16 +137,14 @@ final class AutoShardingPicker extends SubchannelPicker {
       int epIdx = indices.get((firstIndex + i) % size);
       PickerEndpoint endpoint = endpoints.get(epIdx);
 
-      if (endpoint.state == ConnectivityState.READY) {
-        return endpoint.picker.pickSubchannel(args);
+      if (endpoint.getState() == ConnectivityState.READY) {
+        return endpoint.getPicker().pickSubchannel(args);
       }
 
-      if (endpoint.state == ConnectivityState.CONNECTING) {
+      if (endpoint.getState() == ConnectivityState.CONNECTING) {
         foundConnecting = true;
-      } else if (!requestedConnection && endpoint.state == ConnectivityState.IDLE) {
-        if (endpoint.requestConnection != null) {
-          endpoint.requestConnection.run();
-        }
+      } else if (!requestedConnection && endpoint.getState() == ConnectivityState.IDLE) {
+        endpoint.requestConnection();
         requestedConnection = true;
       }
     }
@@ -142,7 +154,7 @@ final class AutoShardingPicker extends SubchannelPicker {
     }
 
     int firstEpIdx = indices.get(firstIndex);
-    return endpoints.get(firstEpIdx).picker.pickSubchannel(args);
+    return endpoints.get(firstEpIdx).getPicker().pickSubchannel(args);
   }
 
   private byte[] extractKeyBytes(Metadata headers) {

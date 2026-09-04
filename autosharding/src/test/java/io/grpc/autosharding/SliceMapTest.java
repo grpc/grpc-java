@@ -126,7 +126,8 @@ public class SliceMapTest {
     assertThat(sliceMap.getGeneration()).isEqualTo(42L);
     assertThat(sliceMap.getFallbackPool()).containsExactly(0, 1).inOrder();
     assertThat(sliceMap.getSlices()).hasSize(1);
-    assertThat(sliceMap.getSlices().get(0).endpoints).containsExactly(0, 1).inOrder();
+    assertThat(sliceMap.getSlices().get(0).getStartKey()).isEqualTo(new byte[] {1});
+    assertThat(sliceMap.getSlices().get(0).getEndpoints()).containsExactly(0, 1).inOrder();
 
     // Verify defensive copying: mutating input collections does not affect sliceMap
     slices.clear();

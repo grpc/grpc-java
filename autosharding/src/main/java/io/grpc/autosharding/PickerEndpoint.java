@@ -16,21 +16,56 @@
 
 package io.grpc.autosharding;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import javax.annotation.Nullable;
 
 /**
- * Immutable snapshot of endpoint state used by the AutoShardingPicker.
+ * Immutable snapshot of endpoint state used by {@link AutoShardingPicker}.
  */
 final class PickerEndpoint {
-  final ConnectivityState state;
-  final SubchannelPicker picker;
-  final Runnable requestConnection;
+  private final ConnectivityState state;
+  private final SubchannelPicker picker;
+  @Nullable private final Runnable requestConnection;
 
+  /**
+   * Constructs a {@link PickerEndpoint}.
+   *
+   * @param state the current connectivity state of the endpoint
+   * @param picker the latest subchannel picker for the endpoint
+   * @param requestConnection a callback to trigger a connection attempt on the child balancer
+   */
   PickerEndpoint(
-      ConnectivityState state, SubchannelPicker picker, Runnable requestConnection) {
-    this.state = state;
-    this.picker = picker;
+      ConnectivityState state,
+      SubchannelPicker picker,
+      @Nullable Runnable requestConnection) {
+    this.state = checkNotNull(state, "state");
+    this.picker = checkNotNull(picker, "picker");
     this.requestConnection = requestConnection;
+  }
+
+  ConnectivityState getState() {
+    return state;
+  }
+
+  SubchannelPicker getPicker() {
+    return picker;
+  }
+
+  void requestConnection() {
+    if (requestConnection != null) {
+      requestConnection.run();
+    }
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("state", state)
+        .add("picker", picker)
+        .toString();
   }
 }

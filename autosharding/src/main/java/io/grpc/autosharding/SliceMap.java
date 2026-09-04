@@ -41,12 +41,26 @@ final class SliceMap {
    * Represents a single key-range slice mapping to endpoint indices in the picker.
    */
   static final class SliceEntry {
-    final byte[] startKey;
-    final ImmutableList<Integer> endpoints;
+    private final byte[] startKey;
+    private final ImmutableList<Integer> endpoints;
 
+    /**
+     * Constructs a {@link SliceEntry}.
+     *
+     * @param startKey the inclusive start key of the slice
+     * @param endpoints the list of endpoint indices assigned to this slice
+     */
     SliceEntry(byte[] startKey, List<Integer> endpoints) {
       this.startKey = checkNotNull(startKey, "startKey");
       this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
+    }
+
+    byte[] getStartKey() {
+      return startKey;
+    }
+
+    ImmutableList<Integer> getEndpoints() {
+      return endpoints;
     }
   }
 
@@ -67,7 +81,8 @@ final class SliceMap {
    */
   SliceMap(List<SliceEntry> slices, List<Integer> fallbackPool, long generation) {
     List<SliceEntry> sortedSlices = new ArrayList<>(checkNotNull(slices, "slices"));
-    sortedSlices.sort((e1, e2) -> UNSIGNED_BYTES_COMPARATOR.compare(e1.startKey, e2.startKey));
+    sortedSlices.sort(
+        (e1, e2) -> UNSIGNED_BYTES_COMPARATOR.compare(e1.getStartKey(), e2.getStartKey()));
     this.slices = ImmutableList.copyOf(sortedSlices);
     this.fallbackPool = ImmutableList.copyOf(checkNotNull(fallbackPool, "fallbackPool"));
     this.generation = generation;
@@ -88,7 +103,7 @@ final class SliceMap {
 
     while (low <= high) {
       int mid = (low + high) >>> 1;
-      int cmp = UNSIGNED_BYTES_COMPARATOR.compare(slices.get(mid).startKey, searchKey);
+      int cmp = UNSIGNED_BYTES_COMPARATOR.compare(slices.get(mid).getStartKey(), searchKey);
 
       if (cmp < 0) {
         low = mid + 1;
