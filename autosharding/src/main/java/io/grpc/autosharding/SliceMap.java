@@ -25,8 +25,21 @@ import java.util.Comparator;
 import java.util.List;
 import javax.annotation.Nullable;
 
+/**
+ * An immutable lookup structure mapping application routing keys to slice indices.
+ *
+ * <p>As defined in gRFC A119, the assignment provider guarantees that the assignment
+ * is pre-validated, gap-free, non-overlapping, and covers the entire keyspace {@code ["" .. inf)}.
+ * Any gaps returned by the autosharding server are filled as slice entries with an empty
+ * endpoints list. Therefore, each {@link SliceEntry} only needs to store {@code startKey}
+ * because the exclusive end key of slice {@code i} is implicitly the inclusive start key of
+ * slice {@code i + 1}.
+ */
 final class SliceMap {
 
+  /**
+   * Represents a single key-range slice mapping to endpoint indices in the picker.
+   */
   static final class SliceEntry {
     final byte[] startKey;
     final ImmutableList<Integer> endpoints;
@@ -45,6 +58,13 @@ final class SliceMap {
   private final ImmutableList<Integer> fallbackPool;
   private final long generation;
 
+  /**
+   * Constructs an immutable {@link SliceMap}.
+   *
+   * @param slices the pre-validated list of key-range slice entries
+   * @param fallbackPool the list of all available endpoint indices for fallback routing
+   * @param generation the snapshot generation number from the assignment
+   */
   SliceMap(List<SliceEntry> slices, List<Integer> fallbackPool, long generation) {
     List<SliceEntry> sortedSlices = new ArrayList<>(checkNotNull(slices, "slices"));
     sortedSlices.sort((e1, e2) -> UNSIGNED_BYTES_COMPARATOR.compare(e1.startKey, e2.startKey));
