@@ -1,5 +1,3 @@
-choco feature enable -n allowEmptyChecksums
-
 set RETRY=0
 :install_pkgconfig
 choco install -y pkgconfiglite --allow-empty-checksums --force
@@ -17,8 +15,8 @@ if %ERRORLEVEL% neq 0 (
 
 choco install -y openjdk --version=17.0
 set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-17\bin"
-set PROTOBUF_VER=35.1
-set ABSL_VERSION=20250127.1
+set PROTOBUF_VER=36.0
+set ABSL_VERSION=20250512.1
 set CMAKE_NAME=cmake-3.26.3-windows-x86_64
 
 if not exist "protobuf-%PROTOBUF_VER%\build\Release\" (

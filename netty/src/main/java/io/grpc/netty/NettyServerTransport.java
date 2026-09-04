@@ -36,12 +36,14 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelPromise;
+import io.netty.util.AsciiString;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -69,6 +71,7 @@ class NettyServerTransport implements ServerTransport {
   private boolean terminated;
   private final boolean autoFlowControl;
   private final int flowControlWindow;
+  private final Set<AsciiString> neverIndexedMetadataKeys;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   private final int softLimitHeaderListSize;
@@ -95,6 +98,7 @@ class NettyServerTransport implements ServerTransport {
       int maxStreams,
       boolean autoFlowControl,
       int flowControlWindow,
+      Set<AsciiString> neverIndexedMetadataKeys,
       int maxMessageSize,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
@@ -118,6 +122,8 @@ class NettyServerTransport implements ServerTransport {
     this.maxStreams = maxStreams;
     this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
+    this.neverIndexedMetadataKeys =
+        Preconditions.checkNotNull(neverIndexedMetadataKeys, "neverIndexedMetadataKeys");
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
     this.softLimitHeaderListSize = softLimitHeaderListSize;
@@ -281,6 +287,7 @@ class NettyServerTransport implements ServerTransport {
         maxStreams,
         autoFlowControl,
         flowControlWindow,
+        neverIndexedMetadataKeys,
         maxHeaderListSize,
         softLimitHeaderListSize,
         maxMessageSize,

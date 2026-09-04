@@ -76,6 +76,7 @@ import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2HeadersDecoder;
 import io.netty.handler.codec.http2.Http2HeadersEncoder;
+import io.netty.handler.codec.http2.Http2HeadersEncoder.SensitivityDetector;
 import io.netty.handler.codec.http2.Http2InboundFrameLogger;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2Settings;
@@ -84,12 +85,14 @@ import io.netty.handler.codec.http2.Http2StreamVisitor;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.codec.http2.UniformStreamByteDistributor;
 import io.netty.handler.logging.LogLevel;
+import io.netty.util.AsciiString;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
 import java.nio.channels.ClosedChannelException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -158,6 +161,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       @Nullable KeepAliveManager keepAliveManager,
       boolean autoFlowControl,
       int flowControlWindow,
+      Set<AsciiString> neverIndexedMetadataKeys,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
@@ -172,7 +176,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
     Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
-        Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, Integer.MAX_VALUE);
+        sensitivityDetector(neverIndexedMetadataKeys), false, 16, Integer.MAX_VALUE);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter(encoder);
     Http2Connection connection = new DefaultHttp2Connection(false);
     UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
@@ -276,6 +280,20 @@ class NettyClientHandler extends AbstractNettyHandler {
         maxHeaderListSize,
         softLimitHeaderListSize,
         metricRecorder);
+  }
+
+  @VisibleForTesting
+  static SensitivityDetector sensitivityDetector(
+      final Set<AsciiString> neverIndexedMetadataKeys) {
+    if (neverIndexedMetadataKeys.isEmpty()) {
+      return Http2HeadersEncoder.NEVER_SENSITIVE;
+    }
+    return new SensitivityDetector() {
+      @Override
+      public boolean isSensitive(CharSequence name, CharSequence value) {
+        return neverIndexedMetadataKeys.contains(AsciiString.of(name));
+      }
+    };
   }
 
   private NettyClientHandler(

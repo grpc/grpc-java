@@ -42,9 +42,11 @@ import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
+import io.grpc.InternalConfigSelector;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -61,6 +63,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolverProvider;
 import io.grpc.Status;
@@ -79,6 +82,7 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
@@ -312,6 +316,66 @@ public class ManagedChannelImplIdlenessTest {
     // in idle mode because the expectation is that the pending call will also need to
     // be handled.
     verify(mockNameResolver, times(2)).start(any(NameResolver.Listener2.class));
+  }
+
+  @Test
+  public void newCallAfterIdleWaitsForFreshConfigSelector() {
+    AtomicInteger staleSelectCount = new AtomicInteger();
+    AtomicInteger freshSelectCount = new AtomicInteger();
+    Attributes staleSelectorAttrs = Attributes.newBuilder()
+        .set(InternalConfigSelector.KEY, countingConfigSelector(staleSelectCount))
+        .build();
+    Attributes freshSelectorAttrs = Attributes.newBuilder()
+        .set(InternalConfigSelector.KEY, countingConfigSelector(freshSelectCount))
+        .build();
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+
+    assertEquals(ConnectivityState.IDLE, channel.getState(true));
+    deliverResolutionResult(staleSelectorAttrs, 1);
+
+    channel.enterIdle();
+
+    Metadata headers = new Metadata();
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, headers);
+
+    assertEquals(0, staleSelectCount.get());
+    assertEquals(0, freshSelectCount.get());
+    verify(mockLoadBalancerProvider, times(2)).newLoadBalancer(helperCaptor.capture());
+    Helper helper = helperCaptor.getAllValues().get(1);
+
+    deliverResolutionResult(freshSelectorAttrs, 2);
+
+    assertEquals(0, staleSelectCount.get());
+    verifyPendingCallDrainedToTransport(helper);
+    assertEquals(1, freshSelectCount.get());
+
+    channel.enterIdle();
+  }
+
+  @Test
+  public void enterIdleWithInitialPendingCallDoesNotReprocessUntilConfigArrives() {
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    Metadata headers = new Metadata();
+
+    assertEquals(ConnectivityState.IDLE, channel.getState(true));
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, headers);
+
+    channel.enterIdle();
+
+    assertFalse(channel.isInPanicMode());
+    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
+    verify(mockLoadBalancerProvider, times(2)).newLoadBalancer(helperCaptor.capture());
+    Helper helper = helperCaptor.getAllValues().get(1);
+
+    deliverResolutionResult(Attributes.EMPTY, 2);
+
+    assertFalse(channel.isInPanicMode());
+    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
+    verifyPendingCallDrainedToTransport(helper);
+
+    channel.enterIdle();
   }
 
   @Test
@@ -612,16 +676,62 @@ public class ManagedChannelImplIdlenessTest {
   }
 
   private void deliverResolutionResult() {
-    verify(mockNameResolver).start(nameResolverListenerCaptor.capture());
+    deliverResolutionResult(Attributes.EMPTY, 1);
+  }
+
+  private void deliverResolutionResult(Attributes attributes, int nameResolverStartCount) {
+    verify(mockNameResolver, times(nameResolverStartCount)).start(
+        nameResolverListenerCaptor.capture());
     // Simulate new address resolved to make sure the LoadBalancer is correctly linked to
     // the NameResolver.
-    ResolutionResult resolutionResult =
+    ResolutionResult.Builder resultBuilder =
         ResolutionResult.newBuilder()
             .setAddressesOrError(StatusOr.fromValue(servers))
-            .setAttributes(Attributes.EMPTY)
-            .build();
-    nameResolverListenerCaptor.getValue().onResult(resolutionResult);
+            .setAttributes(attributes);
+    if (attributes.get(InternalConfigSelector.KEY) != null) {
+      resultBuilder.setServiceConfig(
+          ConfigOrError.fromConfig(ManagedChannelServiceConfig.empty()));
+    }
+    ResolutionResult resolutionResult = resultBuilder.build();
+    List<NameResolver.Listener2> listeners = nameResolverListenerCaptor.getAllValues();
+    listeners.get(listeners.size() - 1).onResult(resolutionResult);
     executor.runDueTasks();
+  }
+
+  private void verifyPendingCallDrainedToTransport(Helper helper) {
+    ClientStream mockStream = mock(ClientStream.class);
+    Subchannel subchannel = createSubchannelSafely(helper, servers.get(0), Attributes.EMPTY);
+    requestConnectionSafely(helper, subchannel);
+    MockClientTransportInfo transportInfo = newTransports.poll();
+    when(transportInfo.transport.newStream(
+            same(method), any(Metadata.class), any(CallOptions.class),
+            any(ClientStreamTracer[].class)))
+        .thenReturn(mockStream);
+    transportInfo.listener.transportReady();
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    when(picker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel));
+
+    updateBalancingStateSafely(helper, READY, picker);
+    executor.runDueTasks();
+
+    verify(transportInfo.transport).newStream(
+        same(method), any(Metadata.class), any(CallOptions.class),
+        any(ClientStreamTracer[].class));
+    verify(mockStream).start(any(ClientStreamListener.class));
+  }
+
+  private static InternalConfigSelector countingConfigSelector(
+      final AtomicInteger selectCount) {
+    return new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(PickSubchannelArgs args) {
+        selectCount.incrementAndGet();
+        return Result.newBuilder()
+            .setConfig(ManagedChannelServiceConfig.empty())
+            .build();
+      }
+    };
   }
 
   private static void requestConnectionSafely(Helper helper, final Subchannel subchannel) {
