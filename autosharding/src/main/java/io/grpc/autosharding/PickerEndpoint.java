@@ -27,24 +27,39 @@ import javax.annotation.Nullable;
  * Immutable snapshot of endpoint state used by {@link AutoShardingPicker}.
  */
 final class PickerEndpoint {
+
+  /**
+   * Callback interface to trigger connection attempts on an IDLE endpoint's child balancer.
+   */
+  @FunctionalInterface
+  interface ExitIdler {
+    /**
+     * Requests the child load balancer to exit IDLE and initiate a connection.
+     *
+     * <p>Implementations MUST be thread-safe, non-blocking, idempotent, and dispatch
+     * execution to the {@link io.grpc.SynchronizationContext}.
+     */
+    void exitIdle();
+  }
+
   private final ConnectivityState state;
   private final SubchannelPicker picker;
-  @Nullable private final Runnable requestConnection;
+  @Nullable private final ExitIdler exitIdler;
 
   /**
    * Constructs a {@link PickerEndpoint}.
    *
    * @param state the current connectivity state of the endpoint
    * @param picker the latest subchannel picker for the endpoint
-   * @param requestConnection a callback to trigger a connection attempt on the child balancer
+   * @param exitIdler a callback to trigger an IDLE child balancer to start connecting
    */
   PickerEndpoint(
       ConnectivityState state,
       SubchannelPicker picker,
-      @Nullable Runnable requestConnection) {
+      @Nullable ExitIdler exitIdler) {
     this.state = checkNotNull(state, "state");
     this.picker = checkNotNull(picker, "picker");
-    this.requestConnection = requestConnection;
+    this.exitIdler = exitIdler;
   }
 
   ConnectivityState getState() {
@@ -56,8 +71,8 @@ final class PickerEndpoint {
   }
 
   void requestConnection() {
-    if (requestConnection != null) {
-      requestConnection.run();
+    if (exitIdler != null) {
+      exitIdler.exitIdle();
     }
   }
 

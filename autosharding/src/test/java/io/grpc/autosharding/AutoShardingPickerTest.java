@@ -27,6 +27,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.autosharding.PickerEndpoint.ExitIdler;
 import io.grpc.autosharding.SliceMap.SliceEntry;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
@@ -42,9 +43,9 @@ import org.junit.runners.JUnit4;
 public class AutoShardingPickerTest {
 
   private static final MethodDescriptor<Void, Void> METHOD = TestMethodDescriptors.voidMethod();
-  private static final Runnable NOOP = new Runnable() {
+  private static final ExitIdler NOOP_EXIT_IDLER = new ExitIdler() {
     @Override
-    public void run() {}
+    public void exitIdle() {}
   };
   private static final PickDetailsConsumer NOOP_CONSUMER = new PickDetailsConsumer() {};
 
@@ -69,7 +70,7 @@ public class AutoShardingPickerTest {
   public void pick_noSliceMap_fallbackEnabled_picksFromFallbackPool() {
     PickResult readyResult = PickResult.withNoResult(); // using as token
     PickerEndpoint ep0 = new PickerEndpoint(
-        ConnectivityState.READY, new FakePicker(readyResult), NOOP);
+        ConnectivityState.READY, new FakePicker(readyResult), NOOP_EXIT_IDLER);
 
     SliceMap emptySliceMap = new SliceMap(
         Collections.emptyList(), Collections.singletonList(0), 1L);
@@ -87,7 +88,7 @@ public class AutoShardingPickerTest {
   @Test
   public void pick_noSliceMap_fallbackDisabled_returnsUnavailableError() {
     PickerEndpoint ep0 = new PickerEndpoint(
-        ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP);
+        ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP_EXIT_IDLER);
 
     SliceMap emptySliceMap = new SliceMap(
         Collections.emptyList(), Collections.singletonList(0), 1L);
@@ -106,7 +107,7 @@ public class AutoShardingPickerTest {
   public void pick_sliceFound_readyEndpoint_returnsPickResult() {
     PickResult expectedResult = PickResult.withNoResult();
     PickerEndpoint ep0 = new PickerEndpoint(
-        ConnectivityState.READY, new FakePicker(expectedResult), NOOP);
+        ConnectivityState.READY, new FakePicker(expectedResult), NOOP_EXIT_IDLER);
 
     SliceEntry slice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
@@ -174,9 +175,9 @@ public class AutoShardingPickerTest {
     PickerEndpoint ep0 = new PickerEndpoint(
         ConnectivityState.TRANSIENT_FAILURE,
         new FakePicker(PickResult.withError(Status.UNAVAILABLE.withDescription("ep0 down"))),
-        NOOP);
+        NOOP_EXIT_IDLER);
     PickerEndpoint ep1 = new PickerEndpoint(
-        ConnectivityState.READY, new FakePicker(fallbackReadyResult), NOOP);
+        ConnectivityState.READY, new FakePicker(fallbackReadyResult), NOOP_EXIT_IDLER);
 
     // Slice 0 only has ep0 (which is down)
     SliceEntry slice0 = new SliceEntry(
@@ -198,7 +199,7 @@ public class AutoShardingPickerTest {
     PickerEndpoint ep0 = new PickerEndpoint(
         ConnectivityState.TRANSIENT_FAILURE,
         new FakePicker(PickResult.withError(epError)),
-        NOOP);
+        NOOP_EXIT_IDLER);
 
     SliceEntry slice0 = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
@@ -218,9 +219,9 @@ public class AutoShardingPickerTest {
     PickResult ready1 = PickResult.withNoResult();
 
     PickerEndpoint ep0 = new PickerEndpoint(
-        ConnectivityState.READY, new FakePicker(ready0), NOOP);
+        ConnectivityState.READY, new FakePicker(ready0), NOOP_EXIT_IDLER);
     PickerEndpoint ep1 = new PickerEndpoint(
-        ConnectivityState.READY, new FakePicker(ready1), NOOP);
+        ConnectivityState.READY, new FakePicker(ready1), NOOP_EXIT_IDLER);
 
     SliceEntry s0 = new SliceEntry(new byte[] {0x00}, Collections.singletonList(0));
     SliceEntry s1 = new SliceEntry(new byte[] {0x50}, Collections.singletonList(1));
@@ -241,7 +242,7 @@ public class AutoShardingPickerTest {
   @Test
   public void pick_emptySliceEndpoints_fallbackDisabled_returnsUnavailable() {
     PickerEndpoint ep0 = new PickerEndpoint(
-        ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP);
+        ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP_EXIT_IDLER);
 
     SliceEntry emptySlice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.emptyList());
@@ -261,7 +262,7 @@ public class AutoShardingPickerTest {
   public void pick_emptySliceEndpoints_fallbackEnabled_routesToFallbackPool() {
     PickResult fallbackReadyResult = PickResult.withNoResult();
     PickerEndpoint ep0 = new PickerEndpoint(
-        ConnectivityState.READY, new FakePicker(fallbackReadyResult), NOOP);
+        ConnectivityState.READY, new FakePicker(fallbackReadyResult), NOOP_EXIT_IDLER);
 
     // Gap slice with empty endpoints list
     SliceEntry gapSlice = new SliceEntry(
