@@ -88,9 +88,9 @@ final class AutoShardingPicker extends SubchannelPicker {
   @Override
   public PickResult pickSubchannel(PickSubchannelArgs args) {
     byte[] key = extractKeyBytes(args.getHeaders());
-    Integer sliceIdx = sliceMap.lookup(key);
+    int sliceIdx = sliceMap.lookup(key);
 
-    if (sliceIdx == null) {
+    if (sliceIdx == -1) {
       if (fallbackEnabled) {
         return pickFromEndpointIndices(sliceMap.getFallbackPool(), args);
       } else {

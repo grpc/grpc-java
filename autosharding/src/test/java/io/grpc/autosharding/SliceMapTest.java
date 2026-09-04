@@ -33,11 +33,11 @@ import org.junit.runners.JUnit4;
 public class SliceMapTest {
 
   @Test
-  public void lookup_emptySlices_returnsNull() {
+  public void lookup_emptySlices_returnsInvalidIndex() {
     SliceMap sliceMap = new SliceMap(Collections.emptyList(), Arrays.asList(0, 1), 1L);
-    assertThat(sliceMap.lookup(new byte[] {1, 2, 3})).isNull();
-    assertThat(sliceMap.lookup(null)).isNull();
-    assertThat(sliceMap.lookup(new byte[0])).isNull();
+    assertThat(sliceMap.lookup(new byte[] {1, 2, 3})).isEqualTo(-1);
+    assertThat(sliceMap.lookup(null)).isEqualTo(-1);
+    assertThat(sliceMap.lookup(new byte[0])).isEqualTo(-1);
   }
 
   @Test
@@ -79,16 +79,16 @@ public class SliceMapTest {
   }
 
   @Test
-  public void lookup_keySmallerThanFirstSlice_returnsNull() {
+  public void lookup_keySmallerThanFirstSlice_returnsInvalidIndex() {
     // Slice starts at "m"
     SliceEntry s1 = new SliceEntry(
         "m".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
     SliceMap sliceMap = new SliceMap(
         Collections.singletonList(s1), Collections.singletonList(0), 1L);
 
-    assertThat(sliceMap.lookup("a".getBytes(StandardCharsets.UTF_8))).isNull();
-    assertThat(sliceMap.lookup("".getBytes(StandardCharsets.UTF_8))).isNull();
-    assertThat(sliceMap.lookup(null)).isNull();
+    assertThat(sliceMap.lookup("a".getBytes(StandardCharsets.UTF_8))).isEqualTo(-1);
+    assertThat(sliceMap.lookup("".getBytes(StandardCharsets.UTF_8))).isEqualTo(-1);
+    assertThat(sliceMap.lookup(null)).isEqualTo(-1);
     assertThat(sliceMap.lookup("m".getBytes(StandardCharsets.UTF_8))).isEqualTo(0);
     assertThat(sliceMap.lookup("z".getBytes(StandardCharsets.UTF_8))).isEqualTo(0);
   }

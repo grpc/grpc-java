@@ -49,12 +49,12 @@ final class SliceMap {
 
   /**
    * Looks up the matching slice index for the given key.
-   * Returns null if slices is empty (e.g. startup/fallback case where there are no assignments).
+   * Returns -1 if slices is empty (e.g. startup/fallback case where there are no assignments)
+   * or if the key is smaller than the first slice's startKey.
    */
-  @Nullable
-  Integer lookup(@Nullable byte[] key) {
+  int lookup(@Nullable byte[] key) {
     if (slices.isEmpty()) {
-      return null;
+      return -1;
     }
     byte[] searchKey = key != null ? key : EMPTY_BYTES;
     int low = 0;
@@ -75,7 +75,7 @@ final class SliceMap {
 
     if (low == 0) {
       // Key is smaller than first slice's startKey
-      return null;
+      return -1;
     }
     return low - 1;
   }
