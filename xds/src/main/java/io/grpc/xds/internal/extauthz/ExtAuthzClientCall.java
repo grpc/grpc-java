@@ -29,7 +29,6 @@ import io.grpc.ForwardingClientCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.DelayedClientCall;
-import io.grpc.xds.internal.headermutations.HeaderMutator;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
@@ -46,7 +45,6 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
   private final AuthorizationGrpc.AuthorizationStub authzStub;
   private final CheckRequestBuilder checkRequestBuilder;
   private final CheckResponseHandler responseHandler;
-  private final HeaderMutator headerMutator;
   private final ExtAuthzConfig config;
   private final Executor callExecutor;
   private final Context.CancellableContext authzContext;
@@ -62,7 +60,6 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
       AuthorizationGrpc.AuthorizationStub authzStub,
       CheckRequestBuilder checkRequestBuilder,
       CheckResponseHandler responseHandler,
-      HeaderMutator headerMutator,
       ExtAuthzConfig config) {
     this.callOptions = callOptions;
     this.next = next;
@@ -70,7 +67,6 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
     this.authzStub = authzStub;
     this.checkRequestBuilder = checkRequestBuilder;
     this.responseHandler = responseHandler;
-    this.headerMutator = headerMutator;
     this.config = config;
     this.callExecutor = executor;
     this.authzContext = Context.current().withCancellation();
@@ -94,7 +90,7 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
     // 3. Trigger the async authorization check under the cancellable context
     authzContext.run(() -> {
       authzStub.check(request, new AuthzCallbackObserver<>(
-          delegate, next, method, callOptions, callExecutor, responseHandler, headerMutator,
+          delegate, next, method, callOptions, callExecutor, responseHandler,
           config, authzContext));
     });
   }

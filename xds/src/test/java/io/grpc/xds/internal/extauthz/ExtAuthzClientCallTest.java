@@ -30,6 +30,9 @@ import io.envoyproxy.envoy.service.auth.v3.CheckResponse;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
 import io.grpc.Context;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -52,12 +55,12 @@ import io.grpc.xds.internal.extauthz.ExtAuthzTestHelper.CapturingListener;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
 import io.grpc.xds.internal.headermutations.HeaderMutations;
-import io.grpc.xds.internal.headermutations.HeaderMutator;
 import io.grpc.xds.internal.headermutations.HeaderValueOption;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -80,8 +83,6 @@ public class ExtAuthzClientCallTest {
   private CheckRequestBuilder mockCheckRequestBuilder;
   @Mock
   private CheckResponseHandler mockResponseHandler;
-  @Mock
-  private HeaderMutator mockHeaderMutator;
   @Mock
   private AuthorizationGrpc.AuthorizationImplBase authzService;
 
@@ -194,36 +195,41 @@ public class ExtAuthzClientCallTest {
   }
 
   @Test
-  public void start_runsCheckUnderAuthzContext() {
-    Context[] capturedContext = new Context[1];
-    doAnswer(invocation -> {
-      capturedContext[0] = Context.current();
-      StreamObserver<CheckResponse> observer =
-          invocation.getArgument(1);
-      observer.onNext(CheckResponse.getDefaultInstance());
-      observer.onCompleted();
-      return null;
-    }).when(authzService)
-        .check(any(CheckRequest.class),
-            ArgumentMatchers.any());
+  public void start_dispatchesAuthzCheckUnderChildContext() throws Exception {
+    Context.Key<String> testKey = Context.key("test-key");
+    Context dataPlaneContext = Context.current().withValue(testKey, "data-plane-val");
 
-    HeaderMutations emptyMutations = HeaderMutations.create(
-        ImmutableList.of(), ImmutableList.of());
-    AuthzResponse authzResponse =
-        AuthzResponse.allow(emptyMutations)
-            .setResponseHeaderMutations(emptyMutations)
-            .build();
-    when(mockResponseHandler.handleResponse(
-        any(CheckResponse.class))).thenReturn(authzResponse);
+    AtomicReference<Context> clientContext = new AtomicReference<>();
+    ClientInterceptor interceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        clientContext.set(Context.current());
+        return next.newCall(method, callOptions);
+      }
+    };
 
-    ExtAuthzClientCall<SimpleRequest, SimpleResponse> call =
-        createCall();
+    Channel interceptedChannel = ClientInterceptors.intercept(channel, interceptor);
+    AuthorizationGrpc.AuthorizationStub interceptedStub =
+        AuthorizationGrpc.newStub(interceptedChannel);
+
+    ExtAuthzClientCall<SimpleRequest, SimpleResponse> call = dataPlaneContext.call(() ->
+        new ExtAuthzClientCall<>(
+            callOptions.getExecutor(), scheduler, callOptions, channel,
+            SimpleServiceGrpc.getUnaryRpcMethod(), interceptedStub,
+            mockCheckRequestBuilder, mockResponseHandler, config));
 
     CapturingListener<SimpleResponse> listener = new CapturingListener<>();
     call.start(listener, new Metadata());
 
-    // The check was called under the authzContext
-    assertThat(capturedContext[0]).isNotNull();
+    assertThat(testKey.get(call.getAuthzContextForTest())).isEqualTo("data-plane-val");
+    assertThat(testKey.get(clientContext.get())).isEqualTo("data-plane-val");
+
+    assertThat(clientContext.get().isCancelled()).isFalse();
+    Throwable cause = new RuntimeException("test cancel");
+    call.cancel("client cancelled", cause);
+    assertThat(clientContext.get().isCancelled()).isTrue();
+    assertThat(clientContext.get().cancellationCause()).isSameInstanceAs(cause);
   }
 
   @Test
@@ -342,7 +348,6 @@ public class ExtAuthzClientCallTest {
 
     assertThat(checkDone.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(lastBackendHeaders).isNotNull();
-    verify(mockHeaderMutator, org.mockito.Mockito.never()).applyMutations(any(), any());
   }
 
   @Test
@@ -379,7 +384,9 @@ public class ExtAuthzClientCallTest {
 
     assertThat(checkDone.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(lastBackendHeaders).isNotNull();
-    verify(mockHeaderMutator).applyMutations(ArgumentMatchers.eq(requestMutations), any());
+    Metadata.Key<String> fooKey =
+        Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER);
+    assertThat(lastBackendHeaders.get(fooKey)).isEqualTo("bar");
   }
 
   @Test
@@ -407,7 +414,6 @@ public class ExtAuthzClientCallTest {
 
     assertThat(checkDone.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(listener.getCloseStatus()).isEqualTo(Status.PERMISSION_DENIED);
-    verify(mockHeaderMutator, org.mockito.Mockito.never()).applyMutations(any(), any());
   }
 
   @Test
@@ -437,8 +443,10 @@ public class ExtAuthzClientCallTest {
     call.start(listener, new Metadata());
 
     assertThat(checkDone.await(5, TimeUnit.SECONDS)).isTrue();
-    verify(mockHeaderMutator).applyMutations(ArgumentMatchers.eq(responseMutations), any());
     assertThat(listener.getCloseStatus()).isEqualTo(Status.PERMISSION_DENIED);
+    Metadata.Key<String> fooKey =
+        Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER);
+    assertThat(listener.getCloseTrailers().get(fooKey)).isEqualTo("bar");
   }
 
   @Test
@@ -507,7 +515,6 @@ public class ExtAuthzClientCallTest {
 
     assertThat(checkDone.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(lastBackendHeaders).isNotNull();
-    verify(mockHeaderMutator, org.mockito.Mockito.never()).applyMutations(any(), any());
   }
 
   @Test
@@ -598,7 +605,7 @@ public class ExtAuthzClientCallTest {
         SimpleServiceGrpc.getUnaryRpcMethod(),
         AuthorizationGrpc.newStub(channel),
         mockCheckRequestBuilder, mockResponseHandler,
-        mockHeaderMutator, config);
+        config);
   }
 
   private static ExtAuthzConfig buildConfig() {

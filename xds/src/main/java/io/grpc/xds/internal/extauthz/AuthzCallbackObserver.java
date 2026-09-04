@@ -48,7 +48,8 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
   private final CallOptions callOptions;
   private final Executor callExecutor;
   private final CheckResponseHandler responseHandler;
-  private final HeaderMutator headerMutator;
+  // TODO(sauravzg): Make this static seeing that it holds no state.
+  private final HeaderMutator headerMutator = HeaderMutator.create();
   private final ExtAuthzConfig config;
   private final Context.CancellableContext authzContext;
 
@@ -59,7 +60,6 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
       CallOptions callOptions,
       Executor callExecutor,
       CheckResponseHandler responseHandler,
-      HeaderMutator headerMutator,
       ExtAuthzConfig config,
       Context.CancellableContext authzContext) {
     this.delayedCall = delayedCall;
@@ -68,7 +68,6 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
     this.callOptions = callOptions;
     this.callExecutor = callExecutor;
     this.responseHandler = responseHandler;
-    this.headerMutator = headerMutator;
     this.config = config;
     this.authzContext = authzContext;
   }

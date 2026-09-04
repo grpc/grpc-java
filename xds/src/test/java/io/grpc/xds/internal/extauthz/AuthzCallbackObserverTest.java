@@ -58,7 +58,6 @@ import io.grpc.xds.internal.extauthz.ExtAuthzTestHelper.CapturingListener;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.headermutations.HeaderMutationFilter;
 import io.grpc.xds.internal.headermutations.HeaderMutations;
-import io.grpc.xds.internal.headermutations.HeaderMutator;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -86,7 +85,6 @@ public class AuthzCallbackObserverTest {
 
   private final CheckResponseHandler responseHandler =
       new CheckResponseHandler(new HeaderMutationFilter(Optional.empty()));
-  private final HeaderMutator headerMutator = HeaderMutator.create();
   private final ScheduledExecutorService scheduler =
       Executors.newSingleThreadScheduledExecutor();
 
@@ -168,7 +166,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator, failClosedConfig(), authzCtx);
+            responseHandler, failClosedConfig(), authzCtx);
 
     SimpleRequest request =
         SimpleRequest.newBuilder().setRequestMessage("allow-payload").build();
@@ -219,7 +217,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator, failClosedConfig(), authzCtx);
+            responseHandler, failClosedConfig(), authzCtx);
 
     SimpleRequest request =
         SimpleRequest.newBuilder().setRequestMessage("mutated-header-payload").build();
@@ -266,7 +264,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator, failClosedConfig(), authzCtx);
+            responseHandler, failClosedConfig(), authzCtx);
 
     SimpleRequest request =
         SimpleRequest.newBuilder().setRequestMessage("deny-payload").build();
@@ -312,7 +310,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator, failClosedConfig(), authzCtx);
+            responseHandler, failClosedConfig(), authzCtx);
 
     SimpleRequest request =
         SimpleRequest.newBuilder().setRequestMessage("deny-trailers-payload").build();
@@ -353,7 +351,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator, failClosedConfig(), authzCtx);
+            responseHandler, failClosedConfig(), authzCtx);
 
     SimpleRequest request =
         SimpleRequest.newBuilder().setRequestMessage("error-closed-payload").build();
@@ -393,7 +391,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator,
+            responseHandler,
             failOpenConfig(/*headerAdd=*/false), authzCtx);
 
     SimpleRequest request =
@@ -432,7 +430,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator,
+            responseHandler,
             failOpenConfig(/*headerAdd=*/true), authzCtx);
 
     SimpleRequest request =
@@ -473,7 +471,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator, failClosedConfig(), authzCtx);
+            responseHandler, failClosedConfig(), authzCtx);
 
     SimpleRequest request =
         SimpleRequest.newBuilder().setRequestMessage("buggy-server-payload").build();
@@ -521,7 +519,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator, failClosedConfig(), authzCtx);
+            responseHandler, failClosedConfig(), authzCtx);
 
     SimpleRequest request =
         SimpleRequest.newBuilder().setRequestMessage("resp-header-payload").build();
@@ -564,7 +562,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator, failClosedConfig(), authzCtx);
+            responseHandler, failClosedConfig(), authzCtx);
 
     SimpleRequest request =
         SimpleRequest.newBuilder().setRequestMessage("remove-header-payload").build();
@@ -622,7 +620,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            mockHandler, headerMutator, failClosedConfig(), authzCtx);
+            mockHandler, failClosedConfig(), authzCtx);
 
     observer.onNext(CheckResponse.getDefaultInstance());
   }
@@ -648,7 +646,7 @@ public class AuthzCallbackObserverTest {
             SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
-            responseHandler, headerMutator, failClosedConfig(), authzCtx);
+            responseHandler, failClosedConfig(), authzCtx);
 
     authzCtx.run(() -> {
       AuthorizationGrpc.newStub(channel)
