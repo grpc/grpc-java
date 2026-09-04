@@ -31,6 +31,7 @@ import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.grpc.ClientInterceptor;
+import io.grpc.ServerInterceptor;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.internal.HeaderForwardingRulesConfig;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
@@ -79,6 +80,11 @@ public class ExternalProcessorFilter implements Filter {
     @Override
     public boolean isClientFilter() {
       return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false);
+    }
+
+    @Override
+    public boolean isServerFilter() {
+      return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", false);
     }
 
     @Override
@@ -132,6 +138,20 @@ public class ExternalProcessorFilter implements Filter {
     }
     return new ExternalProcessorClientInterceptor(
         extProcFilterConfig, cachedChannelManager, scheduler, context);
+  }
+
+  @Nullable
+  @Override
+  public ServerInterceptor buildServerInterceptor(FilterConfig filterConfig,
+      @Nullable FilterConfig overrideConfig) {
+    ExternalProcessorFilterConfig extProcFilterConfig =
+        (ExternalProcessorFilterConfig) filterConfig;
+    if (overrideConfig != null) {
+      extProcFilterConfig = mergeConfigs(extProcFilterConfig,
+          (ExternalProcessorFilterOverrideConfig) overrideConfig);
+    }
+    return new ExternalProcessorServerInterceptor(
+        extProcFilterConfig, cachedChannelManager, context);
   }
 
   private static ExternalProcessorFilterConfig mergeConfigs(

@@ -452,6 +452,13 @@ final class OpenTelemetryTracingModule {
         delegate().onReady();
       }
     }
+
+    @Override
+    public void onEvent(Object event) {
+      try (Scope scope = context.makeCurrent()) {
+        delegate().onEvent(event);
+      }
+    }
   }
 
   @VisibleForTesting
