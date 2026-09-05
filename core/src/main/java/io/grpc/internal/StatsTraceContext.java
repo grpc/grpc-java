@@ -168,6 +168,19 @@ public final class StatsTraceContext {
   }
 
   /**
+   * See {@link ClientStreamTracer#cancelled}. For client-side only.
+   *
+   * <p>Called from abstract stream implementations.
+   */
+  public void clientCancelled(Status status) {
+    for (StreamTracer tracer : tracers) {
+      if (tracer instanceof ClientStreamTracer) {
+        ((ClientStreamTracer) tracer).cancelled(status);
+      }
+    }
+  }
+
+  /**
    * See {@link StreamTracer#streamClosed}. This may be called multiple times, and only the first
    * value will be taken.
    *
