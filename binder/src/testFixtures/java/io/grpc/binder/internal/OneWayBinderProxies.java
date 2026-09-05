@@ -15,6 +15,7 @@
  */
 package io.grpc.binder.internal;
 
+import android.os.IBinder;
 import android.os.RemoteException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -23,6 +24,30 @@ import javax.annotation.Nullable;
 
 /** A collection of {@link OneWayBinderProxy}-related test helpers. */
 public final class OneWayBinderProxies {
+  /** Base class for {@link OneWayBinderProxy} decorators that forward all calls by default. */
+  public abstract static class ForwardingOneWayBinderProxy extends OneWayBinderProxy {
+    protected final OneWayBinderProxy delegate;
+
+    protected ForwardingOneWayBinderProxy(OneWayBinderProxy delegate) {
+      this.delegate = delegate;
+    }
+
+    @Override
+    public void transact(int code, ParcelHolder data) throws RemoteException {
+      delegate.transact(code, data);
+    }
+
+    @Override
+    public void linkToDeath(IBinder.DeathRecipient recipient, int flags) throws RemoteException {
+      delegate.linkToDeath(recipient, flags);
+    }
+
+    @Override
+    public boolean unlinkToDeath(IBinder.DeathRecipient recipient, int flags) {
+      return delegate.unlinkToDeath(recipient, flags);
+    }
+  }
+
   /**
    * A {@link OneWayBinderProxy.Decorator} that blocks calling threads while an (external) test
    * provides the actual decoration.
@@ -73,13 +98,11 @@ public final class OneWayBinderProxies {
   }
 
   /** A {@link OneWayBinderProxy} decorator whose transact method can artificially throw. */
-  public static final class ThrowingOneWayBinderProxy extends OneWayBinderProxy {
-    private final OneWayBinderProxy wrapped;
+  public static final class ThrowingOneWayBinderProxy extends ForwardingOneWayBinderProxy {
     @Nullable private RemoteException remoteException;
 
     ThrowingOneWayBinderProxy(OneWayBinderProxy wrapped) {
-      super(wrapped.getDelegate());
-      this.wrapped = wrapped;
+      super(wrapped);
     }
 
     /**
@@ -97,21 +120,18 @@ public final class OneWayBinderProxies {
       if (remoteException != null) {
         throw remoteException;
       }
-      wrapped.transact(code, data);
+      super.transact(code, data);
     }
   }
 
   /**
    * A {@link OneWayBinderProxy} decorator whose transact method can be configured to silently drop.
    */
-  public static final class BlackHoleOneWayBinderProxy extends OneWayBinderProxy {
-
-    private final OneWayBinderProxy wrapped;
+  public static final class BlackHoleOneWayBinderProxy extends ForwardingOneWayBinderProxy {
     private boolean dropAllTransactions;
 
     BlackHoleOneWayBinderProxy(OneWayBinderProxy wrapped) {
-      super(wrapped.getDelegate());
-      this.wrapped = wrapped;
+      super(wrapped);
     }
 
     /**
@@ -127,13 +147,13 @@ public final class OneWayBinderProxies {
     @Override
     public void transact(int code, ParcelHolder data) throws RemoteException {
       if (!dropAllTransactions) {
-        wrapped.transact(code, data);
+        super.transact(code, data);
       }
     }
   }
 
   /** A {@link OneWayBinderProxy} that queues transactions for a test to deliver manually later. */
-  public static final class QueueingOneWayBinderProxy extends OneWayBinderProxy {
+  public static final class QueueingOneWayBinderProxy extends ForwardingOneWayBinderProxy {
     public static final class Transaction {
       public final int code;
       private final ParcelHolder parcel;
@@ -145,11 +165,9 @@ public final class OneWayBinderProxies {
     }
 
     private final BlockingQueue<Transaction> queue = new LinkedBlockingQueue<>();
-    private final OneWayBinderProxy wrapped;
 
     public QueueingOneWayBinderProxy(OneWayBinderProxy wrapped) {
-      super(wrapped.getDelegate());
-      this.wrapped = wrapped;
+      super(wrapped);
     }
 
     @Override
@@ -171,7 +189,7 @@ public final class OneWayBinderProxies {
      * @throws IllegalStateException if transaction was already delivered once before
      */
     public void deliver(Transaction transaction) throws RemoteException {
-      wrapped.transact(transaction.code, transaction.parcel);
+      delegate.transact(transaction.code, transaction.parcel);
     }
   }
 
