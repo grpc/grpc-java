@@ -68,6 +68,7 @@ import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -79,6 +80,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  * Application that starts a client for the {@link TestServiceGrpc.TestServiceImplBase} and runs
@@ -135,6 +137,9 @@ public class TestServiceClient {
   private int soakRequestSize = 271828;
   private int soakResponseSize = 314159;
   private int numThreads = 1;
+  private boolean enableOpentelemetry;
+  private String otelCollectorAddress;
+  private OpenTelemetrySdk openTelemetrySdk;
   private String additionalMetadata = "";
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
@@ -219,6 +224,10 @@ public class TestServiceClient {
         numThreads = Integer.parseInt(value);
       } else if ("additional_metadata".equals(key)) {
         additionalMetadata = value;
+      } else if ("enable_opentelemetry".equals(key)) {
+        enableOpentelemetry = Boolean.parseBoolean(value);
+      } else if ("otel_collector_address".equals(key)) {
+        otelCollectorAddress = value;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -306,7 +315,11 @@ public class TestServiceClient {
   }
 
   @VisibleForTesting
+  @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   void setUp() {
+    if (enableOpentelemetry) {
+      this.openTelemetrySdk = OpenTelemetryUtil.setupOpenTelemetry(otelCollectorAddress);
+    }
     tester.setUp();
   }
 
@@ -321,6 +334,10 @@ public class TestServiceClient {
       throw ex;
     } catch (Exception ex) {
       throw new RuntimeException(ex);
+    } finally {
+      if (openTelemetrySdk != null) {
+        openTelemetrySdk.close();
+      }
     }
   }
 
