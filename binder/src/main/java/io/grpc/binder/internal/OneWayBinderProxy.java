@@ -1,5 +1,7 @@
 package io.grpc.binder.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
@@ -10,7 +12,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Wraps an {@link IBinder} with a safe and uniformly asynchronous transaction API.
+ * A safe and uniformly asynchronous sink for "oneway" Binder transactions.
  *
  * <p>When the target of your bindService() call is hosted in a different process, Android supplies
  * you with an {@link IBinder} that proxies your transactions to the remote {@link
@@ -22,8 +24,8 @@ import java.util.logging.Logger;
  * consequences with respect to reentrancy, locking, and transaction dispatch order can be
  * surprising and dangerous.
  *
- * <p>Wrap your {@link IBinder}s with an instance of this class to ensure the following
- * out-of-process "oneway" semantics are always in effect:
+ * <p>Implementations of this interface ensure the following out-of-process "oneway" semantics are
+ * always in effect:
  *
  * <ul>
  *   <li>transact() merely enqueues the transaction for processing. It doesn't wait for onTransact()
@@ -35,23 +37,17 @@ import java.util.logging.Logger;
  *   <li>onTransact() calls are dispatched one at a time in the same happens-before order as the
  *       corresponding calls to transact().
  * </ul>
- *
- * <p>NB: One difference that this class can't conceal is that calls to onTransact() are serialized
- * per {@link OneWayBinderProxy} instance, not per instance of the wrapped {@link IBinder}. An
- * android.os.Binder with in-process callers could still receive concurrent calls to onTransact() on
- * different threads if callers used different {@link OneWayBinderProxy} instances or if that Binder
- * also had out-of-process callers.
  */
 public abstract class OneWayBinderProxy {
-  private static final Logger logger = Logger.getLogger(OneWayBinderProxy.class.getName());
-  protected final IBinder delegate;
-
-  protected OneWayBinderProxy(IBinder iBinder) {
-    this.delegate = iBinder;
-  }
 
   /**
    * Returns a new instance of {@link OneWayBinderProxy} that wraps {@code iBinder}.
+   *
+   * <p>NB: One difference this wrapper can't conceal is that calls to onTransact() are serialized
+   * per {@link OneWayBinderProxy} instance, not per instance of the wrapped {@link IBinder}. An
+   * android.os.Binder with in-process callers could still receive concurrent calls to onTransact()
+   * on different threads if callers used different {@link OneWayBinderProxy} instances or if that
+   * Binder also had out-of-process callers.
    *
    * @param iBinder the binder to wrap
    * @param inProcessThreadHopExecutor a non-direct Executor used to dispatch calls to onTransact(),
@@ -81,7 +77,7 @@ public abstract class OneWayBinderProxy {
   public static final Decorator IDENTITY_DECORATOR = (x) -> x;
 
   /**
-   * Enqueues a transaction for the wrapped {@link IBinder} with guaranteed "oneway" semantics.
+   * Enqueues a transaction for the recipient with guaranteed "oneway" semantics.
    *
    * <p>NB: Unlike {@link IBinder#transact}, implementations of this method take ownership of the
    * {@code data} Parcel. When this method returns, {@code data} will normally be empty, but callers
@@ -96,14 +92,47 @@ public abstract class OneWayBinderProxy {
   public abstract void transact(int code, ParcelHolder data) throws RemoteException;
 
   /**
-   * Returns the wrapped {@link IBinder} for the purpose of calling methods other than {@link
-   * IBinder#transact(int, Parcel, Parcel, int)}.
+   * Registers a death recipient to be notified when the host process of the remote binder dies.
+   *
+   * @see IBinder#linkToDeath(IBinder.DeathRecipient, int)
    */
-  public IBinder getDelegate() {
-    return delegate;
+  public abstract void linkToDeath(IBinder.DeathRecipient recipient, int flags)
+      throws RemoteException;
+
+  /**
+   * Unregisters a previously registered death recipient.
+   *
+   * @see IBinder#unlinkToDeath(IBinder.DeathRecipient, int)
+   */
+  public abstract boolean unlinkToDeath(IBinder.DeathRecipient recipient, int flags);
+
+  abstract static class WrappingImplBase extends OneWayBinderProxy {
+    protected final IBinder delegate;
+
+    WrappingImplBase(IBinder delegate) {
+      this.delegate = checkNotNull(delegate);
+    }
+
+    @Override
+    public void linkToDeath(IBinder.DeathRecipient recipient, int flags) throws RemoteException {
+      delegate.linkToDeath(recipient, flags);
+    }
+
+    @Override
+    public boolean unlinkToDeath(IBinder.DeathRecipient recipient, int flags) {
+      return delegate.unlinkToDeath(recipient, flags);
+    }
+
+    protected boolean transactAndRecycleParcel(int code, Parcel data) throws RemoteException {
+      try {
+        return delegate.transact(code, data, null, IBinder.FLAG_ONEWAY);
+      } finally {
+        data.recycle();
+      }
+    }
   }
 
-  static class OutOfProcessImpl extends OneWayBinderProxy {
+  static class OutOfProcessImpl extends WrappingImplBase {
     OutOfProcessImpl(IBinder iBinder) {
       super(iBinder);
     }
@@ -118,15 +147,8 @@ public abstract class OneWayBinderProxy {
     }
   }
 
-  protected boolean transactAndRecycleParcel(int code, Parcel data) throws RemoteException {
-    try {
-      return delegate.transact(code, data, null, IBinder.FLAG_ONEWAY);
-    } finally {
-      data.recycle();
-    }
-  }
-
-  static class InProcessImpl extends OneWayBinderProxy {
+  static class InProcessImpl extends WrappingImplBase {
+    private static final Logger logger = Logger.getLogger(InProcessImpl.class.getName());
     private final SerializingExecutor executor;
 
     InProcessImpl(IBinder binder, Executor executor) {

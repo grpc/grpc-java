@@ -293,7 +293,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     binder = binderDecorator.decorate(binder);
     this.outgoingBinder = binder;
     try {
-      binder.getDelegate().linkToDeath(this, 0);
+      binder.linkToDeath(this, 0);
       return true;
     } catch (RemoteException re) {
       return false;
@@ -367,7 +367,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   private final void sendShutdownTransaction() {
     if (outgoingBinder != null) {
       try {
-        outgoingBinder.getDelegate().unlinkToDeath(this, 0);
+        outgoingBinder.unlinkToDeath(this, 0);
       } catch (NoSuchElementException e) {
         // Ignore.
       }
