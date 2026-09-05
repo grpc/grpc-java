@@ -68,8 +68,8 @@ public final class BinderServerTransportTest {
   }
 
   // Provide defaults so that we can "include only relevant details in tests."
-  BinderServerTransportBuilder newBinderServerTransportBuilder() {
-    return new BinderServerTransportBuilder()
+  BinderServerTransport.Builder newBinderServerTransportBuilder() {
+    return new BinderServerTransport.Builder()
         .setExecutorServicePool(new FixedObjectPool<>(executorService))
         .setAttributes(Attributes.EMPTY)
         .setStreamTracerFactories(ImmutableList.of())
@@ -126,44 +126,4 @@ public final class BinderServerTransportTest {
     assertThat(transportListener.isTerminated()).isTrue();
   }
 
-  static class BinderServerTransportBuilder {
-    ObjectPool<ScheduledExecutorService> executorServicePool;
-    Attributes attributes;
-    List<ServerStreamTracer.Factory> streamTracerFactories;
-    OneWayBinderProxy.Decorator binderDecorator;
-    IBinder callbackBinder;
-
-    public BinderServerTransport build() {
-      return BinderServerTransport.create(
-          executorServicePool, attributes, streamTracerFactories, binderDecorator, callbackBinder);
-    }
-
-    public BinderServerTransportBuilder setExecutorServicePool(
-        ObjectPool<ScheduledExecutorService> executorServicePool) {
-      this.executorServicePool = executorServicePool;
-      return this;
-    }
-
-    public BinderServerTransportBuilder setAttributes(Attributes attributes) {
-      this.attributes = attributes;
-      return this;
-    }
-
-    public BinderServerTransportBuilder setStreamTracerFactories(
-        List<ServerStreamTracer.Factory> streamTracerFactories) {
-      this.streamTracerFactories = streamTracerFactories;
-      return this;
-    }
-
-    public BinderServerTransportBuilder setBinderDecorator(
-        OneWayBinderProxy.Decorator binderDecorator) {
-      this.binderDecorator = binderDecorator;
-      return this;
-    }
-
-    public BinderServerTransportBuilder setCallbackBinder(IBinder callbackBinder) {
-      this.callbackBinder = callbackBinder;
-      return this;
-    }
-  }
 }
