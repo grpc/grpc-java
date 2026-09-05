@@ -301,6 +301,28 @@ public final class ClientInboundTest {
   }
 
   @Test
+  public void outOfOrderMessageDeliveredBeforePrefix() throws Exception {
+    // Deliver message (Tx 1) BEFORE prefix (Tx 0)
+    newStreamTxnToClientBuilder(1).withMessage(utf8("some message")).dispatchTo(inbound);
+
+    // Deliver prefix (Tx 0)
+    newStreamTxnToClientBuilder(0).withPrefix(new Metadata()).dispatchTo(inbound);
+
+    // Request message after prefix has arrived
+    clientStream.request(1);
+
+    // Deliver suffix (Tx 2)
+    newStreamTxnToClientBuilder(2).withSuffix(Status.OK, new Metadata()).dispatchTo(inbound);
+
+    drainExecutors();
+    // Verify message and suffix are delivered
+    assertThat(listener.getReadMessages()).containsExactly("some message");
+    assertThat(listener.isClosed()).isTrue();
+    assertThat(listener.getClosedStatus()).isOk();
+    assertThat(listener.getClosedTrailers().keys()).isEmpty();
+  }
+
+  @Test
   public void sequenceGapCausesBufferingUntilMissingTransactionArrives() throws Exception {
     newStreamTxnToClientBuilder(0).withPrefix(new Metadata()).dispatchTo(inbound);
     clientStream.request(2);
