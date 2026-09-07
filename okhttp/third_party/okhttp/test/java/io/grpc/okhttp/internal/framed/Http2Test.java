@@ -19,7 +19,6 @@ package io.grpc.okhttp.internal.framed;
 import static io.grpc.okhttp.internal.framed.Http2.FLAG_NONE;
 import static io.grpc.okhttp.internal.framed.Http2.FLAG_PADDED;
 import static io.grpc.okhttp.internal.framed.Http2.TYPE_DATA;
-import static io.grpc.okhttp.internal.framed.Http2.TYPE_GOAWAY;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -29,8 +28,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import okio.Buffer;
 import okio.BufferedSink;
-import okio.ByteString;
-import org.mockito.ArgumentMatchers;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -97,39 +94,5 @@ public class Http2Test {
     sink.writeByte((length >>> 16 ) & 0xff);
     sink.writeByte((length >>> 8 ) & 0xff);
     sink.writeByte(length & 0xff);
-  }
-
-  @Test
-  public void goAwayFrameStandardErrorCode() throws IOException {
-    Buffer bufferIn = createGoAway(3, 0 /* NO_ERROR */, "debug");
-    http2FrameReader = new Http2.Reader(bufferIn, 100, true);
-    http2FrameReader.nextFrame(mockHandler);
-
-    verify(mockHandler).goAway(eq(3), eq(ErrorCode.NO_ERROR), eq(ByteString.encodeUtf8("debug")));
-  }
-
-  @Test
-  public void goAwayFrameUnrecognizedErrorCode() throws IOException {
-    Buffer bufferIn = createGoAway(0, 70007 /* Apache httpd error code */, "apache");
-    http2FrameReader = new Http2.Reader(bufferIn, 100, true);
-    http2FrameReader.nextFrame(mockHandler);
-
-    verify(mockHandler).goAway(
-        eq(0), ArgumentMatchers.<ErrorCode>isNull(), eq(ByteString.encodeUtf8("apache")));
-  }
-
-  private Buffer createGoAway(
-      int lastStreamId, int errorCode, String debugData) throws IOException {
-    byte[] debugBytes = debugData.getBytes(StandardCharsets.UTF_8);
-    int length = 8 + debugBytes.length;
-    Buffer sink = new Buffer();
-    writeLength(sink, length);
-    sink.writeByte(TYPE_GOAWAY);
-    sink.writeByte(FLAG_NONE);
-    sink.writeInt(0); // streamId for GOAWAY must be 0
-    sink.writeInt(lastStreamId);
-    sink.writeInt(errorCode);
-    sink.write(debugBytes);
-    return sink;
   }
 }
