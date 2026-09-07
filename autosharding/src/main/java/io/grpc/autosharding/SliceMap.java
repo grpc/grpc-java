@@ -68,7 +68,7 @@ final class SliceMap {
      * @param endpoints the list of endpoint indices assigned to this slice
      */
     SliceEntry(byte[] startKey, List<Integer> endpoints) {
-      this.startKey = checkNotNull(startKey, "startKey");
+      this.startKey = checkNotNull(startKey, "startKey").clone();
       this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
     }
 

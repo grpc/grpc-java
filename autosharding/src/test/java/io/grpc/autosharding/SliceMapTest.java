@@ -117,8 +117,9 @@ public class SliceMapTest {
 
   @Test
   public void gettersAndImmutability() {
+    byte[] inputKey = new byte[] {1};
     List<SliceEntry> slices = new ArrayList<>();
-    slices.add(new SliceEntry(new byte[] {1}, Arrays.asList(0, 1)));
+    slices.add(new SliceEntry(inputKey, Arrays.asList(0, 1)));
     List<Integer> fallback = new ArrayList<>(Arrays.asList(0, 1));
 
     SliceMap sliceMap = new SliceMap(slices, fallback, 42L);
@@ -129,10 +130,12 @@ public class SliceMapTest {
     assertThat(sliceMap.getSlices().get(0).getStartKey()).isEqualTo(new byte[] {1});
     assertThat(sliceMap.getSlices().get(0).getEndpoints()).containsExactly(0, 1).inOrder();
 
-    // Verify defensive copying: mutating input collections does not affect sliceMap
+    // Verify defensive copying: mutating input collections and key array does not affect sliceMap
+    inputKey[0] = 99;
     slices.clear();
     fallback.clear();
     assertThat(sliceMap.getSlices()).hasSize(1);
+    assertThat(sliceMap.getSlices().get(0).getStartKey()).isEqualTo(new byte[] {1});
     assertThat(sliceMap.getFallbackPool()).containsExactly(0, 1).inOrder();
   }
 
