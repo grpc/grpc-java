@@ -37,6 +37,21 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * <p>Routes RPCs to backend endpoints based on a request metadata header key, matching against
  * an immutable {@link SliceMap}.
+ *
+ * <p><b>Lifecycle &amp; Assignment Expectations:</b>
+ * This picker is intended for active routing and post-timeout fallback handling:
+ * <ul>
+ *   <li><b>Pending Initial Assignment:</b> During startup before the first assignment is received
+ *       (and while the initial assignment timer is running), the load balancer handles RPC
+ *       queuing polymorphically using a buffering picker in
+ *       {@link io.grpc.ConnectivityState#CONNECTING}.
+ *   <li><b>Active Routing:</b> Once a valid assignment is received from the control plane,
+ *       this picker routes RPCs according to the populated {@link SliceMap}.
+ *   <li><b>Post-Timeout Fallback:</b> If the initial assignment timer expires without an
+ *       assignment, this picker is used with an empty {@link SliceMap} to either route across
+ *       the {@code fallbackPool} (if fallback is enabled) or fail RPCs with
+ *       {@link io.grpc.Status#UNAVAILABLE} (if fallback is disabled).
+ * </ul>
  */
 final class AutoShardingPicker extends SubchannelPicker {
   private static final byte[] EMPTY_BYTES = new byte[0];
