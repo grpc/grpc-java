@@ -37,14 +37,6 @@ public final class GoAwayDisconnectError implements DisconnectError {
     this.errorCode = errorCode != null ? errorCode : GrpcUtil.Http2Error.INTERNAL_ERROR;
   }
 
-
-  /**
-   * Returns the HTTP/2 error code associated with this disconnect reason.
-   */
-  public GrpcUtil.Http2Error getErrorCode() {
-    return errorCode;
-  }
-
   @Override
   public String toErrorString() {
     return ERROR_TAG + " " + errorCode.name();

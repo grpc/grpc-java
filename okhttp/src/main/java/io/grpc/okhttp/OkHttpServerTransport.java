@@ -986,9 +986,9 @@ final class OkHttpServerTransport implements ServerTransport,
       frameLogger.logGoAway(
           OkHttpFrameLogger.Direction.INBOUND, lastGoodStreamId, errorCode, debugData);
       String description = String.format("Received GOAWAY: %s '%s'", errorCode, debugData.utf8());
-      int httpCode = errorCode != null ? errorCode.httpCode
-          : (int) GrpcUtil.Http2Error.INTERNAL_ERROR.code();
-      Status status = GrpcUtil.Http2Error.statusForCode(httpCode)
+      Status status = (errorCode != null
+          ? GrpcUtil.Http2Error.statusForCode(errorCode.httpCode)
+          : GrpcUtil.Http2Error.INTERNAL_ERROR.status())
           .withDescription(description);
       if (!ErrorCode.NO_ERROR.equals(errorCode)) {
         log.log(
