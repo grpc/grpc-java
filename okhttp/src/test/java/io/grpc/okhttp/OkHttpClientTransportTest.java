@@ -2180,7 +2180,8 @@ public class OkHttpClientTransportTest {
     assertContainStream(DEFAULT_START_STREAM_ID);
     assertContainStream(DEFAULT_START_STREAM_ID + 2);
 
-    // Read a GOAWAY with unrecognized error code (null) and lastGoodStreamId = DEFAULT_START_STREAM_ID
+    // Read a GOAWAY with unrecognized error code (null) and
+    // lastGoodStreamId = DEFAULT_START_STREAM_ID
     frameHandler()
         .goAway(DEFAULT_START_STREAM_ID, null, ByteString.encodeUtf8("unrecognized error code"));
 

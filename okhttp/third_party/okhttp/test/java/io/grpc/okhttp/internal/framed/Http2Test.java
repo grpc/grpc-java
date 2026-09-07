@@ -114,10 +114,12 @@ public class Http2Test {
     http2FrameReader = new Http2.Reader(bufferIn, 100, true);
     http2FrameReader.nextFrame(mockHandler);
 
-    verify(mockHandler).goAway(eq(0), ArgumentMatchers.<ErrorCode>isNull(), eq(ByteString.encodeUtf8("apache")));
+    verify(mockHandler).goAway(
+        eq(0), ArgumentMatchers.<ErrorCode>isNull(), eq(ByteString.encodeUtf8("apache")));
   }
 
-  private Buffer createGoAway(int lastStreamId, int errorCode, String debugData) throws IOException {
+  private Buffer createGoAway(
+      int lastStreamId, int errorCode, String debugData) throws IOException {
     byte[] debugBytes = debugData.getBytes(StandardCharsets.UTF_8);
     int length = 8 + debugBytes.length;
     Buffer sink = new Buffer();
