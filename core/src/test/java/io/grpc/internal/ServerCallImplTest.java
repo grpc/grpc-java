@@ -40,7 +40,6 @@ import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
-import io.grpc.Detachable;
 import io.grpc.InternalChannelz.ServerStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -477,54 +476,20 @@ public class ServerCallImplTest {
   public void streamListener_messageRead_unary_delayed() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-    streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
+    FakeCloseTrackerInputStream messageStream =
+        new FakeCloseTrackerInputStream(UNARY_METHOD.streamRequest(1234L), false);
+    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
 
-    // Message should not be delivered yet
+    // Message should not be delivered or closed yet
     verify(callListener, never()).onMessage(any(Long.class));
+    assertFalse(messageStream.closed);
 
     streamListener.halfClosed();
 
-    // Now it should be delivered
+    // Now it should be delivered and closed
     verify(callListener).onMessage(1234L);
     verify(callListener).onHalfClose();
-  }
-
-  @Test
-  public void streamListener_messageRead_unary_detachable() {
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-
-    InputStream delegate = UNARY_METHOD.streamRequest(1234L);
-    FakeDetachableInputStream detachableStream = new FakeDetachableInputStream(delegate);
-
-    streamListener.messagesAvailable(new SingleMessageProducer(detachableStream));
-
-    // It should have been detached immediately
-    assertTrue(detachableStream.detached);
-    verify(callListener, never()).onMessage(any(Long.class));
-
-    streamListener.halfClosed();
-
-    // Now it should be delivered
-    verify(callListener).onMessage(1234L);
-    verify(callListener).onHalfClose();
-  }
-
-  @Test
-  public void streamListener_messageRead_unary_bufferMessageException() {
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-
-    InputStream delegate = UNARY_METHOD.streamRequest(1234L);
-    FakeDetachableInputStream detachableStream = new FakeDetachableInputStream(delegate, true);
-
-    RuntimeException e = assertThrows(RuntimeException.class,
-        () -> streamListener.messagesAvailable(new SingleMessageProducer(detachableStream)));
-    assertThat(e).hasMessageThat().isEqualTo("detach failed");
-
-    // The stream should have been closed in the catch block
-    assertTrue(detachableStream.closed);
-    verify(callListener, never()).onMessage(any(Long.class));
+    assertTrue(messageStream.closed);
   }
 
   @Test
@@ -534,17 +499,21 @@ public class ServerCallImplTest {
         serverCallTracer, PerfMark.createTag());
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-    streamListener.messagesAvailable(
-        new SingleMessageProducer(SERVER_STREAMING_METHOD.streamRequest(1234L)));
+    FakeCloseTrackerInputStream messageStream =
+        new FakeCloseTrackerInputStream(
+            SERVER_STREAMING_METHOD.streamRequest(1234L), false);
+    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
 
-    // Message should not be delivered yet
+    // Message should not be delivered or closed yet
     verify(callListener, never()).onMessage(any(Long.class));
+    assertFalse(messageStream.closed);
 
     streamListener.halfClosed();
 
-    // Now it should be delivered
+    // Now it should be delivered and closed
     verify(callListener).onMessage(1234L);
     verify(callListener).onHalfClose();
+    assertTrue(messageStream.closed);
   }
 
   @Test
@@ -573,6 +542,14 @@ public class ServerCallImplTest {
 
     verify(stream).cancel(any(Status.class));
     verify(callListener, never()).onMessage(any(Long.class));
+    assertTrue(call.isCancelled());
+
+    // Subsequent halfClosed should be ignored because call is cancelled
+    streamListener.halfClosed();
+    verify(callListener, never()).onHalfClose();
+
+    // When transport closes, onCancel is called once
+    streamListener.closed(Status.CANCELLED);
     verify(callListener).onCancel();
     assertTrue(context.isCancelled());
   }
@@ -581,14 +558,19 @@ public class ServerCallImplTest {
   public void streamListener_messageRead_onlyOnce_unary() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-    streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
-    
+    FakeCloseTrackerInputStream messageStream =
+        new FakeCloseTrackerInputStream(UNARY_METHOD.streamRequest(1234L), false);
+    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
+
+    assertFalse(messageStream.closed);
+
     // canceling the call should clean up and prevent delivery
     streamListener.closed(Status.CANCELLED);
 
     streamListener.halfClosed();
 
     verify(callListener, never()).onMessage(any(Long.class));
+    assertTrue(messageStream.closed);
   }
 
   @Test
@@ -599,21 +581,22 @@ public class ServerCallImplTest {
         .when(callListener)
         .onMessage(any(Long.class));
 
-    InputStream delegate = UNARY_METHOD.streamRequest(1234L);
-    FakeDetachableInputStream detachableStream = new FakeDetachableInputStream(delegate);
+    FakeCloseTrackerInputStream messageStream =
+        new FakeCloseTrackerInputStream(UNARY_METHOD.streamRequest(1234L), false);
 
-    streamListener.messagesAvailable(new SingleMessageProducer(detachableStream));
+    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
 
     // Exception should not be thrown yet because deserialization/delivery is delayed
     verify(callListener, never()).onMessage(any(Long.class));
+    assertFalse(messageStream.closed);
 
     // It should be thrown during halfClosed
     RuntimeException e = assertThrows(RuntimeException.class,
         () -> streamListener.halfClosed());
     assertThat(e).hasMessageThat().isEqualTo("unexpected exception");
 
-    // The detached stream should have been closed in the catch block
-    assertTrue(detachableStream.detachedStream.closed);
+    // The stream should have been closed in the catch block
+    assertTrue(messageStream.closed);
   }
 
   @Test
@@ -621,14 +604,14 @@ public class ServerCallImplTest {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
 
-    InputStream delegate = UNARY_METHOD.streamRequest(1234L);
-    FakeDetachableInputStream detachableStream =
-        new FakeDetachableInputStream(delegate, false, true);
+    FakeCloseTrackerInputStream messageStream =
+        new FakeCloseTrackerInputStream(UNARY_METHOD.streamRequest(1234L), true);
 
-    streamListener.messagesAvailable(new SingleMessageProducer(detachableStream));
+    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
 
     // Message should not be delivered yet
     verify(callListener, never()).onMessage(any(Long.class));
+    assertFalse(messageStream.closed);
 
     // halfClosed should not throw because we use closeQuietly
     streamListener.halfClosed();
@@ -636,7 +619,7 @@ public class ServerCallImplTest {
     // The message was delivered and halfClosed completed
     verify(callListener).onMessage(1234L);
     verify(callListener).onHalfClose();
-    assertTrue(detachableStream.detachedStream.closed);
+    assertTrue(messageStream.closed);
   }
 
   private static class LongMarshaller implements Marshaller<Long> {
@@ -676,50 +659,6 @@ public class ServerCallImplTest {
       if (throwOnClose) {
         throw new IOException("close failed");
       }
-      delegate.close();
-    }
-  }
-
-  private static class FakeDetachableInputStream extends InputStream implements Detachable {
-    boolean detached = false;
-    boolean closed = false;
-    private final InputStream delegate;
-    private final boolean throwOnDetach;
-    private final boolean throwOnClose;
-    FakeCloseTrackerInputStream detachedStream;
-
-    FakeDetachableInputStream(InputStream delegate) {
-      this(delegate, false, false);
-    }
-
-    FakeDetachableInputStream(InputStream delegate, boolean throwOnDetach) {
-      this(delegate, throwOnDetach, false);
-    }
-
-    FakeDetachableInputStream(InputStream delegate, boolean throwOnDetach, boolean throwOnClose) {
-      this.delegate = delegate;
-      this.throwOnDetach = throwOnDetach;
-      this.throwOnClose = throwOnClose;
-    }
-
-    @Override
-    public InputStream detach() {
-      if (throwOnDetach) {
-        throw new RuntimeException("detach failed");
-      }
-      detached = true;
-      detachedStream = new FakeCloseTrackerInputStream(delegate, throwOnClose);
-      return detachedStream;
-    }
-
-    @Override
-    public int read() throws IOException {
-      return delegate.read();
-    }
-
-    @Override
-    public void close() throws IOException {
-      closed = true;
       delegate.close();
     }
   }

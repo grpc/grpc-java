@@ -34,7 +34,6 @@ import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
-import io.grpc.Detachable;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
@@ -46,9 +45,6 @@ import io.grpc.StatusRuntimeException;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -325,20 +321,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       }
     }
 
-    private static InputStream bufferMessage(InputStream is) throws IOException {
-      if (is instanceof Detachable) {
-        return ((Detachable) is).detach();
-      }
-      // Fallback: copy to byte array
-      ByteArrayOutputStream baos = new ByteArrayOutputStream();
-      byte[] buffer = new byte[4096];
-      int bytesRead;
-      while ((bytesRead = is.read(buffer)) != -1) {
-        baos.write(buffer, 0, bytesRead);
-      }
-      return new ByteArrayInputStream(baos.toByteArray());
-    }
-
     @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
     private void messagesAvailableInternal(final MessageProducer producer) {
       if (call.cancelled) {
@@ -349,22 +331,18 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       InputStream message;
       try {
         while ((message = producer.next()) != null) {
+          // TODO: Consider forcing this check to be done in the transport (MessageDeframer)
+          // https://github.com/grpc/grpc-java/pull/13004/changes#r3939373996
           if (call.method.getType().clientSendsOneMessage()) {
             if (delayedMessage != null) {
               GrpcUtil.closeQuietly(message);
               call.stream.cancel(Status.INTERNAL.withDescription("Too many requests"));
               GrpcUtil.closeQuietly(delayedMessage);
               delayedMessage = null;
-              closedInternal(Status.INTERNAL.withDescription("Too many requests"));
+              call.cancelled = true;
               return;
             }
-            try {
-              delayedMessage = bufferMessage(message);
-            } catch (Throwable t) {
-              GrpcUtil.closeQuietly(message);
-              throw t;
-            }
-            message.close();
+            delayedMessage = message;
           } else {
             try {
               listener.onMessage(call.method.parseRequest(message));
