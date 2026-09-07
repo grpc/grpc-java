@@ -313,6 +313,25 @@ public class AutoShardingPickerTest {
   }
 
   @Test
+  public void pick_emptyFallbackPool_fallbackEnabled_returnsUnavailable() {
+    SliceEntry emptySlice = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.emptyList());
+    SliceMap sliceMap = new SliceMap(
+        Collections.singletonList(emptySlice), Collections.emptyList(), 1L);
+
+    AutoShardingPicker picker = new AutoShardingPicker(
+        sliceMap,
+        Collections.emptyList(),
+        true,
+        AutoShardingPicker.createKeyHeader("x-key"));
+
+    PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
+    assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .contains("No endpoints available in fallback pool");
+  }
+
+  @Test
   public void pickerEndpoint_gettersAndToString() {
     FakePicker fakePicker = new FakePicker(PickResult.withNoResult());
     AtomicInteger count = new AtomicInteger();

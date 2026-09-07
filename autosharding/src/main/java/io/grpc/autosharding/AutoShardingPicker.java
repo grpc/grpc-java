@@ -169,7 +169,8 @@ final class AutoShardingPicker extends SubchannelPicker {
 
     if (sliceIdx == -1) {
       if (fallbackEnabled) {
-        return pickFromEndpointIndices(sliceMap.getFallbackPool(), args);
+        return pickFromEndpointIndices(
+            sliceMap.getFallbackPool(), args, "No endpoints available in fallback pool");
       } else {
         return PickResult.withError(
             Status.UNAVAILABLE.withDescription(
@@ -178,18 +179,20 @@ final class AutoShardingPicker extends SubchannelPicker {
     }
 
     if (sliceInFallback[sliceIdx] && fallbackEnabled) {
-      return pickFromEndpointIndices(sliceMap.getFallbackPool(), args);
+      return pickFromEndpointIndices(
+          sliceMap.getFallbackPool(), args, "No endpoints available in fallback pool");
     }
 
     SliceMap.SliceEntry sliceEntry = sliceMap.getSlices().get(sliceIdx);
-    return pickFromEndpointIndices(sliceEntry.getEndpoints(), args);
+    return pickFromEndpointIndices(
+        sliceEntry.getEndpoints(), args, "No valid endpoints in slice and fallback disabled");
   }
 
   private PickResult pickFromEndpointIndices(
-      List<Integer> indices, PickSubchannelArgs args) {
+      List<Integer> indices, PickSubchannelArgs args, String emptyErrorDescription) {
     if (indices.isEmpty()) {
       return PickResult.withError(
-          Status.UNAVAILABLE.withDescription("No valid endpoints in slice and fallback disabled"));
+          Status.UNAVAILABLE.withDescription(emptyErrorDescription));
     }
 
     int size = indices.size();
