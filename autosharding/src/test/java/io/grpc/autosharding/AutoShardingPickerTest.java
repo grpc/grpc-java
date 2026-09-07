@@ -35,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -399,5 +400,100 @@ public class AutoShardingPickerTest {
         bound -> 1);
     PickResult result1 = picker1.pickSubchannel(createArgs(new Metadata()));
     assertThat(result1).isSameInstanceAs(ready1);
+  }
+
+  @Test
+  public void pick_invalidSliceEndpointIndex_throwsIndexOutOfBoundsException() {
+    PickerEndpoint ep0 = new PickerEndpoint(
+        ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP_EXIT_IDLER);
+
+    // Slice references index 5, but only 1 endpoint (index 0) exists
+    SliceEntry slice = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(5));
+    SliceMap sliceMap = new SliceMap(
+        Collections.singletonList(slice), Collections.singletonList(0), 1L);
+
+    AutoShardingPicker picker = new AutoShardingPicker(
+        sliceMap,
+        Collections.singletonList(ep0),
+        false,
+        AutoShardingPicker.createKeyHeader("x-key"));
+
+    Assert.assertThrows(
+        IndexOutOfBoundsException.class,
+        () -> picker.pickSubchannel(createArgs(new Metadata())));
+  }
+
+  @Test
+  public void pick_negativeSliceEndpointIndex_throwsIndexOutOfBoundsException() {
+    PickerEndpoint ep0 = new PickerEndpoint(
+        ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP_EXIT_IDLER);
+
+    // Slice references negative index -1
+    SliceEntry slice = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(-1));
+    SliceMap sliceMap = new SliceMap(
+        Collections.singletonList(slice), Collections.singletonList(0), 1L);
+
+    AutoShardingPicker picker = new AutoShardingPicker(
+        sliceMap,
+        Collections.singletonList(ep0),
+        false,
+        AutoShardingPicker.createKeyHeader("x-key"));
+
+    Assert.assertThrows(
+        IndexOutOfBoundsException.class,
+        () -> picker.pickSubchannel(createArgs(new Metadata())));
+  }
+
+  @Test
+  public void pick_invalidFallbackPoolIndex_throwsIndexOutOfBoundsException() {
+    PickerEndpoint ep0 = new PickerEndpoint(
+        ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP_EXIT_IDLER);
+
+    // Fallback pool references index 10, but only 1 endpoint exists
+    SliceMap emptySliceMap = new SliceMap(
+        Collections.emptyList(), Collections.singletonList(10), 1L);
+
+    AutoShardingPicker picker = new AutoShardingPicker(
+        emptySliceMap,
+        Collections.singletonList(ep0),
+        true,
+        AutoShardingPicker.createKeyHeader("x-key"));
+
+    Assert.assertThrows(
+        IndexOutOfBoundsException.class,
+        () -> picker.pickSubchannel(createArgs(new Metadata())));
+  }
+
+  @Test
+  public void constructor_nullInputs_throwsNullPointerException() {
+    SliceMap sliceMap = new SliceMap(
+        Collections.emptyList(), Collections.emptyList(), 1L);
+
+    Assert.assertThrows(
+        NullPointerException.class,
+        () -> new AutoShardingPicker(
+            null,
+            Collections.emptyList(),
+            false,
+            null));
+
+    Assert.assertThrows(
+        NullPointerException.class,
+        () -> new AutoShardingPicker(
+            sliceMap,
+            null,
+            false,
+            null));
+
+    Assert.assertThrows(
+        NullPointerException.class,
+        () -> new AutoShardingPicker(
+            sliceMap,
+            Collections.emptyList(),
+            false,
+            null,
+            null));
   }
 }
