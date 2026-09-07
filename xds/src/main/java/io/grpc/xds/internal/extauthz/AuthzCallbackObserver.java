@@ -74,15 +74,12 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
 
   @Override
   public void onNext(CheckResponse value) {
-    // Note on exception safety: handleResponse() internally catches
-    // HeaderMutationDisallowedException and converts it to a DENY response.
-    // Remaining calls (newCall, setCallAndDrain) use battle-tested
-    // infrastructure with protobuf-guaranteed non-null defaults. An
-    // uncaught RuntimeException here would propagate to the gRPC stub
-    // framework, which handles observer stream cleanup. The authzContext
-    // would remain uncancelled, but will be GC'd when this observer is
-    // collected — acceptable since the authz RPC would have already
-    // completed (we're inside onNext).
+    // Note: This implementation is currently exception-safe.
+    //
+    // TODO(sauravz): Revisit hardening if this invariant changes in the future.
+    // If an unhandled RuntimeException escapes onNext(), gRPC cancels the stream and
+    // invokes onError(). Under failure_mode_allow: true, this causes the call to fail
+    // open, which could inadvertently permit an unauthorized request.
     AuthzResponse authzResponse = responseHandler.handleResponse(value);
     if (authzResponse.decision() == AuthzResponse.Decision.ALLOW) {
       ClientCall<ReqT, RespT> delegate = next.newCall(method, callOptions);
@@ -160,6 +157,8 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
 
   private void setCallAndDrain(ClientCall<ReqT, RespT> call) {
     Runnable drain = delayedCall.setCall(call);
+    // drain is null if the call was already set (e.g. onCompleted() following onNext())
+    // or if the call was cancelled in-flight.
     if (drain != null) {
       callExecutor.execute(drain);
     }
