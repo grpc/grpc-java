@@ -28,12 +28,29 @@ import javax.annotation.Nullable;
 /**
  * An immutable lookup structure mapping application routing keys to slice indices.
  *
- * <p>As defined in gRFC A119, the assignment provider guarantees that the assignment
- * is pre-validated, gap-free, non-overlapping, and covers the entire keyspace {@code ["" .. inf)}.
- * Any gaps returned by the autosharding server are filled as slice entries with an empty
- * endpoints list. Therefore, each {@link SliceEntry} only needs to store {@code startKey}
- * because the exclusive end key of slice {@code i} is implicitly the inclusive start key of
- * slice {@code i + 1}.
+ * <p>The assignment provider guarantees that the assignment is pre-validated, gap-free, 
+ * non-overlapping, and covers the entire keyspace {@code ["" .. inf)}.
+ * <ul>
+ *   <li>The first slice's {@code startKey} is expected to be {@code new byte[0]} ({@code ""}).</li>
+ *   <li>Unassigned key ranges (gaps) returned by the autosharding server are filled as slice
+ *       entries with an empty {@code endpoints} list.</li>
+ *   <li>Endpoint indices in {@link SliceEntry#getEndpoints()} and {@link #getFallbackPool()}
+ *       are non-negative indices corresponding 1:1 to the endpoint snapshot list in
+ *       {@link AutoShardingPicker}.</li>
+ * </ul>
+ *
+ * <p>Behavior on Invalid or Edge-case Inputs:
+ * <ul>
+ *   <li>Empty slices list: {@link #lookup(byte[])} returns {@code -1}, allowing
+ *       {@link AutoShardingPicker} to fall back to the fallback pool or fail with UNAVAILABLE.</li>
+ *   <li>Key smaller than first slice start key: {@link #lookup(byte[])} returns {@code -1}
+ *       if the first slice's {@code startKey} is not {@code ""} and the key precedes it.</li>
+ *   <li>Null key: Treated as an empty byte array ({@code new byte[0]}).</li>
+ *   <li>Unsorted slices: The constructor automatically sorts slices lexicographically
+ *       using unsigned byte comparison.</li>
+ *   <li>Null constructor arguments: Throws {@link NullPointerException} if {@code slices},
+ *       {@code fallbackPool}, {@code startKey}, or {@code endpoints} is {@code null}.</li>
+ * </ul>
  */
 final class SliceMap {
 
@@ -89,9 +106,11 @@ final class SliceMap {
   }
 
   /**
-   * Looks up the matching slice index for the given key.
-   * Returns -1 if slices is empty (e.g. startup/fallback case where there are no assignments)
-   * or if the key is smaller than the first slice's startKey.
+   * Looks up the matching slice index for the given key using binary search.
+   *
+   * @param key the routing key to look up, or {@code null} to search with an empty byte array
+   * @return the 0-based slice index in {@link #getSlices()}, or {@code -1} if {@code slices}
+   *     is empty or if the key is smaller than the first slice's {@code startKey}
    */
   int lookup(@Nullable byte[] key) {
     if (slices.isEmpty()) {

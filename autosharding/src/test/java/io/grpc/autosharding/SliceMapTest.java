@@ -135,4 +135,70 @@ public class SliceMapTest {
     assertThat(sliceMap.getSlices()).hasSize(1);
     assertThat(sliceMap.getFallbackPool()).containsExactly(0, 1).inOrder();
   }
+
+  @Test
+  public void lookup_nullKey_treatedAsEmptyBytes() {
+    SliceEntry s1 = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
+    SliceEntry s2 = new SliceEntry(
+        "m".getBytes(StandardCharsets.UTF_8), Collections.singletonList(1));
+    SliceMap sliceMap = new SliceMap(Arrays.asList(s1, s2), Arrays.asList(0, 1), 1L);
+
+    assertThat(sliceMap.lookup(null)).isEqualTo(0);
+  }
+
+  @Test
+  public void constructor_unsortedSlices_sortedLexicographically() {
+    SliceEntry s1 = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
+    SliceEntry s2 = new SliceEntry(
+        "m".getBytes(StandardCharsets.UTF_8), Collections.singletonList(1));
+    SliceEntry s3 = new SliceEntry(
+        "z".getBytes(StandardCharsets.UTF_8), Collections.singletonList(2));
+
+    // Pass in reverse order
+    SliceMap sliceMap = new SliceMap(Arrays.asList(s3, s1, s2), Arrays.asList(0, 1, 2), 1L);
+
+    assertThat(sliceMap.getSlices().get(0).getStartKey())
+        .isEqualTo("".getBytes(StandardCharsets.UTF_8));
+    assertThat(sliceMap.getSlices().get(1).getStartKey())
+        .isEqualTo("m".getBytes(StandardCharsets.UTF_8));
+    assertThat(sliceMap.getSlices().get(2).getStartKey())
+        .isEqualTo("z".getBytes(StandardCharsets.UTF_8));
+
+    assertThat(sliceMap.lookup("abc".getBytes(StandardCharsets.UTF_8))).isEqualTo(0);
+    assertThat(sliceMap.lookup("mmm".getBytes(StandardCharsets.UTF_8))).isEqualTo(1);
+    assertThat(sliceMap.lookup("zzz".getBytes(StandardCharsets.UTF_8))).isEqualTo(2);
+  }
+
+  @Test
+  public void lookup_duplicateStartKeys_matchesOne() {
+    SliceEntry s1 = new SliceEntry(
+        "a".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
+    SliceEntry s2 = new SliceEntry(
+        "a".getBytes(StandardCharsets.UTF_8), Collections.singletonList(1));
+    SliceMap sliceMap = new SliceMap(Arrays.asList(s1, s2), Arrays.asList(0, 1), 1L);
+
+    int idx = sliceMap.lookup("a".getBytes(StandardCharsets.UTF_8));
+    assertThat(idx).isAnyOf(0, 1);
+  }
+
+  @Test
+  public void constructor_nullInputs_throwsNullPointerException() {
+    org.junit.Assert.assertThrows(
+        NullPointerException.class,
+        () -> new SliceMap(null, Collections.singletonList(0), 1L));
+
+    org.junit.Assert.assertThrows(
+        NullPointerException.class,
+        () -> new SliceMap(Collections.emptyList(), null, 1L));
+
+    org.junit.Assert.assertThrows(
+        NullPointerException.class,
+        () -> new SliceEntry(null, Collections.singletonList(0)));
+
+    org.junit.Assert.assertThrows(
+        NullPointerException.class,
+        () -> new SliceEntry(new byte[0], null));
+  }
 }
