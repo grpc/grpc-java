@@ -36,10 +36,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * authorization decision and applying any necessary header mutations.
  */
 @ThreadSafe
-class CheckResponseHandler {
+public class CheckResponseHandler {
   private final HeaderMutationFilter headerMutationFilter;
 
-  CheckResponseHandler(HeaderMutationFilter headerMutationFilter) {
+  public CheckResponseHandler(HeaderMutationFilter headerMutationFilter) {
     this.headerMutationFilter = headerMutationFilter;
   }
 
