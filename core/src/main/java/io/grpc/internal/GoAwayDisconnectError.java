@@ -37,15 +37,6 @@ public final class GoAwayDisconnectError implements DisconnectError {
     this.errorCode = errorCode != null ? errorCode : GrpcUtil.Http2Error.INTERNAL_ERROR;
   }
 
-  /**
-   * Creates a GoAway reason from the wire error code.
-   *
-   * @param errorCode The wire HTTP/2 error code.
-   */
-  public GoAwayDisconnectError(long errorCode) {
-    GrpcUtil.Http2Error error = GrpcUtil.Http2Error.forCode(errorCode);
-    this.errorCode = error != null ? error : GrpcUtil.Http2Error.INTERNAL_ERROR;
-  }
 
   /**
    * Returns the HTTP/2 error code associated with this disconnect reason.

@@ -608,8 +608,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         statusCaptor.getValue().getDescription());
 
     DisconnectError disconnectError = disconnectErrorCaptor.getValue();
-    assertEquals("GOAWAY INTERNAL_ERROR", disconnectError.toErrorString());
-    assertEquals(new GoAwayDisconnectError(70007L), disconnectError);
+    assertEquals(
+        new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR), disconnectError);
 
     // Creating new stream must fail immediately with UNAVAILABLE
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));

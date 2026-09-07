@@ -1093,9 +1093,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   private void startGoAway(int lastKnownStreamId, ErrorCode errorCode, Status status) {
-    DisconnectError disconnectError = errorCode == null
-        ? new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR)
-        : new GoAwayDisconnectError(errorCode.httpCode);
+    DisconnectError disconnectError = new GoAwayDisconnectError(
+        errorCode != null ? GrpcUtil.Http2Error.forCode(errorCode.httpCode) : null);
     startGoAway(lastKnownStreamId, errorCode, status, disconnectError);
   }
 
@@ -1584,7 +1583,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       DisconnectError disconnectError;
       if (errorCode != null) {
         status = GrpcUtil.Http2Error.statusForCode(errorCode.httpCode);
-        disconnectError = new GoAwayDisconnectError(errorCode.httpCode);
+        disconnectError = new GoAwayDisconnectError(
+            GrpcUtil.Http2Error.forCode(errorCode.httpCode));
       } else {
         status = GrpcUtil.Http2Error.INTERNAL_ERROR.status()
             .withDescription("Unrecognized HTTP/2 error code");
