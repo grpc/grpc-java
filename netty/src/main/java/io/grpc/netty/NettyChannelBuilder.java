@@ -449,7 +449,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
    *
    * @since 1.84.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12976")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12999")
   @CanIgnoreReturnValue
   public NettyChannelBuilder neverIndexMetadataKey(Metadata.Key<?> key) {
     neverIndexedMetadataKeys.add(AsciiString.of(checkNotNull(key, "key").name()));
@@ -464,7 +464,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
    *
    * @since 1.84.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12976")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12999")
   @CanIgnoreReturnValue
   public NettyChannelBuilder neverIndexMetadataKeys(
       Collection<? extends Metadata.Key<?>> keys) {

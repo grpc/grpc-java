@@ -263,10 +263,6 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (socket instanceof SSLSocket) {
       SSLSocket sslSocket = (SSLSocket) socket;
       SSLParameters sslParams = sslSocket.getSSLParameters();
-      if (sslParams != null) {
-        sslParams.setEndpointIdentificationAlgorithm("");
-        sslSocket.setSSLParameters(sslParams);
-      }
       sniMatchers = getAutoSniSanMatchers(sslParams);
     }
     if (sniMatchers.isEmpty() && certContext != null) {
@@ -284,8 +280,6 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     List<StringMatcher> sniMatchers = null;
     SSLParameters sslParams = sslEngine.getSSLParameters();
     if (sslParams != null) {
-      sslParams.setEndpointIdentificationAlgorithm("");
-      sslEngine.setSSLParameters(sslParams);
       sniMatchers = getAutoSniSanMatchers(sslParams);
     }
     if (sniMatchers.isEmpty() && certContext != null) {

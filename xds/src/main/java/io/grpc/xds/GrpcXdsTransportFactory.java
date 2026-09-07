@@ -24,7 +24,6 @@ import io.grpc.CallOptions;
 import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
-import io.grpc.CompositeCallCredentials;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
@@ -88,14 +87,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
         channelBuilder.childChannelConfigurator(channelConfigurator);
       }
       this.channel = channelBuilder.build();
-      if (callCredentials != null && serverInfo.callCredentials() != null) {
-        this.callCredentials = new CompositeCallCredentials(
-            callCredentials, serverInfo.callCredentials());
-      } else if (serverInfo.callCredentials() != null) {
-        this.callCredentials = serverInfo.callCredentials();
-      } else {
-        this.callCredentials = callCredentials;
-      }
+      this.callCredentials = callCredentials;
     }
 
     @VisibleForTesting

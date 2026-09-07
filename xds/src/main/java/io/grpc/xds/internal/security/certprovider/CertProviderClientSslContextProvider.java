@@ -76,7 +76,9 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
     }
 
     SslContextBuilder sslContextBuilder =
-        GrpcSslContexts.forClient().trustManager(trustManagerFactory);
+        GrpcSslContexts.forClient()
+            .endpointIdentificationAlgorithm("")
+            .trustManager(trustManagerFactory);
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }

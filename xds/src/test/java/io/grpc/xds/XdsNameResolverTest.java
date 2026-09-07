@@ -400,15 +400,14 @@ public class XdsNameResolverTest {
     String serviceAuthority = "[::FFFF:129.144.52.38]:80";
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true, true, false, false,
-            null)))
+            "td.googleapis.com", InsecureChannelCredentials.create(), true, true, false, false)))
         .node(Node.newBuilder().build())
         .authorities(
             ImmutableMap.of(targetAuthority, AuthorityInfo.create(
                 "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s?foo=1&bar=2",
                 ImmutableList.of(ServerInfo.create(
                     "td.googleapis.com", InsecureChannelCredentials.create(),
-                    true, true, false, false, null)))))
+                    true, true, false, false)))))
         .build();
     expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
         + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
@@ -2957,7 +2956,7 @@ public class XdsNameResolverTest {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
         MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions callOptions) {
-      TestCall<ReqT, RespT> call = new TestCall<>(callOptions);
+      TestCall<ReqT, RespT> call = new TestCall<>(methodDescriptor, callOptions);
       testCall = call;
       return call;
     }
@@ -2969,11 +2968,13 @@ public class XdsNameResolverTest {
   }
 
   private static final class TestCall<ReqT, RespT> extends NoopClientCall<ReqT, RespT> {
+    final MethodDescriptor<ReqT, RespT> methodDescriptor;
     // CallOptions actually received from the channel when the call is created.
     final CallOptions callOptions;
     ClientCall.Listener<RespT> listener;
 
-    TestCall(CallOptions callOptions) {
+    TestCall(MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions callOptions) {
+      this.methodDescriptor = methodDescriptor;
       this.callOptions = callOptions;
     }
 
@@ -3097,5 +3098,82 @@ public class XdsNameResolverTest {
     String response = ClientCalls.blockingUnaryCall(
         channel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
     assertThat(response).isEqualTo("Hello World");
+  }
+
+  @Test
+  public void rawMessageClientInterceptor_flagFalse() {
+    String origClientProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
+    String origServerProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER");
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", "false");
+    try {
+      filterStateTestSetupResolver();
+      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+      VirtualHost vhost = filterStateTestVhost();
+
+      xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+      createAndDeliverClusterUpdates(xdsClient, cluster1);
+
+      // When flags are false, RawMessageClientInterceptor is not added.
+      assertClusterResolutionResult(call1, cluster1);
+      assertThat(testCall.methodDescriptor).isSameInstanceAs(call1.methodDescriptor);
+    } finally {
+      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", origClientProp);
+      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", origServerProp);
+    }
+  }
+
+  @Test
+  public void rawMessageClientInterceptor_flagTrue() {
+    String origClientProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
+    String origServerProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER");
+
+    // When GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT is true, RawMessageClientInterceptor is added.
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "true");
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", "false");
+    try {
+      filterStateTestSetupResolver();
+      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+      VirtualHost vhost = filterStateTestVhost();
+
+      xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+      createAndDeliverClusterUpdates(xdsClient, cluster1);
+
+      assertClusterResolutionResult(call1, cluster1);
+      assertThat(testCall.methodDescriptor).isNotSameInstanceAs(call1.methodDescriptor);
+    } finally {
+      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", origClientProp);
+      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", origServerProp);
+    }
+
+    resolver.shutdown();
+    reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
+
+    // When GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER is true, RawMessageClientInterceptor is added.
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", "true");
+    try {
+      filterStateTestSetupResolver();
+      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+      VirtualHost vhost = filterStateTestVhost();
+
+      xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+      createAndDeliverClusterUpdates(xdsClient, cluster1);
+
+      assertClusterResolutionResult(call1, cluster1);
+      assertThat(testCall.methodDescriptor).isNotSameInstanceAs(call1.methodDescriptor);
+    } finally {
+      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", origClientProp);
+      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", origServerProp);
+    }
+  }
+
+  private static void restoreProperty(String key, @Nullable String value) {
+    if (value == null) {
+      System.clearProperty(key);
+    } else {
+      System.setProperty(key, value);
+    }
   }
 }

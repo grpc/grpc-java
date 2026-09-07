@@ -680,8 +680,11 @@ final class ProtocolNegotiators {
         sslEngine = sslContext.newEngine(ctx.alloc());
       }
       SSLParameters sslParams = sslEngine.getSSLParameters();
-      sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-      sslEngine.setSSLParameters(sslParams);
+      if (sslParams.getEndpointIdentificationAlgorithm() == null) {
+        sslParams.setEndpointIdentificationAlgorithm(
+            GrpcSslContexts.DEFAULT_ENDPOINT_IDENTIFICATION_ALGORITHM);
+        sslEngine.setSSLParameters(sslParams);
+      }
       ctx.pipeline().addBefore(ctx.name(), /* name= */ null, this.executor != null
           ? new SslHandler(sslEngine, false, this.executor)
           : new SslHandler(sslEngine, false));

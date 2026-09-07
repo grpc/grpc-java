@@ -456,7 +456,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
    *
    * @since 1.84.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12976")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12999")
   @CanIgnoreReturnValue
   public NettyServerBuilder neverIndexMetadataKey(Metadata.Key<?> key) {
     neverIndexedMetadataKeys.add(AsciiString.of(checkNotNull(key, "key").name()));
@@ -471,7 +471,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
    *
    * @since 1.84.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12976")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12999")
   @CanIgnoreReturnValue
   public NettyServerBuilder neverIndexMetadataKeys(
       Collection<? extends Metadata.Key<?>> keys) {
