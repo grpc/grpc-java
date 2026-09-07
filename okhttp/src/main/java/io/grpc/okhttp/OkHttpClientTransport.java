@@ -1093,13 +1093,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   private void startGoAway(int lastKnownStreamId, ErrorCode errorCode, Status status) {
-    GrpcUtil.Http2Error http2Error;
-    if (errorCode == null) {
-      http2Error = GrpcUtil.Http2Error.NO_ERROR;
-    } else {
-      http2Error = GrpcUtil.Http2Error.forCode(errorCode.httpCode);
-    }
-    startGoAway(lastKnownStreamId, errorCode, status, new GoAwayDisconnectError(http2Error));
+    DisconnectError disconnectError = errorCode == null
+        ? new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR)
+        : new GoAwayDisconnectError(errorCode.httpCode);
+    startGoAway(lastKnownStreamId, errorCode, status, disconnectError);
   }
 
   private void startGoAway(int lastKnownStreamId, ErrorCode errorCode, Status status,
