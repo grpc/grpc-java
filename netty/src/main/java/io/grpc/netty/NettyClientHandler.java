@@ -968,8 +968,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private void goingAway(long errorCode, byte[] debugData) {
     Status finalStatus = statusFromH2Error(
         Status.Code.UNAVAILABLE, "GOAWAY shut down transport", errorCode, debugData);
-    DisconnectError disconnectError = new GoAwayDisconnectError(
-        GrpcUtil.Http2Error.forCode(errorCode));
+    DisconnectError disconnectError = new GoAwayDisconnectError(errorCode);
     lifecycleManager.notifyGracefulShutdown(finalStatus, disconnectError);
     abruptGoAwayStatus = statusFromH2Error(
         Status.Code.UNAVAILABLE, "Abrupt GOAWAY closed unsent stream", errorCode, debugData);

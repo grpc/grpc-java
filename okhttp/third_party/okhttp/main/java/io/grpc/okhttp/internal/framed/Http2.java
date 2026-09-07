@@ -349,9 +349,6 @@ public final class Http2 implements Variant {
       int errorCodeInt = source.readInt();
       int opaqueDataLength = length - 8;
       io.grpc.okhttp.internal.framed.ErrorCode errorCode = io.grpc.okhttp.internal.framed.ErrorCode.fromHttp2(errorCodeInt);
-      if (errorCode == null) {
-        throw ioException("TYPE_GOAWAY unexpected error code: %d", errorCodeInt);
-      }
       ByteString debugData = EMPTY;
       if (opaqueDataLength > 0) { // Must read debug data in order to not corrupt the connection.
         debugData = source.readByteString(opaqueDataLength);

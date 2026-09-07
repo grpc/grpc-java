@@ -1093,16 +1093,21 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   private void startGoAway(int lastKnownStreamId, ErrorCode errorCode, Status status) {
+    GrpcUtil.Http2Error http2Error;
+    if (errorCode == null) {
+      http2Error = GrpcUtil.Http2Error.NO_ERROR;
+    } else {
+      http2Error = GrpcUtil.Http2Error.forCode(errorCode.httpCode);
+    }
+    startGoAway(lastKnownStreamId, errorCode, status, new GoAwayDisconnectError(http2Error));
+  }
+
+  private void startGoAway(int lastKnownStreamId, ErrorCode errorCode, Status status,
+      DisconnectError disconnectError) {
     synchronized (lock) {
       if (goAwayStatus == null) {
         goAwayStatus = status;
-        GrpcUtil.Http2Error http2Error;
-        if (errorCode == null) {
-          http2Error = GrpcUtil.Http2Error.NO_ERROR;
-        } else {
-          http2Error = GrpcUtil.Http2Error.forCode(errorCode.httpCode);
-        }
-        listener.transportShutdown(status, new GoAwayDisconnectError(http2Error));
+        listener.transportShutdown(status, disconnectError);
       }
       if (errorCode != null && !goAwaySent) {
         // Send GOAWAY with lastGoodStreamId of 0, since we don't expect any server-initiated
@@ -1578,13 +1583,22 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           tooManyPingsRunnable.run();
         }
       }
-      Status status = GrpcUtil.Http2Error.statusForCode(errorCode.httpCode)
-          .augmentDescription("Received Goaway");
+      Status status;
+      DisconnectError disconnectError;
+      if (errorCode != null) {
+        status = GrpcUtil.Http2Error.statusForCode(errorCode.httpCode);
+        disconnectError = new GoAwayDisconnectError(errorCode.httpCode);
+      } else {
+        status = GrpcUtil.Http2Error.INTERNAL_ERROR.status()
+            .withDescription("Unrecognized HTTP/2 error code");
+        disconnectError = new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR);
+      }
+      status = status.augmentDescription("Received Goaway");
       if (debugData.size() > 0) {
         // If a debug message was provided, use it.
         status = status.augmentDescription(debugData.utf8());
       }
-      startGoAway(lastGoodStreamId, null, status);
+      startGoAway(lastGoodStreamId, null, status, disconnectError);
     }
 
     @Override
