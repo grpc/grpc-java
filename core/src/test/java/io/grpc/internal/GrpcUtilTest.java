@@ -391,4 +391,64 @@ public class GrpcUtilTest {
 
     verify(listener).closed(eq(status), eq(RpcProgress.DROPPED), any(Metadata.class));
   }
+
+  @Test
+  public void goAwayDisconnectError_standardErrorCode() {
+    GoAwayDisconnectError error = new GoAwayDisconnectError(GrpcUtil.Http2Error.NO_ERROR);
+    assertEquals("GOAWAY NO_ERROR", error.toErrorString());
+    assertEquals(GrpcUtil.Http2Error.NO_ERROR, error.getErrorCode());
+  }
+
+  @Test
+  public void goAwayDisconnectError_standardErrorCodeFromLong() {
+    GoAwayDisconnectError error = new GoAwayDisconnectError(0x0L);
+    assertEquals("GOAWAY NO_ERROR", error.toErrorString());
+    assertEquals(GrpcUtil.Http2Error.NO_ERROR, error.getErrorCode());
+
+    GoAwayDisconnectError cancelError = new GoAwayDisconnectError(0x8L);
+    assertEquals("GOAWAY CANCEL", cancelError.toErrorString());
+    assertEquals(GrpcUtil.Http2Error.CANCEL, cancelError.getErrorCode());
+  }
+
+  @Test
+  public void goAwayDisconnectError_nullErrorCodeFallsBackToInternalError() {
+    GoAwayDisconnectError error = new GoAwayDisconnectError((GrpcUtil.Http2Error) null);
+    assertEquals("GOAWAY INTERNAL_ERROR", error.toErrorString());
+    assertEquals(GrpcUtil.Http2Error.INTERNAL_ERROR, error.getErrorCode());
+  }
+
+  @Test
+  public void goAwayDisconnectError_unrecognizedErrorCodeFromLongFallsBackToInternalError() {
+    // Apache httpd APR_TIMEUP error code
+    GoAwayDisconnectError apacheError = new GoAwayDisconnectError(70007L);
+    assertEquals("GOAWAY INTERNAL_ERROR", apacheError.toErrorString());
+    assertEquals(GrpcUtil.Http2Error.INTERNAL_ERROR, apacheError.getErrorCode());
+
+    // Arbitrary unknown error code
+    GoAwayDisconnectError unknownError = new GoAwayDisconnectError(0x12345678L);
+    assertEquals("GOAWAY INTERNAL_ERROR", unknownError.toErrorString());
+    assertEquals(GrpcUtil.Http2Error.INTERNAL_ERROR, unknownError.getErrorCode());
+
+    // Negative code
+    GoAwayDisconnectError negativeError = new GoAwayDisconnectError(-1L);
+    assertEquals("GOAWAY INTERNAL_ERROR", negativeError.toErrorString());
+    assertEquals(GrpcUtil.Http2Error.INTERNAL_ERROR, negativeError.getErrorCode());
+  }
+
+  @Test
+  public void goAwayDisconnectError_equalsAndHashCode() {
+    GoAwayDisconnectError err1 = new GoAwayDisconnectError(70007L);
+    GoAwayDisconnectError err2 = new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR);
+    GoAwayDisconnectError err3 = new GoAwayDisconnectError((GrpcUtil.Http2Error) null);
+    GoAwayDisconnectError err4 = new GoAwayDisconnectError(GrpcUtil.Http2Error.NO_ERROR);
+
+    assertEquals(err1, err2);
+    assertEquals(err2, err3);
+    assertEquals(err1.hashCode(), err2.hashCode());
+    assertEquals(err2.hashCode(), err3.hashCode());
+
+    assertFalse(err1.equals(err4));
+    assertFalse(err1.hashCode() == err4.hashCode());
+  }
 }
+
