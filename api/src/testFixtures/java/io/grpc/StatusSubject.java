@@ -17,6 +17,7 @@
 package io.grpc;
 
 import static com.google.common.truth.Fact.fact;
+import static com.google.common.truth.Truth.assertAbout;
 
 import com.google.common.truth.FailureMetadata;
 import com.google.common.truth.Subject;
@@ -29,6 +30,10 @@ public final class StatusSubject extends Subject {
 
   public static Subject.Factory<StatusSubject, Status> status() {
     return statusFactory;
+  }
+
+  public static StatusSubject assertThat(@Nullable Status actual) {
+    return assertAbout(status()).that(actual);
   }
 
   private final Status actual;
