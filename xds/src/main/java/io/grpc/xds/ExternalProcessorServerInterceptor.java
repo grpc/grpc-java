@@ -915,10 +915,11 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         return super.isReady();
       }
 
+      boolean rawReady = super.isReady();
       synchronized (streamLock) {
         boolean sidecarReady = isSidecarReady();
         if (config.getObservabilityMode()) {
-          return super.isReady() && sidecarReady;
+          return rawReady && sidecarReady;
         }
         return upstreamToSidestreamWindow > 0 && sidecarReady
             && pendingResponseBodyMessages.isEmpty();
@@ -931,23 +932,18 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         super.request(numMessages);
         return;
       }
-      if (currentProcessingMode.getRequestBodyMode() != ProcessingMode.BodySendMode.GRPC) {
+      if (currentProcessingMode.getRequestBodyMode() != ProcessingMode.BodySendMode.GRPC
+          || config.getObservabilityMode()) {
+        boolean pull = false;
         synchronized (streamLock) {
           if (isSidecarReady()) {
-            super.request(numMessages);
+            pull = true;
           } else {
             pendingRequests.addAndGet(numMessages);
           }
         }
-        return;
-      }
-      if (config.getObservabilityMode()) {
-        synchronized (streamLock) {
-          if (isSidecarReady()) {
-            super.request(numMessages);
-          } else {
-            pendingRequests.addAndGet(numMessages);
-          }
+        if (pull) {
+          super.request(numMessages);
         }
         return;
       }
@@ -977,18 +973,21 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           || currentProcessingMode.getResponseHeaderMode()
               == ProcessingMode.HeaderSendMode.DEFAULT;
 
+      boolean sendDirect = false;
       synchronized (streamLock) {
-        // NOTE: Even if sendResponseHeaders is false, we MUST obtain streamLock to call
-        // proceedWithSendHeaders() safely, because an active control plane thread could
-        // concurrently call super.sendMessage() or super.close() (e.g., due to a concurrent error).
         if (passThroughMode.get() || isExtProcStreamCompleted() || !sendResponseHeaders) {
-          proceedWithSendHeaders(headers);
-          return;
+          sendDirect = true;
+        } else {
+          this.savedResponseHeaders = headers;
+          if (isExtProcStreamDraining()) {
+            return;
+          }
         }
-        this.savedResponseHeaders = headers;
-        if (isExtProcStreamDraining()) {
-          return;
-        }
+      }
+
+      if (sendDirect) {
+        proceedWithSendHeaders(headers);
+        return;
       }
 
       sendToExtProc(ProcessingRequest.newBuilder()
@@ -998,30 +997,51 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           .build());
 
       if (config.getObservabilityMode()) {
-        synchronized (streamLock) {
-          proceedWithSendHeaders();
-        }
+        proceedWithSendHeaders();
       }
     }
 
     void proceedWithSendHeaders() {
+      Metadata headersToSend = null;
+      List<InputStream> messagesToSend = null;
+
       synchronized (streamLock) {
         if (savedResponseHeaders != null) {
-          proceedWithSendHeaders(savedResponseHeaders);
+          headersToSend = savedResponseHeaders;
           savedResponseHeaders = null;
-          InputStream msg;
-          while ((msg = savedOutgoingMessagesAwaitingHeaderMutation.poll()) != null) {
+          if (!savedOutgoingMessagesAwaitingHeaderMutation.isEmpty()) {
+            messagesToSend = new ArrayList<>();
+            InputStream msg;
+            while ((msg = savedOutgoingMessagesAwaitingHeaderMutation.poll()) != null) {
+              messagesToSend.add(msg);
+            }
+          }
+        }
+      }
+
+      if (headersToSend != null) {
+        proceedWithSendHeaders(headersToSend);
+        if (messagesToSend != null) {
+          for (InputStream msg : messagesToSend) {
             sendMessage(msg);
           }
+        }
+        boolean triggerHandshake = false;
+        Metadata trailersForHandshake = null;
+        synchronized (streamLock) {
           if (savedStatus != null) {
             if (!config.getObservabilityMode()
                 && (!pendingResponseBodyMessages.isEmpty()
                     || outstandingResponseBodyRequests > 0)) {
               pendingClose.set(true);
             } else {
-              triggerCloseHandshake(savedTrailers);
+              triggerHandshake = true;
+              trailersForHandshake = savedTrailers;
             }
           }
+        }
+        if (triggerHandshake) {
+          triggerCloseHandshake(trailersForHandshake);
         }
       }
     }
@@ -1110,32 +1130,42 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         return;
       }
 
+      boolean passThroughClose = false;
+      boolean completedClose = false;
+
       synchronized (streamLock) {
         if (passThroughMode.get()) {
-          if (markDataPlaneCallClosed(dataPlaneCallState)) {
-            proceedWithClose(status, trailers);
+          passThroughClose = markDataPlaneCallClosed(dataPlaneCallState);
+        } else {
+          this.savedStatus = status;
+          this.savedTrailers = trailers;
+
+          if (!config.getObservabilityMode()
+              && (!pendingResponseBodyMessages.isEmpty() || outstandingResponseBodyRequests > 0)) {
+            pendingClose.set(true);
+            return;
           }
-          closeExtProcStream();
-          return;
-        }
 
-        this.savedStatus = status;
-        this.savedTrailers = trailers;
-
-        if (!config.getObservabilityMode()
-            && (!pendingResponseBodyMessages.isEmpty() || outstandingResponseBodyRequests > 0)) {
-          pendingClose.set(true);
-          return;
+          if (isExtProcStreamCompleted()) {
+            completedClose = true;
+          } else if (savedResponseHeaders != null) {
+            return;
+          }
         }
+      }
 
-        if (isExtProcStreamCompleted()) {
-          proceedWithClose();
-          return;
-        }
+      if (passThroughClose) {
+        proceedWithClose(status, trailers);
+        closeExtProcStream();
+        return;
+      } else if (passThroughMode.get()) {
+        closeExtProcStream();
+        return;
+      }
 
-        if (savedResponseHeaders != null) {
-          return;
-        }
+      if (completedClose) {
+        proceedWithClose();
+        return;
       }
 
       if (!responseHeadersSent.get()) {
@@ -1145,9 +1175,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
       triggerCloseHandshake(trailers);
 
       if (config.getObservabilityMode()) {
-        synchronized (streamLock) {
-          proceedWithClose();
-        }
+        proceedWithClose();
         @SuppressWarnings("unused")
         ScheduledFuture<?> unused = scheduler.schedule(
             this::closeExtProcStream,
@@ -1157,15 +1185,21 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     }
 
     void proceedWithClose() {
+      Status statusToClose = null;
+      Metadata trailersToClose = null;
       synchronized (streamLock) {
         if (savedStatus != null
             && (isExtProcStreamCompleted() || config.getObservabilityMode())) {
           if (markDataPlaneCallClosed(dataPlaneCallState)) {
-            proceedWithClose(savedStatus, savedTrailers);
+            statusToClose = savedStatus;
+            trailersToClose = savedTrailers;
           }
           savedStatus = null;
           savedTrailers = null;
         }
+      }
+      if (statusToClose != null) {
+        proceedWithClose(statusToClose, trailersToClose);
       }
     }
 
@@ -1299,9 +1333,11 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         }
       }
       if (triggerClose) {
+        Metadata trailersForHandshake;
         synchronized (streamLock) {
-          triggerCloseHandshake(savedTrailers);
+          trailersForHandshake = savedTrailers;
         }
+        triggerCloseHandshake(trailersForHandshake);
       }
     }
 
@@ -1390,14 +1426,20 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         }
       }
 
+      boolean triggerClose = false;
+      Metadata trailersForHandshake = null;
       synchronized (streamLock) {
         outstandingResponseBodyRequests--;
         if (pendingClose.get()
             && pendingResponseBodyMessages.isEmpty()
             && outstandingResponseBodyRequests == 0) {
           pendingClose.set(false);
-          triggerCloseHandshake(savedTrailers);
+          triggerClose = true;
+          trailersForHandshake = savedTrailers;
         }
+      }
+      if (triggerClose) {
+        triggerCloseHandshake(trailersForHandshake);
       }
     }
 
@@ -1469,12 +1511,16 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     }
 
     private void drainPendingDrainingOutgoingMessages() {
+      List<InputStream> messagesToSend = new ArrayList<>();
       synchronized (streamLock) {
         InputStream msg;
         while ((msg = pendingDrainingOutgoingMessages.poll()) != null) {
-          super.sendMessage(msg);
+          messagesToSend.add(msg);
         }
         passThroughMode.set(true);
+      }
+      for (InputStream msg : messagesToSend) {
+        super.sendMessage(msg);
       }
     }
 
