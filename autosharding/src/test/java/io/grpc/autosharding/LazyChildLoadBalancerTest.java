@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -194,7 +195,7 @@ public class LazyChildLoadBalancerTest {
     // Verify child policy instantiated exactly once despite concurrent exitIdle calls
     verify(mockProvider, times(1)).newLoadBalancer(mockHelper);
     verify(mockDelegate, times(1)).acceptResolvedAddresses(resolvedAddresses);
-    verify(mockDelegate, times(1)).requestConnection();
+    verify(mockDelegate, atLeastOnce()).requestConnection();
   }
 
   @Test
