@@ -17,6 +17,7 @@
 package io.grpc.autosharding;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 
 import com.google.common.base.MoreObjects;
@@ -105,15 +106,31 @@ final class EndpointMap {
   }
 
   /**
-   * Builds an immutable snapshot list of {@link PickerEndpoint}s ordered by index.
+   * Builds an immutable snapshot list of {@link PickerEndpoint}s placed strictly at their
+   * corresponding {@link EndpointHolder#getIndex()} positions.
+   *
+   * @throws IllegalStateException if endpoint indices are not contiguous from 0 to N-1
    */
   ImmutableList<PickerEndpoint> toPickerEndpoints() {
-    ImmutableList.Builder<PickerEndpoint> builder =
-        ImmutableList.builderWithExpectedSize(map.size());
-    for (EndpointHolder holder : map.values()) {
-      builder.add(holder.toPickerEndpoint());
+    int size = map.size();
+    if (size == 0) {
+      return ImmutableList.of();
     }
-    return builder.build();
+    PickerEndpoint[] array = new PickerEndpoint[size];
+    for (EndpointHolder holder : map.values()) {
+      int idx = holder.getIndex();
+      checkState(
+          idx >= 0 && idx < size,
+          "Endpoint holder index %s is out of bounds for size %s",
+          idx,
+          size);
+      checkState(
+          array[idx] == null,
+          "Duplicate endpoint holder index %s detected",
+          idx);
+      array[idx] = holder.toPickerEndpoint();
+    }
+    return ImmutableList.copyOf(array);
   }
 
   @Override

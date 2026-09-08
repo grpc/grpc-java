@@ -19,9 +19,11 @@ package io.grpc.autosharding;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -168,17 +170,65 @@ public class EndpointMapTest {
   }
 
   @Test
-  public void toPickerEndpoints_buildsImmutableListMatchingHolders() {
+  public void toPickerEndpoints_buildsImmutableListMatchingHoldersByIndex() {
     EndpointHolder h0 = createHolder(0);
     EndpointHolder h1 = createHolder(1);
 
-    endpointMap.put("host0", h0);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+
+    // Trigger connections so child helpers are passed to provider
+    h0.updateAddresses(
+        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress() {})),
+        Attributes.EMPTY);
+    h0.requestConnection();
+
+    h1.updateAddresses(
+        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress() {})),
+        Attributes.EMPTY);
+    h1.requestConnection();
+
+    verify(mockProvider, times(2)).newLoadBalancer(helperCaptor.capture());
+    Helper childHelper0 = helperCaptor.getAllValues().get(0);
+    Helper childHelper1 = helperCaptor.getAllValues().get(1);
+
+    SubchannelPicker picker0 = mock(SubchannelPicker.class);
+    SubchannelPicker picker1 = mock(SubchannelPicker.class);
+
+    childHelper0.updateBalancingState(READY, picker0);
+    childHelper1.updateBalancingState(TRANSIENT_FAILURE, picker1);
+
+    // Insert in reverse index order to verify explicit index placement
     endpointMap.put("host1", h1);
+    endpointMap.put("host0", h0);
 
     ImmutableList<PickerEndpoint> pickerEndpoints = endpointMap.toPickerEndpoints();
     assertThat(pickerEndpoints).hasSize(2);
-    assertThat(pickerEndpoints.get(0).getState()).isEqualTo(IDLE);
-    assertThat(pickerEndpoints.get(1).getState()).isEqualTo(IDLE);
+    assertThat(pickerEndpoints.get(0).getState()).isEqualTo(READY);
+    assertThat(pickerEndpoints.get(0).getPicker()).isSameInstanceAs(picker0);
+    assertThat(pickerEndpoints.get(1).getState()).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pickerEndpoints.get(1).getPicker()).isSameInstanceAs(picker1);
+  }
+
+  @Test
+  public void toPickerEndpoints_emptyMap_returnsEmptyList() {
+    assertThat(endpointMap.toPickerEndpoints()).isEmpty();
+  }
+
+  @Test
+  public void toPickerEndpoints_duplicateOrOutOfBoundsIndex_throwsIllegalStateException() {
+    EndpointHolder h0 = createHolder(0);
+    EndpointHolder h0Duplicate = createHolder(0);
+
+    endpointMap.put("host0", h0);
+    endpointMap.put("host1", h0Duplicate);
+
+    assertThrows(IllegalStateException.class, () -> endpointMap.toPickerEndpoints());
+
+    endpointMap.clear();
+    EndpointHolder hOutOfBounds = createHolder(5);
+    endpointMap.put("host0", hOutOfBounds);
+
+    assertThrows(IllegalStateException.class, () -> endpointMap.toPickerEndpoints());
   }
 
   @Test
