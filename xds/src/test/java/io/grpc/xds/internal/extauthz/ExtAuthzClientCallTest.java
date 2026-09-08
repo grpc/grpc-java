@@ -195,6 +195,47 @@ public class ExtAuthzClientCallTest {
   }
 
   @Test
+  public void cancel_whileCheckInFlight_responseAfterCancelDoesNotForwardToBackend()
+      throws Exception {
+    AtomicReference<StreamObserver<CheckResponse>> capturedObserver = new AtomicReference<>();
+    CountDownLatch checkCalled = new CountDownLatch(1);
+    doAnswer(invocation -> {
+      capturedObserver.set(invocation.getArgument(1));
+      checkCalled.countDown();
+      return null;
+    }).when(authzService).check(any(CheckRequest.class), any());
+
+    HeaderMutations emptyMutations = HeaderMutations.create(
+        ImmutableList.of(), ImmutableList.of());
+    AuthzResponse authzResponse =
+        AuthzResponse.allow(emptyMutations)
+            .setResponseHeaderMutations(emptyMutations)
+            .build();
+    when(mockResponseHandler.handleResponse(
+        any(CheckResponse.class))).thenReturn(authzResponse);
+
+    ExtAuthzClientCall<SimpleRequest, SimpleResponse> call = createCall(
+        com.google.common.util.concurrent.MoreExecutors.directExecutor(), channel, config);
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    call.start(listener, new Metadata());
+
+    assertThat(checkCalled.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Cancel while check is pending
+    call.cancel("client cancelled", null);
+    assertThat(listener.getCloseStatus().getCode()).isEqualTo(Status.Code.CANCELLED);
+
+    lastBackendHeaders = null;
+
+    // Authz responds after cancellation
+    capturedObserver.get().onNext(CheckResponse.getDefaultInstance());
+    capturedObserver.get().onCompleted();
+
+    // Verify backend received nothing
+    assertThat(lastBackendHeaders).isNull();
+  }
+
+  @Test
   public void start_dispatchesAuthzCheckUnderChildContext() throws Exception {
     Context.Key<String> testKey = Context.key("test-key");
     Context dataPlaneContext = Context.current().withValue(testKey, "data-plane-val");

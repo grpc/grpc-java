@@ -98,8 +98,8 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
   @Override
   public void cancel(
       @Nullable String message, @Nullable Throwable cause) {
-    authzContext.cancel(cause);
     super.cancel(message, cause);
+    authzContext.cancel(cause);
   }
 
   /**

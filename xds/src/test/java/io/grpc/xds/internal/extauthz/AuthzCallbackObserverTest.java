@@ -625,6 +625,73 @@ public class AuthzCallbackObserverTest {
     observer.onNext(CheckResponse.getDefaultInstance());
   }
 
+  @Test
+  public void allow_whenDelayedCallCancelledInFlight_setCallReturnsNull() {
+    doAnswer(invocation -> {
+      StreamObserver<CheckResponse> obs = invocation.getArgument(1);
+      obs.onNext(CheckResponse.newBuilder()
+          .setStatus(com.google.rpc.Status.newBuilder().setCode(0).build())
+          .setOkResponse(OkHttpResponse.getDefaultInstance())
+          .build());
+      obs.onCompleted();
+      return null;
+    }).when(authzService).check(any(), any());
+
+    TestDelayedCall<SimpleRequest, SimpleResponse> delayedCall =
+        new TestDelayedCall<>(MoreExecutors.directExecutor(), scheduler, null);
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    delayedCall.start(listener, new Metadata());
+    delayedCall.cancel("cancelled in flight", null);
+
+    Context.CancellableContext authzCtx = Context.current().withCancellation();
+    AuthzCallbackObserver<SimpleRequest, SimpleResponse> observer =
+        new AuthzCallbackObserver<>(
+            delayedCall, channel,
+            SimpleServiceGrpc.getUnaryRpcMethod(),
+            CallOptions.DEFAULT,
+            MoreExecutors.directExecutor(),
+            responseHandler, failClosedConfig(), authzCtx);
+
+    authzCtx.run(() -> {
+      AuthorizationGrpc.newStub(channel)
+          .check(CheckRequest.getDefaultInstance(), observer);
+    });
+
+    assertThat(capturedBackendHeaders).isNull();
+    assertThat(listener.getCloseStatus().getCode()).isEqualTo(Status.Code.CANCELLED);
+  }
+
+  @Test
+  public void allow_whenDelayedCallNotStarted_setCallReturnsNull() {
+    doAnswer(invocation -> {
+      StreamObserver<CheckResponse> obs = invocation.getArgument(1);
+      obs.onNext(CheckResponse.newBuilder()
+          .setStatus(com.google.rpc.Status.newBuilder().setCode(0).build())
+          .setOkResponse(OkHttpResponse.getDefaultInstance())
+          .build());
+      obs.onCompleted();
+      return null;
+    }).when(authzService).check(any(), any());
+
+    TestDelayedCall<SimpleRequest, SimpleResponse> delayedCall =
+        new TestDelayedCall<>(MoreExecutors.directExecutor(), scheduler, null);
+    Context.CancellableContext authzCtx = Context.current().withCancellation();
+    AuthzCallbackObserver<SimpleRequest, SimpleResponse> observer =
+        new AuthzCallbackObserver<>(
+            delayedCall, channel,
+            SimpleServiceGrpc.getUnaryRpcMethod(),
+            CallOptions.DEFAULT,
+            MoreExecutors.directExecutor(),
+            responseHandler, failClosedConfig(), authzCtx);
+
+    authzCtx.run(() -> {
+      AuthorizationGrpc.newStub(channel)
+          .check(CheckRequest.getDefaultInstance(), observer);
+    });
+
+    assertThat(capturedBackendHeaders).isNull();
+  }
+
 
   private static final class TestDelayedCall<ReqT, RespT>
       extends DelayedClientCall<ReqT, RespT> {
