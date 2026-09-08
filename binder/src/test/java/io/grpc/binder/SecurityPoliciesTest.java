@@ -88,20 +88,17 @@ public final class SecurityPoliciesTest {
   public void testInternalOnly() throws Exception {
     policy = SecurityPolicies.internalOnly();
 
-    assertThat(policy.checkAuthorization(MY_UID).getCode()).isEqualTo(Status.OK.getCode());
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(MY_UID)).isOk();
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
   public void testPermissionDenied() throws Exception {
     policy = SecurityPolicies.permissionDenied(PERMISSION_DENIED_REASONS);
-    assertThat(policy.checkAuthorization(MY_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(MY_UID)).hasCode(Status.Code.PERMISSION_DENIED);
     assertThat(policy.checkAuthorization(MY_UID).getDescription())
         .isEqualTo(PERMISSION_DENIED_REASONS);
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
         .isEqualTo(PERMISSION_DENIED_REASONS);
   }
@@ -116,7 +113,7 @@ public final class SecurityPoliciesTest {
     policy = SecurityPolicies.hasSignature(packageManager, OTHER_UID_PACKAGE_NAME, SIG2);
 
     // THEN UID for package that has SIG2 will be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -132,8 +129,8 @@ public final class SecurityPoliciesTest {
     policy = SecurityPolicies.hasSignature(packageManager, appContext.getPackageName(), SIG1);
 
     // THEN UID for package that has SIG1 but different package name will not be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE))
+        .hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -146,8 +143,7 @@ public final class SecurityPoliciesTest {
     policy = SecurityPolicies.hasSignature(packageManager, OTHER_UID_PACKAGE_NAME, SIG1);
 
     // THEN UID for package that doesn't have SIG1 will not be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -162,7 +158,7 @@ public final class SecurityPoliciesTest {
             packageManager, OTHER_UID_PACKAGE_NAME, ImmutableList.of(SIG2));
 
     // THEN UID for package that has SIG2 will be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -182,8 +178,8 @@ public final class SecurityPoliciesTest {
             ImmutableList.of(SIG1, new Signature("1314")));
 
     // THEN UID for package that has SIG1 but different package name will not be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE))
+        .hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -198,15 +194,14 @@ public final class SecurityPoliciesTest {
             packageManager, OTHER_UID_PACKAGE_NAME, ImmutableList.of(SIG1, SIG2));
 
     // THEN UID for package that has SIG2 will be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
   public void testHasSignature_failsIfUidUnknown() throws Exception {
     policy = SecurityPolicies.hasSignature(packageManager, appContext.getPackageName(), SIG1);
 
-    assertThat(policy.checkAuthorization(OTHER_UID_UNKNOWN).getCode())
-        .isEqualTo(Status.UNAUTHENTICATED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID_UNKNOWN)).hasCode(Status.Code.UNAUTHENTICATED);
   }
 
   @Test
@@ -231,7 +226,7 @@ public final class SecurityPoliciesTest {
     policy =
         SecurityPolicies.hasPermissions(
             packageManager, ImmutableSet.of(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION));
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -251,8 +246,7 @@ public final class SecurityPoliciesTest {
     installPackages(OTHER_UID, info, infoNoPerms);
 
     policy = SecurityPolicies.hasPermissions(packageManager, ImmutableSet.of(ACCESS_FINE_LOCATION));
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
         .contains(ACCESS_FINE_LOCATION);
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
@@ -274,7 +268,7 @@ public final class SecurityPoliciesTest {
     policy =
         SecurityPolicies.hasPermissions(
             packageManager, ImmutableSet.of(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION));
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -292,8 +286,7 @@ public final class SecurityPoliciesTest {
     policy =
         SecurityPolicies.hasPermissions(
             packageManager, ImmutableSet.of(ACCESS_FINE_LOCATION, WRITE_EXTERNAL_STORAGE));
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
         .contains(WRITE_EXTERNAL_STORAGE);
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
@@ -314,8 +307,7 @@ public final class SecurityPoliciesTest {
 
     policy =
         SecurityPolicies.hasPermissions(packageManager, ImmutableSet.of(WRITE_EXTERNAL_STORAGE));
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
         .contains(WRITE_EXTERNAL_STORAGE);
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
@@ -332,7 +324,7 @@ public final class SecurityPoliciesTest {
 
     policy = SecurityPolicies.isDeviceOwner(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -344,16 +336,14 @@ public final class SecurityPoliciesTest {
 
     policy = SecurityPolicies.isDeviceOwner(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
   public void testIsDeviceOwner_failsWhenNoPackagesForUid() throws Exception {
     policy = SecurityPolicies.isDeviceOwner(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.UNAUTHENTICATED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.UNAUTHENTICATED);
   }
 
   @Test
@@ -367,7 +357,7 @@ public final class SecurityPoliciesTest {
 
     policy = SecurityPolicies.isProfileOwner(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -380,8 +370,7 @@ public final class SecurityPoliciesTest {
 
     policy = SecurityPolicies.isProfileOwner(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -389,8 +378,7 @@ public final class SecurityPoliciesTest {
   public void testIsProfileOwner_failsWhenNoPackagesForUid() throws Exception {
     policy = SecurityPolicies.isProfileOwner(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.UNAUTHENTICATED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.UNAUTHENTICATED);
   }
 
   @Test
@@ -405,7 +393,7 @@ public final class SecurityPoliciesTest {
 
     policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -420,8 +408,7 @@ public final class SecurityPoliciesTest {
 
     policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -434,8 +421,7 @@ public final class SecurityPoliciesTest {
 
     policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -443,8 +429,7 @@ public final class SecurityPoliciesTest {
   public void testIsProfileOwnerOnOrgOwned_failsWhenNoPackagesForUid() throws Exception {
     policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.UNAUTHENTICATED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.UNAUTHENTICATED);
   }
 
   @Test
@@ -457,8 +442,7 @@ public final class SecurityPoliciesTest {
 
     policy = SecurityPolicies.isProfileOwner(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   private static PackageInfoBuilder newBuilder() {
@@ -518,7 +502,7 @@ public final class SecurityPoliciesTest {
   public void testAllOf_succeedsIfAllSecurityPoliciesAllowed() throws Exception {
     policy = SecurityPolicies.allOf(SecurityPolicies.internalOnly());
 
-    assertThat(policy.checkAuthorization(MY_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(MY_UID)).isOk();
   }
 
   @Test
@@ -528,8 +512,7 @@ public final class SecurityPoliciesTest {
             SecurityPolicies.internalOnly(),
             SecurityPolicies.permissionDenied("Not allowed SecurityPolicy"));
 
-    assertThat(policy.checkAuthorization(MY_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(MY_UID)).hasCode(Status.Code.PERMISSION_DENIED);
     assertThat(policy.checkAuthorization(MY_UID).getDescription())
         .contains("Not allowed SecurityPolicy");
   }
@@ -539,7 +522,7 @@ public final class SecurityPoliciesTest {
     RecordingPolicy recordingPolicy = new RecordingPolicy();
     policy = SecurityPolicies.anyOf(SecurityPolicies.internalOnly(), recordingPolicy);
 
-    assertThat(policy.checkAuthorization(MY_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(MY_UID)).isOk();
     assertThat(recordingPolicy.numCalls.get()).isEqualTo(0);
   }
 
@@ -560,8 +543,7 @@ public final class SecurityPoliciesTest {
               }
             });
 
-    assertThat(policy.checkAuthorization(MY_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(MY_UID)).hasCode(Status.Code.PERMISSION_DENIED);
     assertThat(policy.checkAuthorization(MY_UID).getDescription()).contains("Not allowed: first");
     assertThat(policy.checkAuthorization(MY_UID).getDescription()).contains("Not allowed: second");
   }
@@ -588,7 +570,7 @@ public final class SecurityPoliciesTest {
             packageManager, OTHER_UID_PACKAGE_NAME, getSha256Hash(SIG2));
 
     // THEN UID for package that has SIG2 will be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -609,8 +591,8 @@ public final class SecurityPoliciesTest {
             packageManager, appContext.getPackageName(), getSha256Hash(SIG1));
 
     // THEN UID for package that has SIG1 but different package name will not be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE))
+        .hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -624,8 +606,7 @@ public final class SecurityPoliciesTest {
             packageManager, OTHER_UID_PACKAGE_NAME, getSha256Hash(SIG1));
 
     // THEN UID for package that doesn't have SIG1 will not be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -640,7 +621,7 @@ public final class SecurityPoliciesTest {
             packageManager, OTHER_UID_PACKAGE_NAME, ImmutableList.of(getSha256Hash(SIG2)));
 
     // THEN UID for package that has SIG2 will be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -657,7 +638,7 @@ public final class SecurityPoliciesTest {
             ImmutableList.of(getSha256Hash(SIG1), getSha256Hash(SIG2)));
 
     // THEN UID for package that has SIG2 will be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
@@ -675,8 +656,7 @@ public final class SecurityPoliciesTest {
             ImmutableList.of(getSha256Hash(SIG1), getSha256Hash(SIG2)));
 
     // THEN UID for package that has SIG2 but different package name will not be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -696,8 +676,7 @@ public final class SecurityPoliciesTest {
             ImmutableList.of(getSha256Hash(SIG1), getSha256Hash(SIG2)));
 
     // THEN UID for package that doesn't have SIG1 or SIG2 will not be authorized
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID)).hasCode(Status.Code.PERMISSION_DENIED);
   }
 
   private static byte[] getSha256Hash(Signature signature) {
