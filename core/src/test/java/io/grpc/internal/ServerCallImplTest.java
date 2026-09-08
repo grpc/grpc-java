@@ -501,12 +501,13 @@ public class ServerCallImplTest {
   }
 
   @Test
-  public void triggerEvent_afterClose_noop() {
+  public void triggerEvent_afterClose_propagatesToStream() {
     call.close(Status.OK, new Metadata());
     Object event = new Object();
     call.triggerEvent(event);
-    verify(stream, never()).triggerEvent(event);
+    verify(stream).triggerEvent(event);
   }
+
 
   @Test
   public void streamListener_triggerEvent() {
