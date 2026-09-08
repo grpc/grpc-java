@@ -198,6 +198,18 @@ public class LazyChildLoadBalancerTest {
   }
 
   @Test
+  public void exitIdle_resetsFlagOnSyncContext_allowsSubsequentExitIdle() {
+    lazyLb.acceptResolvedAddresses(resolvedAddresses);
+
+    lazyLb.exitIdle();
+    verify(mockDelegate, times(1)).requestConnection();
+
+    // Subsequent exitIdle after syncContext execution should request connection again
+    lazyLb.exitIdle();
+    verify(mockDelegate, times(2)).requestConnection();
+  }
+
+  @Test
   public void handleNameResolutionError_null_throwsNullPointerException() {
     assertThrows(
         NullPointerException.class,

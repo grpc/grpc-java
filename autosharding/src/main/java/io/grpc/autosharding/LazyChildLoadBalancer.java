@@ -135,7 +135,10 @@ final class LazyChildLoadBalancer extends LoadBalancer implements PickerEndpoint
       return;
     }
     if (connectingScheduled.compareAndSet(false, true)) {
-      helper.getSynchronizationContext().execute(this::requestConnection);
+      helper.getSynchronizationContext().execute(() -> {
+        connectingScheduled.set(false);
+        requestConnection();
+      });
     }
   }
 
