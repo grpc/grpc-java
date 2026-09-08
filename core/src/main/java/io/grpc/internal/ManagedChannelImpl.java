@@ -1015,25 +1015,26 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       void notifyQueuedForNameResolution() {
-        boolean shouldStart = false;
         synchronized (this) {
           if (!callCancelled && !queuedForResolution) {
             queuedForResolution = true;
-            shouldStart = true;
-          }
-        }
-        if (shouldStart) {
-          for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
-            factory.recordCallDelayStart(
-                "resolving", "waiting for name resolution or service config");
+            for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+              if (callCancelled || delayEnded.get()) {
+                break;
+              }
+              factory.recordCallDelayStart(
+                  "resolving", "waiting for name resolution or service config");
+            }
           }
         }
       }
 
       private void endDelayIfNeeded() {
-        if (queuedForResolution && delayEnded.compareAndSet(false, true)) {
-          for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
-            factory.recordCallDelayEnd();
+        synchronized (this) {
+          if (queuedForResolution && delayEnded.compareAndSet(false, true)) {
+            for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+              factory.recordCallDelayEnd();
+            }
           }
         }
       }
@@ -1071,8 +1072,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       protected void callCancelled() {
         synchronized (this) {
           callCancelled = true;
+          endDelayIfNeeded();
         }
-        endDelayIfNeeded();
         super.callCancelled();
         syncContext.execute(new PendingCallRemoval());
       }

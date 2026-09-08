@@ -1669,6 +1669,7 @@ public class OpenTelemetryMetricsModuleTest {
                         })));
   }
 
+
   @Test
   public void clientCallDelayDuration_recorded() {
     Map<String, Boolean> enabledMetrics = ImmutableMap.of(
@@ -1698,6 +1699,57 @@ public class OpenTelemetryMetricsModuleTest {
                           point.hasAttribute(
                               AttributeKey.stringKey("grpc.delay_type"), "resolving");
                         })));
+  }
+
+  @Test
+  public void clientCallDelayDuration_defensiveCleanupOnAbruptCallEnded() {
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        "grpc.client.call.delay.duration", true
+    );
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        testMeter, enabledMetrics, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+    CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(
+            module, "target:///", STREAM_INFO.getCallOptions(), method.getFullMethodName(),
+            emptyList(), Context.root());
+
+    callAttemptsTracerFactory.recordCallDelayStart("resolving", "dns resolution pending");
+    fakeClock.forwardTime(500, TimeUnit.MILLISECONDS);
+    // Call ends abruptly without prior recordCallDelayEnd()
+    callAttemptsTracerFactory.callEnded(
+        Status.CANCELLED.withDescription("abrupt cancellation"), STREAM_INFO.getCallOptions());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric -> assertThat(metric)
+                .hasName("grpc.client.call.delay.duration")
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> {
+                          point.hasSum(0.5);
+                          point.hasAttribute(METHOD_KEY, method.getFullMethodName());
+                          point.hasAttribute(TARGET_KEY, "target:///");
+                          point.hasAttribute(
+                              AttributeKey.stringKey("grpc.delay_type"), "resolving");
+                        })));
+
+    // Ensure subsequent calls to recordCallDelayEnd are safe no-ops
+    callAttemptsTracerFactory.recordCallDelayEnd();
+    // Ensure subsequent calls to recordCallDelayStart are rejected after callEnded
+    callAttemptsTracerFactory.recordCallDelayStart("resolving", "late start attempt");
+    fakeClock.forwardTime(200, TimeUnit.MILLISECONDS);
+    callAttemptsTracerFactory.recordCallDelayEnd();
+
+    // Metric sum remains 0.5, no additional recordings
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric -> assertThat(metric)
+                .hasName("grpc.client.call.delay.duration")
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> point.hasSum(0.5))));
   }
 
   @Test
@@ -2914,9 +2966,33 @@ public class OpenTelemetryMetricsModuleTest {
 
       callAttemptsTracerFactory.recordCallDelayStart("resolving", "reason1");
       callAttemptsTracerFactory.recordCallDelayStart("resolving", "reason2");
+      // Transition to a different delay type while active (exercises Objects.equals == false)
+      callAttemptsTracerFactory.recordCallDelayStart("connecting", "transition to connecting");
       callAttemptsTracerFactory.recordCallDelayEnd();
 
       assertNotNull(callAttemptsTracerFactory);
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    }
+  }
+
+  @Test
+  public void clientCallDelayDuration_nullDelayType_noMetricRecorded() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    try {
+      String target = "target:///";
+      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+          enabledMetricsMap, disableDefaultMetrics);
+      OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+      OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+          new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+              emptyList(), Context.root());
+
+      callAttemptsTracerFactory.recordCallDelayStart(null, "null delay type");
+      callAttemptsTracerFactory.recordCallDelayEnd();
+
+      assertThat(openTelemetryTesting.getMetrics())
+          .noneSatisfy(metric -> assertThat(metric).hasName("grpc.client.call.delay.duration"));
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
     }
@@ -2938,9 +3014,35 @@ public class OpenTelemetryMetricsModuleTest {
 
       tracer.recordAttemptDelayStart("connecting", "reason1");
       tracer.recordAttemptDelayStart("connecting", "reason2");
+      // Transition to a different delay type while active (exercises Objects.equals == false)
+      tracer.recordAttemptDelayStart("0:connecting", "transition to different delay type");
       tracer.recordAttemptDelayEnd();
 
       assertNotNull(tracer);
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    }
+  }
+
+  @Test
+  public void clientAttemptDelayDuration_nullDelayType_noMetricRecorded() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    try {
+      String target = "target:///";
+      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+          enabledMetricsMap, disableDefaultMetrics);
+      OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+      OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+          new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+              emptyList(), Context.root());
+      ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+
+      tracer.recordAttemptDelayStart(null, "null delay type");
+      tracer.recordAttemptDelayEnd();
+
+      assertThat(openTelemetryTesting.getMetrics())
+          .noneSatisfy(metric -> assertThat(metric).hasName("grpc.client.attempt.delay.duration"));
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
     }

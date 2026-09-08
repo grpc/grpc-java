@@ -226,7 +226,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     @Override
-    public void recordAttemptDelayStart(String delayType, String delayReason) {
+    public synchronized void recordAttemptDelayStart(String delayType, String delayReason) {
       if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
           || (activeDelayStopwatch != null && Objects.equals(activeDelayType, delayType))) {
         // Do not reset the stopwatch if the delay type is unchanged.
@@ -243,7 +243,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     @Override
-    public void recordAttemptDelayEnd() {
+    public synchronized void recordAttemptDelayEnd() {
       Stopwatch delayStopwatch = activeDelayStopwatch;
       String delayType = activeDelayType;
       if (delayStopwatch != null && delayType != null) {
@@ -504,6 +504,7 @@ final class OpenTelemetryMetricsModule {
           finishedCallToBeRecorded = true;
         }
       }
+      recordCallDelayEnd();
       if (shouldRecordFinishedCall) {
         recordFinishedCall(callOptions);
       }
@@ -577,6 +578,11 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public synchronized void recordCallDelayStart(String delayType, String delayReason) {
+      synchronized (lock) {
+        if (callEnded) {
+          return;
+        }
+      }
       if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
           || (activeCallDelayStopwatch != null && Objects.equals(activeCallDelayType, delayType))) {
         return;

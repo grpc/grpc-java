@@ -1137,6 +1137,67 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
+  public void clientCallDelayReasonChanged_nullDelayType_usesEmptyString() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    try {
+      OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+          openTelemetryRule.getOpenTelemetry());
+      Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+      CallAttemptsTracerFactory callTracer =
+          tracingModule.newClientCallTracer(clientSpan, method);
+
+      callTracer.recordCallDelayStart(null, "start reason");
+      callTracer.recordCallDelayReasonChanged("changed reason");
+      callTracer.recordCallDelayEnd();
+      callTracer.callEnded(Status.OK);
+      clientSpan.end();
+
+      List<SpanData> spans = openTelemetryRule.getSpans();
+      assertEquals(2, spans.size());
+      SpanData delaySpan = spans.get(0);
+      assertEquals(2, delaySpan.getEvents().size());
+      EventData event = delaySpan.getEvents().get(1);
+      assertEquals("", event.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+      assertEquals("changed reason",
+          event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    }
+  }
+
+  @Test
+  public void clientAttemptDelayReasonChanged_nullDelayType_usesEmptyString() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    try {
+      OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+          openTelemetryRule.getOpenTelemetry());
+      Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+      CallAttemptsTracerFactory callTracer =
+          tracingModule.newClientCallTracer(clientSpan, method);
+      ClientStreamTracer clientStreamTracer =
+          callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+      clientStreamTracer.recordAttemptDelayStart(null, "start reason");
+      clientStreamTracer.recordAttemptDelayReasonChanged("changed reason");
+      clientStreamTracer.recordAttemptDelayEnd();
+      clientStreamTracer.streamClosed(Status.OK);
+      callTracer.callEnded(Status.OK);
+      clientSpan.end();
+
+      List<SpanData> spans = openTelemetryRule.getSpans();
+      assertEquals(3, spans.size());
+      SpanData delaySpan = spans.get(0);
+      assertEquals(2, delaySpan.getEvents().size());
+      EventData event = delaySpan.getEvents().get(1);
+      assertEquals("", event.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+      assertEquals("changed reason",
+          event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    }
+  }
+
+  @Test
   public void delayTracing_featureFlagDisabled_allMethodsNoOp() {
     System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
