@@ -255,6 +255,17 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   @Override
+  public void triggerEvent(Object event) {
+    if (closeCalled) {
+      return;
+    }
+    try (TaskCloseable ignore = PerfMark.traceTask("ServerCall.triggerEvent")) {
+      PerfMark.attachTag(tag);
+      stream.triggerEvent(event);
+    }
+  }
+
+  @Override
   public SecurityLevel getSecurityLevel() {
     final Attributes attributes = getAttributes();
     if (attributes == null) {
@@ -393,6 +404,17 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           return;
         }
         listener.onReady();
+      }
+    }
+
+    @Override
+    public void triggerEvent(Object event) {
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.triggerEvent")) {
+        PerfMark.attachTag(call.tag);
+        if (call.cancelled) {
+          return;
+        }
+        listener.onEvent(event);
       }
     }
   }

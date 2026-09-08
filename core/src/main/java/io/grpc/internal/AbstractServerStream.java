@@ -174,6 +174,16 @@ public abstract class AbstractServerStream extends AbstractStream
   }
 
   @Override
+  public final void triggerEvent(final Object event) {
+    transportState().runOnTransportThread(new Runnable() {
+      @Override
+      public void run() {
+        transportState().triggerEvent(event);
+      }
+    });
+  }
+
+  @Override
   public StatsTraceContext statsTraceContext() {
     return statsTraceCtx;
   }
@@ -258,6 +268,13 @@ public abstract class AbstractServerStream extends AbstractStream
     }
 
 
+
+    public final void triggerEvent(Object event) {
+      if (listenerClosed) {
+        return;
+      }
+      listener().triggerEvent(event);
+    }
 
     @Override
     protected ServerStreamListener listener() {

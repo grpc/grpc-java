@@ -45,6 +45,7 @@ public final class PendingAuthListenerTest {
   public void onCallbacks_noOpBeforeStartCall() {
     listener.onReady();
     listener.onMessage("foo");
+    listener.onEvent("bar");
     listener.onHalfClose();
     listener.onComplete();
 
@@ -54,16 +55,19 @@ public final class PendingAuthListenerTest {
   @Test
   public void onCallbacks_runsPendingCallbacksAfterStartCall() {
     String message = "foo";
+    String event = "bar";
 
     // Act 1
     listener.onReady();
     listener.onMessage(message);
+    listener.onEvent(event);
     listener.startCall(call, headers, next);
 
     // Assert 1
     InOrder order = Mockito.inOrder(delegate);
     order.verify(delegate).onReady();
     order.verify(delegate).onMessage(message);
+    order.verify(delegate).onEvent(event);
 
     // Act 2
     listener.onHalfClose();
