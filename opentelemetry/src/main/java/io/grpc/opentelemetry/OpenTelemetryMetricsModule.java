@@ -607,7 +607,8 @@ final class OpenTelemetryMetricsModule {
     }
 
     @Override
-    public synchronized void recordCallDelayReasonChanged(String delayReason) {
+    public void recordCallDelayReasonChanged(String delayReason) {
+      // Reason strings are high-cardinality diagnostics intended for tracing spans.
     }
 
     @Override

@@ -998,8 +998,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final MethodDescriptor<ReqT, RespT> method;
       final CallOptions callOptions;
       private final long callCreationTime;
-      private volatile boolean queuedForResolution;
-      private volatile boolean callCancelled;
+      @GuardedBy("this")
+      private boolean queuedForResolution;
+      @GuardedBy("this")
+      private boolean callCancelled;
       @GuardedBy("this")
       private boolean delayEnded;
 
@@ -1047,11 +1049,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         ClientCall<ReqT, RespT> realCall;
         Context previous = context.attach();
         try {
-          CallOptions effectiveOptions = callOptions;
-          if (queuedForResolution) {
-            effectiveOptions = callOptions.withOption(NAME_RESOLUTION_DELAYED,
-                ticker.nanoTime() - callCreationTime);
-          }
+          CallOptions effectiveOptions = callOptions.withOption(NAME_RESOLUTION_DELAYED,
+              ticker.nanoTime() - callCreationTime);
           realCall = newClientCall(method, effectiveOptions);
         } finally {
           context.detach(previous);

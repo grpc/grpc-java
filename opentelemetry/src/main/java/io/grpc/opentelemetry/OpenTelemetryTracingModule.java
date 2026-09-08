@@ -229,18 +229,23 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public synchronized void recordCallDelayReasonChanged(String delayReason) {
+    public void recordCallDelayReasonChanged(String delayReason) {
       if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
           || isCallEnded()
           || activeCallDelaySpan == null) {
         return;
       }
-      String type = activeCallDelayType;
-      activeCallDelaySpan.addEvent(
-          "Delay state transition",
-          Attributes.of(
-              AttributeKey.stringKey("grpc.delay_type"), type != null ? type : "",
-              AttributeKey.stringKey("grpc.delay_reason"), delayReason));
+      synchronized (this) {
+        if (isCallEnded() || activeCallDelaySpan == null) {
+          return;
+        }
+        String type = activeCallDelayType;
+        activeCallDelaySpan.addEvent(
+            "Delay state transition",
+            Attributes.of(
+                AttributeKey.stringKey("grpc.delay_type"), type != null ? type : "",
+                AttributeKey.stringKey("grpc.delay_reason"), delayReason));
+      }
     }
 
     @Override
@@ -322,18 +327,21 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public synchronized void recordAttemptDelayReasonChanged(String delayReason) {
-      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
-          || streamClosed
-          || activeDelaySpan == null) {
+    public void recordAttemptDelayReasonChanged(String delayReason) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled() || activeDelaySpan == null) {
         return;
       }
-      String type = activeDelayType;
-      activeDelaySpan.addEvent(
-          "Delay state transition",
-          Attributes.of(
-              AttributeKey.stringKey("grpc.delay_type"), type != null ? type : "",
-              AttributeKey.stringKey("grpc.delay_reason"), delayReason));
+      synchronized (this) {
+        if (streamClosed || activeDelaySpan == null) {
+          return;
+        }
+        String type = activeDelayType;
+        activeDelaySpan.addEvent(
+            "Delay state transition",
+            Attributes.of(
+                AttributeKey.stringKey("grpc.delay_type"), type != null ? type : "",
+                AttributeKey.stringKey("grpc.delay_reason"), delayReason));
+      }
     }
 
     @Override
