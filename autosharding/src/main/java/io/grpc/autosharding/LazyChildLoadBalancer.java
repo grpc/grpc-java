@@ -53,7 +53,7 @@ final class LazyChildLoadBalancer extends LoadBalancer implements PickerEndpoint
   @Nullable private LoadBalancer delegate;
   @Nullable private ResolvedAddresses lastResolvedAddresses;
   private boolean connectionRequested = false;
-  private boolean shutdown = false;
+  private volatile boolean shutdown = false;
 
   /**
    * Constructs a {@link LazyChildLoadBalancer}.
@@ -74,10 +74,16 @@ final class LazyChildLoadBalancer extends LoadBalancer implements PickerEndpoint
     }
     lastResolvedAddresses = resolvedAddresses;
     if (connectionRequested) {
+      boolean newlyCreated = false;
       if (delegate == null) {
         delegate = delegateProvider.newLoadBalancer(helper);
+        newlyCreated = true;
       }
-      return delegate.acceptResolvedAddresses(resolvedAddresses);
+      Status status = delegate.acceptResolvedAddresses(resolvedAddresses);
+      if (newlyCreated && status.isOk()) {
+        delegate.requestConnection();
+      }
+      return status;
     } else {
       // Report IDLE state until connection is explicitly requested
       helper.updateBalancingState(
@@ -111,7 +117,8 @@ final class LazyChildLoadBalancer extends LoadBalancer implements PickerEndpoint
     if (delegate == null && lastResolvedAddresses != null) {
       delegate = delegateProvider.newLoadBalancer(helper);
       delegate.acceptResolvedAddresses(lastResolvedAddresses);
-    } else if (delegate != null) {
+    }
+    if (delegate != null) {
       delegate.requestConnection();
     }
   }

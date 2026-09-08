@@ -105,7 +105,7 @@ public class LazyChildLoadBalancerTest {
   }
 
   @Test
-  public void requestConnection_createsChildPolicy_andForwardsAddresses() {
+  public void requestConnection_createsChildPolicy_forwardsAddresses_andRequestsConnection() {
     lazyLb.acceptResolvedAddresses(resolvedAddresses);
     assertThat(lazyLb.getDelegate()).isNull();
 
@@ -114,6 +114,7 @@ public class LazyChildLoadBalancerTest {
     assertThat(lazyLb.isConnectionRequested()).isTrue();
     verify(mockProvider).newLoadBalancer(mockHelper);
     verify(mockDelegate).acceptResolvedAddresses(resolvedAddresses);
+    verify(mockDelegate).requestConnection();
     assertThat(lazyLb.getDelegate()).isSameInstanceAs(mockDelegate);
   }
 
@@ -126,22 +127,24 @@ public class LazyChildLoadBalancerTest {
     lazyLb.acceptResolvedAddresses(resolvedAddresses);
     verify(mockProvider).newLoadBalancer(mockHelper);
     verify(mockDelegate).acceptResolvedAddresses(resolvedAddresses);
+    verify(mockDelegate).requestConnection();
   }
 
   @Test
   public void requestConnection_whenAlreadyCreated_delegatesRequestConnection() {
     lazyLb.acceptResolvedAddresses(resolvedAddresses);
     lazyLb.requestConnection();
-    verify(mockDelegate, never()).requestConnection();
+    verify(mockDelegate, times(1)).requestConnection();
 
     lazyLb.requestConnection();
-    verify(mockDelegate).requestConnection();
+    verify(mockDelegate, times(2)).requestConnection();
   }
 
   @Test
   public void acceptResolvedAddresses_afterConnectionRequested_forwardsDirectly() {
     lazyLb.acceptResolvedAddresses(resolvedAddresses);
     lazyLb.requestConnection();
+    verify(mockDelegate, times(1)).requestConnection();
 
     ResolvedAddresses newAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(Collections.singletonList(
@@ -151,6 +154,8 @@ public class LazyChildLoadBalancerTest {
 
     lazyLb.acceptResolvedAddresses(newAddresses);
     verify(mockDelegate).acceptResolvedAddresses(newAddresses);
+    // Should not request connection again on subsequent address update
+    verify(mockDelegate, times(1)).requestConnection();
   }
 
   @Test
@@ -189,6 +194,7 @@ public class LazyChildLoadBalancerTest {
     // Verify child policy instantiated exactly once despite concurrent exitIdle calls
     verify(mockProvider, times(1)).newLoadBalancer(mockHelper);
     verify(mockDelegate, times(1)).acceptResolvedAddresses(resolvedAddresses);
+    verify(mockDelegate, times(1)).requestConnection();
   }
 
   @Test
