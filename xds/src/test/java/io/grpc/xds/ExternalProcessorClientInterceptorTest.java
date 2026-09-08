@@ -90,9 +90,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -21127,6 +21129,164 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(capturedStatus.get().getCause()).isInstanceOf(IllegalArgumentException.class);
 
     channelManager.close();
+  }
+
+  @Test
+  public void whenCallCancelledConcurrently_underlyingCallCancelledExactlyOnceAndNoExtProcLeak()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    final AtomicInteger extProcErrorCount = new AtomicInteger();
+    final AtomicInteger extProcRequestsAfterError = new AtomicInteger();
+    final AtomicBoolean extProcHadError = new AtomicBoolean(false);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (extProcHadError.get()) {
+                  extProcRequestsAfterError.incrementAndGet();
+                }
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {
+                extProcHadError.set(true);
+                extProcErrorCount.incrementAndGet();
+              }
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final CountDownLatch dataPlaneServerStartedLatch = new CountDownLatch(1);
+    final CountDownLatch releaseServerResponseLatch = new CountDownLatch(1);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          dataPlaneServerStartedLatch.countDown();
+          try {
+            releaseServerResponseLatch.await(5, TimeUnit.SECONDS);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+          responseObserver.onNext("Hello " + request);
+          responseObserver.onCompleted();
+        }))
+        .build());
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .directExecutor()
+        .build().start());
+
+    final AtomicInteger rawCallCancelCount = new AtomicInteger();
+    ClientInterceptor countingInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          @Override
+          public void cancel(String message, Throwable cause) {
+            rawCallCancelCount.incrementAndGet();
+            super.cancel(message, cause);
+          }
+        };
+      }
+    };
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .intercept(countingInterceptor)
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> proxyCall = interceptCall(
+        interceptor,
+        METHOD_SAY_HELLO,
+        DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+        dataPlaneChannel);
+
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+
+    proxyCall.request(1);
+    proxyCall.sendMessage("ping");
+    proxyCall.halfClose();
+
+    // Wait until the data plane call has started and is active
+    assertThat(dataPlaneServerStartedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Concurrently release server response and trigger multiple concurrent cancellations
+    int numCancelThreads = 8;
+    ExecutorService executor = Executors.newFixedThreadPool(numCancelThreads + 1);
+    CyclicBarrier barrier = new CyclicBarrier(numCancelThreads + 1);
+    List<Future<?>> futures = new ArrayList<>();
+
+    futures.add(executor.submit(() -> {
+      barrier.await();
+      releaseServerResponseLatch.countDown();
+      return null;
+    }));
+
+    for (int i = 0; i < numCancelThreads; i++) {
+      final int threadId = i;
+      futures.add(executor.submit(() -> {
+        barrier.await();
+        proxyCall.cancel("Cancel from thread " + threadId, null);
+        return null;
+      }));
+    }
+
+    for (Future<?> f : futures) {
+      f.get(5, TimeUnit.SECONDS);
+    }
+
+    // Underlying rawCall was cancelled exactly once despite multiple concurrent cancellations
+    assertThat(rawCallCancelCount.get()).isEqualTo(1);
+    // Ext-proc received onError at most once
+    assertThat(extProcErrorCount.get()).isAtMost(1);
+    // Ext-proc never received any requests after being cancelled
+    assertThat(extProcRequestsAfterError.get()).isEqualTo(0);
+
+    channelManager.close();
+    shutdownAndAwaitTermination(executor);
   }
 
   private static List<ProcessingRequest> filterClientRequests(List<ProcessingRequest> requests) {
