@@ -1000,7 +1000,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       private final long callCreationTime;
       private volatile boolean queuedForResolution;
       private volatile boolean callCancelled;
-      private final AtomicBoolean delayEnded = new AtomicBoolean();
+      @GuardedBy("this")
+      private boolean delayEnded;
 
       PendingCall(Context context, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
         super(
@@ -1019,7 +1020,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           if (!callCancelled && !queuedForResolution) {
             queuedForResolution = true;
             for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
-              if (callCancelled || delayEnded.get()) {
+              if (callCancelled || delayEnded) {
                 break;
               }
               factory.recordCallDelayStart(
@@ -1031,7 +1032,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       private void endDelayIfNeeded() {
         synchronized (this) {
-          if (queuedForResolution && delayEnded.compareAndSet(false, true)) {
+          if (queuedForResolution && !delayEnded) {
+            delayEnded = true;
             for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
               factory.recordCallDelayEnd();
             }

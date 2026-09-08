@@ -2957,8 +2957,11 @@ public class OpenTelemetryMetricsModuleTest {
     System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
     try {
       String target = "target:///";
+      Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+          "grpc.client.call.delay.duration", true
+      );
       OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-          enabledMetricsMap, disableDefaultMetrics);
+          enabledMetrics, disableDefaultMetrics);
       OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
       OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
           new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
@@ -2970,7 +2973,8 @@ public class OpenTelemetryMetricsModuleTest {
       callAttemptsTracerFactory.recordCallDelayStart("connecting", "transition to connecting");
       callAttemptsTracerFactory.recordCallDelayEnd();
 
-      assertNotNull(callAttemptsTracerFactory);
+      assertThat(openTelemetryTesting.getMetrics())
+          .anySatisfy(metric -> assertThat(metric).hasName("grpc.client.call.delay.duration"));
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
     }
