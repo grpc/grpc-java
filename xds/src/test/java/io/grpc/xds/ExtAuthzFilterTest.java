@@ -541,6 +541,73 @@ public class ExtAuthzFilterTest {
     assertThat(result.errorDetail).contains("Invalid config type");
   }
 
+  @Test
+  public void provider_typeUrls() {
+    ExtAuthzFilter.Provider provider = new ExtAuthzFilter.Provider();
+    assertThat(provider.typeUrls()).asList().containsExactly(
+        "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz",
+        "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute");
+  }
+
+  @Test
+  public void provider_isClientFilter_flagDisabled() {
+    System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_AUTHZ_ON_CLIENT");
+    ExtAuthzFilter.Provider provider = new ExtAuthzFilter.Provider();
+    assertThat(provider.isClientFilter()).isFalse();
+  }
+
+  @Test
+  public void provider_isClientFilter_flagEnabled() {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_AUTHZ_ON_CLIENT", "true");
+    try {
+      ExtAuthzFilter.Provider provider = new ExtAuthzFilter.Provider();
+      assertThat(provider.isClientFilter()).isTrue();
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_AUTHZ_ON_CLIENT");
+    }
+  }
+
+  @Test
+  public void provider_registeredInFilterRegistry() {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_AUTHZ_ON_CLIENT", "true");
+    try {
+      FilterRegistry.reset();
+      FilterRegistry registry = FilterRegistry.getDefaultRegistry();
+      Filter.Provider provider = registry.get(
+          "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz");
+      assertThat(provider).isInstanceOf(ExtAuthzFilter.Provider.class);
+      assertThat(provider.isClientFilter()).isTrue();
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_AUTHZ_ON_CLIENT");
+      FilterRegistry.reset();
+    }
+  }
+
+  @Test
+  public void filterConfig_typeUrl() {
+    ExtAuthzFilter.ExtAuthzFilterConfig config =
+        new ExtAuthzFilter.ExtAuthzFilterConfig(buildExtAuthzConfig());
+    assertThat(config.typeUrl()).isEqualTo(
+        "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz");
+  }
+
+  @Test
+  public void filterConfigOverride_typeUrl() {
+    ExtAuthzFilter.ExtAuthzFilterConfigOverride overrideConfig =
+        new ExtAuthzFilter.ExtAuthzFilterConfigOverride();
+    assertThat(overrideConfig.typeUrl()).isEqualTo(
+        "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute");
+  }
+
+  @Test
+  public void provider_newInstance_smokeTest() {
+    ExtAuthzFilter.Provider provider = new ExtAuthzFilter.Provider();
+    Filter filterInstance = provider.newInstance(
+        Filter.FilterContext.create("ext_authz", mock(io.grpc.MetricRecorder.class)));
+    assertThat(filterInstance).isNotNull();
+    filterInstance.close();
+  }
+
   private static class CapturingListener<T> extends ClientCall.Listener<T> {
     volatile Status closeStatus;
 
