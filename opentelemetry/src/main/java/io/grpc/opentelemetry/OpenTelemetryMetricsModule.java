@@ -390,7 +390,7 @@ final class OpenTelemetryMetricsModule {
     @Nullable private volatile Stopwatch activeCallDelayStopwatch;
     @GuardedBy("this")
     @Nullable private String activeCallDelayType;
-    private final Attributes callLevelBaseAttributes;
+    private final io.opentelemetry.api.common.Attributes callLevelBaseAttributes;
     private long retryDelayNanos;
     private long callLatencyNanos;
     private final Object lock = new Object();
@@ -416,18 +416,19 @@ final class OpenTelemetryMetricsModule {
       this.attemptDelayStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
-      AttributesBuilder builder = Attributes.builder()
+      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
           .put(METHOD_KEY, fullMethodName)
           .put(TARGET_KEY, target);
       if (module.customLabelEnabled) {
         builder.put(
             CUSTOM_LABEL_KEY, callOptions.getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
       }
-      this.callLevelBaseAttributes = builder.build();
+      io.opentelemetry.api.common.Attributes attribute = builder.build();
+      this.callLevelBaseAttributes = attribute;
 
       // Record here in case mewClientStreamTracer() would never be called.
       if (module.resource.clientAttemptCountCounter() != null) {
-        module.resource.clientAttemptCountCounter().add(1, callLevelBaseAttributes, otelContext);
+        module.resource.clientAttemptCountCounter().add(1, attribute, otelContext);
       }
     }
 
@@ -447,14 +448,14 @@ final class OpenTelemetryMetricsModule {
       // CallAttemptsTracerFactory constructor. attemptsPerCall will be non-zero after the first
       // attempt, as first attempt cannot be a transparent retry.
       if (attemptsPerCall.get() > 0) {
-        AttributesBuilder builder = Attributes.builder()
+        AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
             .put(METHOD_KEY, fullMethodName)
             .put(TARGET_KEY, target);
         if (module.customLabelEnabled) {
           builder.put(
               CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
         }
-        Attributes attribute = builder.build();
+        io.opentelemetry.api.common.Attributes attribute = builder.build();
         if (module.resource.clientAttemptCountCounter() != null) {
           module.resource.clientAttemptCountCounter().add(1, attribute, otelContext);
         }

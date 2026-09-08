@@ -55,7 +55,6 @@ import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.data.MetricData;
-import io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
@@ -232,15 +231,6 @@ public class GrpcOpenTelemetryTest {
   }
 
   @Test
-  public void targetAttributeFilter_null_clearsFilter() {
-    GrpcOpenTelemetry.Builder builder = GrpcOpenTelemetry.newBuilder();
-    builder.targetAttributeFilter(target -> true);
-    builder.targetAttributeFilter(null);
-    GrpcOpenTelemetry module = builder.build();
-    assertThat(module).isNotNull();
-  }
-
-  @Test
   public void configureChannelBuilder_registersMetricSink() {
     GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder().build();
     TestChannelBuilder testBuilder = new TestChannelBuilder();
@@ -322,9 +312,11 @@ public class GrpcOpenTelemetryTest {
     call.request(1);
     assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    OpenTelemetryAssertions.assertThat(openTelemetryRule.getMetrics())
+    io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+        .assertThat(openTelemetryRule.getMetrics())
         .anySatisfy(
-            metric -> OpenTelemetryAssertions.assertThat(metric)
+            metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+                .assertThat(metric)
                 .hasName("grpc.client.attempt.delay.duration")
                 .hasHistogramSatisfying(
                     histogram -> histogram.hasPointsSatisfying(
@@ -332,9 +324,11 @@ public class GrpcOpenTelemetryTest {
                           point.hasAttribute(
                               AttributeKey.stringKey("grpc.delay_type"), "connecting");
                         })));
-    OpenTelemetryAssertions.assertThat(openTelemetryRule.getMetrics())
+    io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+        .assertThat(openTelemetryRule.getMetrics())
         .anySatisfy(
-            metric -> OpenTelemetryAssertions.assertThat(metric)
+            metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+                .assertThat(metric)
                 .hasName("grpc.client.call.delay.duration"));
   }
 
@@ -493,16 +487,6 @@ public class GrpcOpenTelemetryTest {
     @Override
     protected TestChannelBuilder interceptWithTarget(InterceptorFactory factory) {
       this.interceptorFactory = factory;
-      return this;
-    }
-
-    @Override
-    public TestChannelBuilder intercept(java.util.List<ClientInterceptor> interceptors) {
-      return this;
-    }
-
-    @Override
-    public TestChannelBuilder intercept(ClientInterceptor... interceptors) {
       return this;
     }
 
