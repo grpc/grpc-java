@@ -26,7 +26,6 @@ import android.content.pm.Signature;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Process;
-import androidx.annotation.RequiresApi;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
@@ -435,10 +434,13 @@ public final class SecurityPolicies {
    * <p>A client, on the other hand, should only use {@link #hasPermissions} policies that require
    * install-time permissions which cannot change.
    *
+   * @deprecated This method does not correctly handle shared UIDs, isolated processes and UIDs from
+   *     a different Android user. Use {@link #hasPermissions(Context, ImmutableSet)} instead.
    * @param permissions all permissions that the calling package needs to have
    * @throws NullPointerException if any of the inputs are {@code null}
    * @throws IllegalArgumentException if {@code permissions} is empty
    */
+  @Deprecated
   public static SecurityPolicy hasPermissions(
       PackageManager packageManager, ImmutableSet<String> permissions) {
     Preconditions.checkNotNull(packageManager, "packageManager");
@@ -447,12 +449,68 @@ public final class SecurityPolicies {
     return new SecurityPolicy() {
       @Override
       public Status checkAuthorization(int uid) {
-        return checkPermissions(uid, packageManager, permissions);
+        return checkPackagePermissions(uid, packageManager, permissions);
       }
     };
   }
 
-  private static Status checkPermissions(
+  /**
+   * Returns a {@link SecurityPolicy} that checks if a given UID is granted all of the specified
+   * {@code permissions}.
+   *
+   * <p>The gRPC framework assumes that a {@link SecurityPolicy}'s verdict for a given peer UID will
+   * not change over the lifetime of any process with that UID. But Android runtime permissions can
+   * be granted or revoked by the user at any time and so using the {@link #hasPermissions} {@link
+   * SecurityPolicy} comes with certain special responsibilities.
+   *
+   * <p>In particular, callers must ensure that the *subjects* of the returned {@link
+   * SecurityPolicy} hold all required {@code permissions} *before* making use of it. Android kills
+   * an app's processes when it loses any permission but the same isn't true when a permission is
+   * granted. And so without special care, a {@link #hasPermissions} denial could incorrectly
+   * persist even if the subject is later granted all required {@code permissions}.
+   *
+   * <p>A server using {@link #hasPermissions} must, as part of its RPC API contract, require
+   * clients to request and receive all {@code permissions} before making a call. This is in line
+   * with official Android guidance to request and confirm receipt of runtime permissions before
+   * using them.
+   *
+   * <p>A client, on the other hand, should only use {@link #hasPermissions} policies that require
+   * install-time permissions which cannot change.
+   *
+   * @param applicationContext for permission checks. Use Application to avoid leaks.
+   * @param permissions all permissions that the calling UID needs to have
+   * @throws NullPointerException if any of the inputs are {@code null}
+   * @throws IllegalArgumentException if {@code permissions} is empty
+   */
+  public static SecurityPolicy hasPermissions(
+      Context applicationContext, ImmutableSet<String> permissions) {
+    Preconditions.checkNotNull(applicationContext, "applicationContext");
+    Preconditions.checkNotNull(permissions, "permissions");
+    Preconditions.checkArgument(!permissions.isEmpty(), "permissions");
+    return new SecurityPolicy() {
+      @Override
+      public Status checkAuthorization(int uid) {
+        return checkUidPermissions(applicationContext, uid, permissions);
+      }
+    };
+  }
+
+  private static Status checkUidPermissions(
+      Context applicationContext, int uid, ImmutableSet<String> permissions) {
+    for (String permission : permissions) {
+      if (applicationContext.checkPermission(permission, /* pid= */ -1, uid) // -1 means unknown.
+          != PackageManager.PERMISSION_GRANTED) {
+        return Status.PERMISSION_DENIED.withDescription(
+            "Rejected by permission check security policy. UID "
+                + uid
+                + " does not have permission "
+                + permission);
+      }
+    }
+    return Status.OK;
+  }
+
+  private static Status checkPackagePermissions(
       int uid, PackageManager packageManager, ImmutableSet<String> permissions) {
     String[] packages = packageManager.getPackagesForUid(uid);
     if (packages == null || packages.length == 0) {

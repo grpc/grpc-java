@@ -22,8 +22,11 @@ import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.StatusSubject.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.robolectric.Shadows.shadowOf;
 
+import android.app.Application;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -205,6 +208,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void testHasPermissions_sharedUserId_succeedsIfAllPackageHavePermissions()
       throws Exception {
     PackageInfo info =
@@ -230,6 +234,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void testHasPermissions_sharedUserId_failsIfOnePackageHasNoPermissions() throws Exception {
     PackageInfo info =
         newBuilder()
@@ -254,6 +259,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void testHasPermissions_succeedsIfPackageHasPermissions() throws Exception {
     PackageInfo info =
         newBuilder()
@@ -272,6 +278,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void testHasPermissions_failsIfPackageDoesNotHaveOnePermission() throws Exception {
     PackageInfo info =
         newBuilder()
@@ -294,6 +301,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void testHasPermissions_failsIfPackageDoesNotHavePermissions() throws Exception {
     PackageInfo info =
         newBuilder()
@@ -312,6 +320,93 @@ public final class SecurityPoliciesTest {
         .contains(WRITE_EXTERNAL_STORAGE);
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
         .contains(OTHER_UID_PACKAGE_NAME);
+  }
+
+  @Test
+  public void testHasPermissions_context_nullContext_throwsNullPointerException() {
+    NullPointerException e =
+        assertThrows(
+            NullPointerException.class,
+            () ->
+                SecurityPolicies.hasPermissions(
+                    (Context) null, ImmutableSet.of(ACCESS_FINE_LOCATION)));
+    assertThat(e).hasMessageThat().contains("applicationContext");
+  }
+
+  @Test
+  public void testHasPermissions_context_nullPermissions_throwsNullPointerException() {
+    NullPointerException e =
+        assertThrows(
+            NullPointerException.class, () -> SecurityPolicies.hasPermissions(appContext, null));
+    assertThat(e).hasMessageThat().contains("permissions");
+  }
+
+  @Test
+  public void testHasPermissions_context_emptyPermissions_throwsIllegalArgumentException() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> SecurityPolicies.hasPermissions(appContext, ImmutableSet.of()));
+  }
+
+  @Test
+  public void testHasPermissions_context_succeedsIfUidHasAllPermissions() throws Exception {
+    shadowOf((Application) appContext)
+        .grantPermissions(/* pid= */ 0, OTHER_UID, ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION);
+
+    policy =
+        SecurityPolicies.hasPermissions(
+            appContext, ImmutableSet.of(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION));
+
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
+  }
+
+  @Test
+  public void testHasPermissions_context_failsIfUidDoesNotHaveOnePermission() throws Exception {
+    shadowOf((Application) appContext)
+        .grantPermissions(/* pid= */ 0, OTHER_UID, ACCESS_FINE_LOCATION);
+
+    policy =
+        SecurityPolicies.hasPermissions(
+            appContext, ImmutableSet.of(ACCESS_FINE_LOCATION, WRITE_EXTERNAL_STORAGE));
+
+    Status status = policy.checkAuthorization(OTHER_UID);
+    assertThat(status).hasCode(Status.Code.PERMISSION_DENIED);
+    assertThat(status.getDescription()).contains(WRITE_EXTERNAL_STORAGE);
+    assertThat(status.getDescription()).contains(String.valueOf(OTHER_UID));
+  }
+
+  @Test
+  public void testHasPermissions_context_failsIfUidDoesNotHavePermissions() throws Exception {
+    policy = SecurityPolicies.hasPermissions(appContext, ImmutableSet.of(WRITE_EXTERNAL_STORAGE));
+
+    Status status = policy.checkAuthorization(OTHER_UID);
+    assertThat(status).hasCode(Status.Code.PERMISSION_DENIED);
+    assertThat(status.getDescription()).contains(WRITE_EXTERNAL_STORAGE);
+    assertThat(status.getDescription()).contains(String.valueOf(OTHER_UID));
+  }
+
+  @Test
+  public void testHasPermissions_context_sharedUserId_succeedsEvenIfOnePackageLacksPermission()
+      throws Exception {
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_PACKAGE_NAME)
+            .setPermission(ACCESS_FINE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .build();
+
+    PackageInfo infoNoPerms =
+        newBuilder()
+            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
+            .setPermission(ACCESS_FINE_LOCATION, 0)
+            .build();
+
+    installPackages(OTHER_UID, info, infoNoPerms);
+    shadowOf((Application) appContext)
+        .grantPermissions(/* pid= */ 0, OTHER_UID, ACCESS_FINE_LOCATION);
+
+    policy = SecurityPolicies.hasPermissions(appContext, ImmutableSet.of(ACCESS_FINE_LOCATION));
+
+    assertThat(policy.checkAuthorization(OTHER_UID)).isOk();
   }
 
   @Test
