@@ -227,14 +227,16 @@ public class LazyChildLoadBalancerTest {
   }
 
   @Test
-  public void shutdown_cleansUpDelegate() {
+  public void shutdown_cleansUpDelegateAndAddresses() {
     lazyLb.acceptResolvedAddresses(resolvedAddresses);
+    assertThat(lazyLb.getLastResolvedAddresses()).isNotNull();
     lazyLb.requestConnection();
     assertThat(lazyLb.getDelegate()).isNotNull();
 
     lazyLb.shutdown();
     verify(mockDelegate).shutdown();
     assertThat(lazyLb.getDelegate()).isNull();
+    assertThat(lazyLb.getLastResolvedAddresses()).isNull();
   }
 
   @Test

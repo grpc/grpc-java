@@ -142,6 +142,7 @@ final class LazyChildLoadBalancer extends LoadBalancer implements PickerEndpoint
   @Override
   public void shutdown() {
     shutdown = true;
+    lastResolvedAddresses = null;
     if (delegate != null) {
       delegate.shutdown();
       delegate = null;
@@ -166,5 +167,11 @@ final class LazyChildLoadBalancer extends LoadBalancer implements PickerEndpoint
   @Nullable
   LoadBalancer getDelegate() {
     return delegate;
+  }
+
+  @VisibleForTesting
+  @Nullable
+  ResolvedAddresses getLastResolvedAddresses() {
+    return lastResolvedAddresses;
   }
 }
