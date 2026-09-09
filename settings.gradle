@@ -95,6 +95,7 @@ include ":grpc-inprocess"
 include ":grpc-util"
 include ":grpc-opentelemetry"
 include ":grpc-context-override-opentelemetry"
+include ":grpc-autosharding"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
@@ -132,6 +133,7 @@ project(':grpc-inprocess').projectDir = "$rootDir/inprocess" as File
 project(':grpc-util').projectDir = "$rootDir/util" as File
 project(':grpc-opentelemetry').projectDir = "$rootDir/opentelemetry" as File
 project(':grpc-context-override-opentelemetry').projectDir = "$rootDir/contextstorage" as File
+project(':grpc-autosharding').projectDir = "$rootDir/autosharding" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
     println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'

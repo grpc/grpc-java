@@ -132,7 +132,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             "s",
             LATENCY_BUCKETS,
             ImmutableList.of("grpc.target"),
-            ImmutableList.of("grpc.lb.backend_service"),
+            ImmutableList.of(),
             true);
 
         clientHalfCloseDuration = registry.registerDoubleHistogram(
@@ -142,7 +142,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             "s",
             LATENCY_BUCKETS,
             ImmutableList.of("grpc.target"),
-            ImmutableList.of("grpc.lb.backend_service"),
+            ImmutableList.of(),
             true);
 
         serverHeadersDuration = registry.registerDoubleHistogram(
@@ -152,7 +152,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             "s",
             LATENCY_BUCKETS,
             ImmutableList.of("grpc.target"),
-            ImmutableList.of("grpc.lb.backend_service"),
+            ImmutableList.of(),
             true);
 
         serverTrailersDuration = registry.registerDoubleHistogram(
@@ -162,7 +162,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             "s",
             LATENCY_BUCKETS,
             ImmutableList.of("grpc.target"),
-            ImmutableList.of("grpc.lb.backend_service"),
+            ImmutableList.of(),
             true);
       }
     }
@@ -236,8 +236,18 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     MethodDescriptor<InputStream, InputStream> rawMethod =
         (MethodDescriptor<InputStream, InputStream>) (MethodDescriptor<?, ?>) method;
     ClientCall<InputStream, InputStream> rawCall =
-        (ClientCall<InputStream, InputStream>) (ClientCall<?, ?>)
-            next.newCall(method, callOptions);
+        new SimpleForwardingClientCall<InputStream, InputStream>(
+            (ClientCall<InputStream, InputStream>) (ClientCall<?, ?>)
+                next.newCall(method, callOptions)) {
+          private final AtomicBoolean cancelled = new AtomicBoolean(false);
+
+          @Override
+          public void cancel(@Nullable String message, @Nullable Throwable cause) {
+            if (cancelled.compareAndSet(false, true)) {
+              super.cancel(message, cause);
+            }
+          }
+        };
 
     // Create a local subclass instance to buffer outbound actions
     DataPlaneDelayedCall<InputStream, InputStream> delayedCall =
@@ -246,8 +256,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     DataPlaneClientCall dataPlaneCall = new DataPlaneClientCall(
         delayedCall, rawCall, extProcStub, filterConfig, filterConfig.getMutationRulesConfig(),
-        scheduler, rawMethod, next, metricsRecorder, next.authority(),
-        callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY));
+        scheduler, rawMethod, next, metricsRecorder, next.authority());
 
     return (ClientCall<ReqT, RespT>) (ClientCall<?, ?>) dataPlaneCall;
   }
@@ -340,7 +349,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final Channel channel;
     private final MetricRecorder metricsRecorder;
     private final String target;
-    private final String backendService;
     private volatile Context callContext = Context.ROOT;
 
     private volatile long clientHeadersStartNanos;
@@ -362,7 +370,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
     final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
     final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
-    private final AtomicBoolean downstreamCancelled = new AtomicBoolean(false);
 
     protected DataPlaneClientCall(
         DataPlaneDelayedCall<InputStream, InputStream> delayedCall,
@@ -374,8 +381,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         MethodDescriptor<?, ?> method,
         Channel channel,
         MetricRecorder metricsRecorder,
-        String target,
-        String backendService) {
+        String target) {
       super(delayedCall);
       this.delayedCall = delayedCall;
       this.rawCall = rawCall;
@@ -388,7 +394,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       this.channel = channel;
       this.metricsRecorder = checkNotNull(metricsRecorder, "metricsRecorder");
       this.target = checkNotNull(target, "target");
-      this.backendService = checkNotNull(backendService, "backendService");
     }
 
     private boolean activateCall() {
@@ -420,7 +425,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             instrument,
             durationSecs,
             ImmutableList.of(target),
-            ImmutableList.of(backendService));
+            ImmutableList.of());
       }
     }
 
@@ -443,13 +448,14 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               .withDescription("gRPC message compression not supported in ext_proc")
               .asRuntimeException();
           synchronized (streamLock) {
-            if (!extProcStreamState.get().isCompleted()
-                && extProcClientCallRequestObserver != null) {
-              extProcClientCallRequestObserver.onError(ex);
+            if (markExtProcStreamFailed(extProcStreamState)) {
+              if (extProcClientCallRequestObserver != null) {
+                extProcClientCallRequestObserver.onError(ex);
+                extProcClientCallRequestObserver = null;
+              }
             }
           }
           activateCall();
-          markExtProcStreamFailed(extProcStreamState);
           cancelDownstream("gRPC message compression not supported in ext_proc", ex);
           closeExtProcStream();
           return false;
@@ -463,7 +469,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       this.callContext = Context.current();
       clientHeadersStartNanos = System.nanoTime();
       this.requestHeaders = headers;
-      this.wrappedListener = new DataPlaneListener(responseListener, rawCall, this);
+      this.wrappedListener = new DataPlaneListener(responseListener, this);
 
       // DelayedClientCall.start will buffer the listener and headers until setCall is called.
       super.start(wrappedListener, headers);
@@ -664,6 +670,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         @Override
         public void onCompleted() {
           if (markExtProcStreamCompleted(extProcStreamState)) {
+            synchronized (streamLock) {
+              extProcClientCallRequestObserver = null;
+            }
             handleFailOpen(wrappedListener);
           }
         }
@@ -693,7 +702,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     private void sendToExtProc(ProcessingRequest request) {
       synchronized (streamLock) {
-        if (extProcStreamState.get().isCompleted()) {
+        if (extProcStreamState.get().isCompleted() || extProcClientCallRequestObserver == null) {
           return;
         }
         
@@ -830,6 +839,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (markExtProcStreamCompleted(extProcStreamState)) {
           if (extProcClientCallRequestObserver != null) {
             extProcClientCallRequestObserver.onCompleted();
+            extProcClientCallRequestObserver = null;
           }
         }
       }
@@ -839,11 +849,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (markExtProcStreamFailed(extProcStreamState)) {
         synchronized (streamLock) {
           if (extProcClientCallRequestObserver != null) {
-            try {
-              extProcClientCallRequestObserver.onError(t);
-            } catch (Throwable ignored) {
-              // Ignore exceptions during cancel/onError propagation
-            }
+            extProcClientCallRequestObserver.onError(t);
             extProcClientCallRequestObserver = null;
           }
         }
@@ -999,7 +1005,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             ByteString copiedBody = ByteString.readFrom(message);
             pendingDrainingMessages.add(new KnownLengthInputStream(copiedBody));
           } catch (IOException e) {
-            rawCall.cancel("Failed to copy outbound message for buffering", e);
+            cancelDownstream("Failed to copy outbound message for buffering", e);
           }
           return;
         }
@@ -1029,7 +1035,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             }
           }
         } catch (IOException e) {
-          rawCall.cancel("Failed to serialize message for External Processor", e);
+          cancelDownstream("Failed to serialize message for External Processor", e);
         }
       }
     }
@@ -1124,6 +1130,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
             .setRequestBody(HttpBody.newBuilder()
+                .setEndOfStream(true)
                 .setEndOfStreamWithoutMessage(true)
                 .build());
         mergeAccumulatedWindowUpdates(builder);
@@ -1131,21 +1138,22 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
-    private void cancelDownstream(@Nullable String message, @Nullable Throwable cause) {
-      if (downstreamCancelled.compareAndSet(false, true)) {
-        delayedCall.cancel(message, cause);
-      }
+    void cancelDownstream(@Nullable String message, @Nullable Throwable cause) {
+      delayedCall.cancel(message, cause);
     }
 
     @Override
     public void cancel(@Nullable String message, @Nullable Throwable cause) {
       synchronized (streamLock) {
-        if (!extProcStreamState.get().isCompleted() && extProcClientCallRequestObserver != null) {
-          extProcClientCallRequestObserver.onError(
-              Status.CANCELLED
-                  .withDescription(message)
-                  .withCause(cause)
-                  .asRuntimeException());
+        if (markExtProcStreamFailed(extProcStreamState)) {
+          if (extProcClientCallRequestObserver != null) {
+            extProcClientCallRequestObserver.onError(
+                Status.CANCELLED
+                    .withDescription(message)
+                    .withCause(cause)
+                    .asRuntimeException());
+            extProcClientCallRequestObserver = null;
+          }
         }
       }
       cancelDownstream(message, cause);
@@ -1156,7 +1164,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
-          if (!streamed.getEndOfStreamWithoutMessage()) {
+          boolean isEndOfStream = streamed.getEndOfStream();
+          boolean isEndOfStreamWithoutMessage =
+              isEndOfStream && streamed.getEndOfStreamWithoutMessage();
+          if (!isEndOfStreamWithoutMessage) {
             ByteString body = streamed.getBody();
             boolean sendImmediately = false;
             synchronized (streamLock) {
@@ -1173,7 +1184,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               trySendAccumulatedWindowUpdates();
             }
           }
-          if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
+          if (isEndOfStream) {
             synchronized (streamLock) {
               if (pendingUpstreamBodyMessages.isEmpty()) {
                 if (requestSideClosed.compareAndSet(false, true)) {
@@ -1318,7 +1329,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         // If sent in response to any other event, it will cause the data plane RPC to
         // immediately fail with the specified status as if it were an out-of-band
         // cancellation.
-        rawCall.cancel(status.getDescription(), null);
+        cancelDownstream(status.getDescription(), null);
         listener.unblockAfterStreamComplete();
       }
       closeExtProcStream();
@@ -1442,7 +1453,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
   }
 
   private static class DataPlaneListener extends SimpleForwardingClientCallListener<InputStream> {
-    private final ClientCall<?, ?> rawCall;
     private final DataPlaneClientCall dataPlaneClientCall;
     // Path 3: Upstream response bodies queued because upstream to sidestream window not available,
     // response headers not cleared by ext_proc or ext_proc stream draining
@@ -1457,10 +1467,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     protected DataPlaneListener(
         ClientCall.Listener<InputStream> delegate,
-        ClientCall<?, ?> rawCall,
         DataPlaneClientCall dataPlaneClientCall) {
       super(delegate);
-      this.rawCall = rawCall;
       this.dataPlaneClientCall = dataPlaneClientCall;
     }
 
@@ -1538,7 +1546,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             ByteString copiedBody = ByteString.readFrom(message);
             savedMessages.add(new KnownLengthInputStream(copiedBody));
           } catch (IOException e) {
-            rawCall.cancel("Failed to copy inbound message for buffering", e);
+            dataPlaneClientCall.cancelDownstream("Failed to copy inbound message for buffering", e);
           }
           return;
         }
@@ -1574,7 +1582,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             dataPlaneClientCall.drainPendingRequests();
           }
         } catch (IOException e) {
-          rawCall.cancel("Failed to read server response", e);
+          dataPlaneClientCall.cancelDownstream("Failed to read server response", e);
         }
       }
     }
@@ -1592,7 +1600,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               sendResponseBodyToExtProc(bodyByteString, false);
               dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
             } catch (IOException e) {
-              rawCall.cancel("Failed to read buffered response body", e);
+              dataPlaneClientCall.cancelDownstream("Failed to read buffered response body", e);
             }
           }
         }
