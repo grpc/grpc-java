@@ -129,6 +129,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -3098,6 +3099,69 @@ public class XdsNameResolverTest {
     String response = ClientCalls.blockingUnaryCall(
         channel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
     assertThat(response).isEqualTo("Hello World");
+  }
+
+  @Test
+  public void rawMessageClientInterceptor_retriesPreservePayload() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    AtomicInteger attempts = new AtomicInteger();
+    List<String> receivedMessages = new ArrayList<>();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, new ServerCallHandler<String, String>() {
+          @Override
+          public ServerCall.Listener<String> startCall(
+              ServerCall<String, String> call, Metadata headers) {
+            call.request(1);
+            return new ServerCall.Listener<String>() {
+              @Override
+              public void onMessage(String message) {
+                receivedMessages.add(message);
+                if (attempts.incrementAndGet() == 1) {
+                  call.close(Status.UNAVAILABLE.withDescription("transient error"), new Metadata());
+                } else {
+                  call.sendHeaders(new Metadata());
+                  call.sendMessage("Hello " + message);
+                  call.close(Status.OK, new Metadata());
+                }
+              }
+            };
+          }
+        }).build();
+
+    grpcCleanup.register(InProcessServerBuilder.forName(serverName)
+        .directExecutor()
+        .addService(serviceDef)
+        .build()
+        .start());
+
+    Map<String, Object> retryPolicy = new HashMap<>();
+    retryPolicy.put("maxAttempts", 2D);
+    retryPolicy.put("initialBackoff", "0.01s");
+    retryPolicy.put("maxBackoff", "0.1s");
+    retryPolicy.put("backoffMultiplier", 1D);
+    retryPolicy.put("retryableStatusCodes", ImmutableList.of("UNAVAILABLE"));
+
+    Map<String, Object> methodConfig = new HashMap<>();
+    Map<String, Object> name = new HashMap<>();
+    name.put("service", "test.TestService");
+    methodConfig.put("name", ImmutableList.of(name));
+    methodConfig.put("retryPolicy", retryPolicy);
+
+    Map<String, Object> serviceConfig = new HashMap<>();
+    serviceConfig.put("methodConfig", ImmutableList.of(methodConfig));
+
+    Channel channel = grpcCleanup.register(InProcessChannelBuilder.forName(serverName)
+        .directExecutor()
+        .enableRetry()
+        .defaultServiceConfig(serviceConfig)
+        .intercept(new XdsNameResolver.RawMessageClientInterceptor())
+        .build());
+
+    String response = ClientCalls.blockingUnaryCall(
+        channel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
+    assertThat(response).isEqualTo("Hello World");
+    assertThat(attempts.get()).isEqualTo(2);
+    assertThat(receivedMessages).containsExactly("World", "World");
   }
 
   @Test

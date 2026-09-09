@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -35,6 +36,7 @@ import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
+import io.grpc.Drainable;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalConfigSelector;
@@ -69,6 +71,8 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.extproc.KnownLengthInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -1134,6 +1138,9 @@ final class XdsNameResolver extends NameResolver {
         new MethodDescriptor.Marshaller<InputStream>() {
           @Override
           public InputStream stream(InputStream value) {
+            if (value instanceof KnownLengthInputStream) {
+              return new KnownLengthInputStream(((KnownLengthInputStream) value).getByteString());
+            }
             return value;
           }
 
@@ -1192,7 +1199,31 @@ final class XdsNameResolver extends NameResolver {
 
         @Override
         public void sendMessage(ReqT message) {
-          rawCall.sendMessage(method.getRequestMarshaller().stream(message));
+          InputStream stream = method.getRequestMarshaller().stream(message);
+          ByteString byteString;
+          try {
+            if (stream instanceof Drainable) {
+              int size = stream.available();
+              ByteString.Output output =
+                  size > 0 ? ByteString.newOutput(size) : ByteString.newOutput();
+              ((Drainable) stream).drainTo(output);
+              byteString = output.toByteString();
+            } else {
+              byteString = ByteString.readFrom(stream);
+            }
+          } catch (IOException e) {
+            throw Status.INTERNAL
+                .withDescription("Failed to read message for raw message interceptor")
+                .withCause(e)
+                .asRuntimeException();
+          } finally {
+            try {
+              stream.close();
+            } catch (IOException ignored) {
+              // ignore
+            }
+          }
+          rawCall.sendMessage(new KnownLengthInputStream(byteString));
         }
 
         @Override
