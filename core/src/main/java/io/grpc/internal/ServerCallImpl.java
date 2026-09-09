@@ -288,6 +288,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     private final ServerCallImpl<ReqT, ?> call;
     private final ServerCall.Listener<ReqT> listener;
     private final Context.CancellableContext context;
+    private InputStream delayedMessage;
 
     public ServerStreamListenerImpl(
         ServerCallImpl<ReqT, ?> call, ServerCall.Listener<ReqT> listener,
@@ -330,13 +331,27 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       InputStream message;
       try {
         while ((message = producer.next()) != null) {
-          try {
-            listener.onMessage(call.method.parseRequest(message));
-          } catch (Throwable t) {
-            GrpcUtil.closeQuietly(message);
-            throw t;
+          // TODO: Consider forcing this check to be done in the transport (MessageDeframer)
+          // https://github.com/grpc/grpc-java/pull/13004/changes#r3939373996
+          if (call.method.getType().clientSendsOneMessage()) {
+            if (delayedMessage != null) {
+              GrpcUtil.closeQuietly(message);
+              call.stream.cancel(Status.INTERNAL.withDescription("Too many requests"));
+              GrpcUtil.closeQuietly(delayedMessage);
+              delayedMessage = null;
+              call.cancelled = true;
+              return;
+            }
+            delayedMessage = message;
+          } else {
+            try {
+              listener.onMessage(call.method.parseRequest(message));
+            } catch (Throwable t) {
+              GrpcUtil.closeQuietly(message);
+              throw t;
+            }
+            message.close();
           }
-          message.close();
         }
       } catch (Throwable t) {
         GrpcUtil.closeQuietly(producer);
@@ -353,6 +368,19 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           return;
         }
 
+        if (delayedMessage != null) {
+          InputStream message = delayedMessage;
+          delayedMessage = null;
+          try {
+            listener.onMessage(call.method.parseRequest(message));
+          } catch (Throwable t) {
+            GrpcUtil.closeQuietly(message);
+            Throwables.throwIfUnchecked(t);
+            throw new RuntimeException(t);
+          }
+          GrpcUtil.closeQuietly(message);
+        }
+
         listener.onHalfClose();
       }
     }
@@ -366,6 +394,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     }
 
     private void closedInternal(Status status) {
+      if (delayedMessage != null) {
+        GrpcUtil.closeQuietly(delayedMessage);
+        delayedMessage = null;
+      }
       Throwable cancelCause = null;
       try {
         if (status.isOk()) {
