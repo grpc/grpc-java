@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.util;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -34,7 +34,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit test for {@link io.grpc.xds.LazyLoadBalancer}. */
+/** Unit test for {@link LazyLoadBalancer}. */
 @RunWith(JUnit4.class)
 public final class LazyLoadBalancerTest {
   private SynchronizationContext syncContext =
