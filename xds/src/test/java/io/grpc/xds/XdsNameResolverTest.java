@@ -1713,7 +1713,12 @@ public class XdsNameResolverTest {
   }
 
   private StatefulFilter.Provider filterStateTestSetupResolver() {
-    StatefulFilter.Provider statefulFilterProvider = new StatefulFilter.Provider();
+    return filterStateTestSetupResolver(false);
+  }
+
+  private StatefulFilter.Provider filterStateTestSetupResolver(boolean requiresPayloadAccess) {
+    StatefulFilter.Provider statefulFilterProvider =
+        new StatefulFilter.Provider(requiresPayloadAccess);
     FilterRegistry filterRegistry = FilterRegistry.newRegistry()
         .register(statefulFilterProvider, ROUTER_FILTER_PROVIDER);
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
@@ -3165,79 +3170,30 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void rawMessageClientInterceptor_flagFalse() {
-    String origClientProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
-    String origServerProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER");
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", "false");
-    try {
-      filterStateTestSetupResolver();
-      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-      VirtualHost vhost = filterStateTestVhost();
+  public void rawMessageClientInterceptor_filterDoesNotRequirePayloadAccess() {
+    filterStateTestSetupResolver(false);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
 
-      xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
-      createAndDeliverClusterUpdates(xdsClient, cluster1);
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
 
-      // When flags are false, RawMessageClientInterceptor is not added.
-      assertClusterResolutionResult(call1, cluster1);
-      assertThat(testCall.methodDescriptor).isSameInstanceAs(call1.methodDescriptor);
-    } finally {
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", origClientProp);
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", origServerProp);
-    }
+    // When filter does not require payload access, RawMessageClientInterceptor is not added.
+    assertClusterResolutionResult(call1, cluster1);
+    assertThat(testCall.methodDescriptor).isSameInstanceAs(call1.methodDescriptor);
   }
 
   @Test
-  public void rawMessageClientInterceptor_flagTrue() {
-    String origClientProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
-    String origServerProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER");
+  public void rawMessageClientInterceptor_filterRequiresPayloadAccess() {
+    filterStateTestSetupResolver(true);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
 
-    // When GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT is true, RawMessageClientInterceptor is added.
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "true");
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", "false");
-    try {
-      filterStateTestSetupResolver();
-      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-      VirtualHost vhost = filterStateTestVhost();
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
 
-      xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
-      createAndDeliverClusterUpdates(xdsClient, cluster1);
-
-      assertClusterResolutionResult(call1, cluster1);
-      assertThat(testCall.methodDescriptor).isNotSameInstanceAs(call1.methodDescriptor);
-    } finally {
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", origClientProp);
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", origServerProp);
-    }
-
-    resolver.shutdown();
-    reset(mockListener);
-    when(mockListener.onResult2(any())).thenReturn(Status.OK);
-
-    // When GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER is true, RawMessageClientInterceptor is added.
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", "true");
-    try {
-      filterStateTestSetupResolver();
-      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-      VirtualHost vhost = filterStateTestVhost();
-
-      xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
-      createAndDeliverClusterUpdates(xdsClient, cluster1);
-
-      assertClusterResolutionResult(call1, cluster1);
-      assertThat(testCall.methodDescriptor).isNotSameInstanceAs(call1.methodDescriptor);
-    } finally {
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", origClientProp);
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", origServerProp);
-    }
-  }
-
-  private static void restoreProperty(String key, @Nullable String value) {
-    if (value == null) {
-      System.clearProperty(key);
-    } else {
-      System.setProperty(key, value);
-    }
+    // When a filter requires payload access, RawMessageClientInterceptor is added.
+    assertClusterResolutionResult(call1, cluster1);
+    assertThat(testCall.methodDescriptor).isNotSameInstanceAs(call1.methodDescriptor);
   }
 }

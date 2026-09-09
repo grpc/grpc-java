@@ -893,6 +893,7 @@ final class XdsNameResolver extends NameResolver {
         selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
       }
 
+      boolean anyFilterRequiresPayload = false;
       ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
       for (NamedFilterConfig namedFilter : filterConfigs) {
         String name = namedFilter.name;
@@ -907,12 +908,14 @@ final class XdsNameResolver extends NameResolver {
 
         if (interceptor != null) {
           filterInterceptors.add(interceptor);
+          if (filter.requiresPayloadAccess(config, overrideConfig)) {
+            anyFilterRequiresPayload = true;
+          }
         }
       }
 
       ImmutableList.Builder<ClientInterceptor> withRawMessage = ImmutableList.builder();
-      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)
-          || GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", false)) {
+      if (anyFilterRequiresPayload) {
         withRawMessage.add(new RawMessageClientInterceptor());
       }
       withRawMessage.addAll(filterInterceptors.build());
@@ -1138,6 +1141,10 @@ final class XdsNameResolver extends NameResolver {
         new MethodDescriptor.Marshaller<InputStream>() {
           @Override
           public InputStream stream(InputStream value) {
+            // For retry attempts, RetriableStream calls stream(value) once per attempt.
+            // Returning a fresh KnownLengthInputStream wrapping the immutable ByteString ensures
+            // each retry attempt reads from the beginning of the payload rather than an already
+            // drained stream.
             if (value instanceof KnownLengthInputStream) {
               return new KnownLengthInputStream(((KnownLengthInputStream) value).getByteString());
             }
