@@ -441,7 +441,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
           }
         }
         activeDelayType = newType;
-        activeDelayReason = null;
+        activeDelayReason = newReason;
         if (newType != null) {
           for (ClientStreamTracer tracer : tracers) {
             tracer.recordAttemptDelayStart(newType, newReason != null ? newReason : "");
@@ -449,7 +449,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
         }
       }
       // Delay type is unchanged, but the reason changed (e.g., priority failover).
-      if (newType != null && newReason != null
+      else if (newType != null && newReason != null
           && !Objects.equals(activeDelayReason, newReason)) {
         activeDelayReason = newReason;
         for (ClientStreamTracer tracer : tracers) {

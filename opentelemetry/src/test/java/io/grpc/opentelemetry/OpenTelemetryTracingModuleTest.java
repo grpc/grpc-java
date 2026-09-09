@@ -20,6 +20,7 @@ import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -319,7 +320,7 @@ public class OpenTelemetryTracingModuleTest {
     clientStreamTracer.recordAttemptDelayStart("connecting", "pick_first: attempting to connect");
     clientStreamTracer.recordAttemptDelayEnd();
 
-    verify(mockTracer).spanBuilder(eq("Attempt Delay"));
+    verify(mockTracer).spanBuilder(eq("Delay"));
     verify(mockSpanBuilder).setAttribute(eq("grpc.delay_type"), eq("connecting"));
     verify(mockDelaySpan).addEvent(
         eq("Delay state transition"),
@@ -343,7 +344,7 @@ public class OpenTelemetryTracingModuleTest {
     callTracer.recordCallDelayStart("resolving", "waiting for DNS query");
     callTracer.recordCallDelayEnd();
 
-    verify(mockTracer).spanBuilder(eq("Call Delay"));
+    verify(mockTracer).spanBuilder(eq("Delay"));
     verify(mockSpanBuilder).setAttribute(eq("grpc.delay_type"), eq("resolving"));
     verify(mockDelaySpan).addEvent(
         eq("Delay state transition"),
@@ -431,7 +432,7 @@ public class OpenTelemetryTracingModuleTest {
     List<SpanData> spans = openTelemetryRule.getSpans();
     SpanData callDelaySpan = null;
     for (SpanData s : spans) {
-      if ("Call Delay".equals(s.getName())) {
+      if ("Delay".equals(s.getName())) {
         callDelaySpan = s;
         break;
       }
@@ -568,7 +569,7 @@ public class OpenTelemetryTracingModuleTest {
     List<SpanData> spans = openTelemetryRule.getSpans();
     SpanData delaySpanData = null;
     for (SpanData s : spans) {
-      if ("Attempt Delay".equals(s.getName())) {
+      if ("Delay".equals(s.getName())) {
         delaySpanData = s;
         break;
       }
@@ -718,31 +719,28 @@ public class OpenTelemetryTracingModuleTest {
     assertEquals(3, spans.size());
     SpanData delaySpanData = spans.get(0);
 
-    assertEquals("Attempt Delay", delaySpanData.getName());
+    assertEquals("Delay", delaySpanData.getName());
     assertEquals("connecting", delaySpanData.getAttributes().get(
         AttributeKey.stringKey("grpc.delay_type")));
     assertEquals(3, delaySpanData.getEvents().size());
 
     EventData event1 = delaySpanData.getEvents().get(0);
     assertEquals("Delay state transition", event1.getName());
-    assertEquals("connecting", event1.getAttributes().get(
-        AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason1", event1.getAttributes().get(
         AttributeKey.stringKey("grpc.delay_reason")));
+    assertNull(event1.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
 
     EventData event2 = delaySpanData.getEvents().get(1);
     assertEquals("Delay state transition", event2.getName());
-    assertEquals("connecting", event2.getAttributes().get(
-        AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason2", event2.getAttributes().get(
         AttributeKey.stringKey("grpc.delay_reason")));
+    assertNull(event2.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
 
     EventData event3 = delaySpanData.getEvents().get(2);
     assertEquals("Delay state transition", event3.getName());
-    assertEquals("connecting", event3.getAttributes().get(
-        AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason3", event3.getAttributes().get(
         AttributeKey.stringKey("grpc.delay_reason")));
+    assertNull(event3.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
   }
 
   @Test
@@ -766,7 +764,7 @@ public class OpenTelemetryTracingModuleTest {
       List<SpanData> spans = openTelemetryRule.getSpans();
       assertEquals(2, spans.size());
       for (SpanData span : spans) {
-        assertTrue(!span.getName().equals("Attempt Delay"));
+        assertTrue(!span.getName().equals("Delay"));
       }
     } finally {
       System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
@@ -791,9 +789,9 @@ public class OpenTelemetryTracingModuleTest {
     List<SpanData> spans = openTelemetryRule.getSpans();
     assertEquals(2, spans.size());
     SpanData callDelaySpan = spans.stream()
-        .filter(s -> "Call Delay".equals(s.getName()))
+        .filter(s -> "Delay".equals(s.getName()))
         .findFirst()
-        .orElseThrow(() -> new AssertionError("Expected 'Call Delay' span not found"));
+        .orElseThrow(() -> new AssertionError("Expected 'Delay' span not found"));
 
     assertEquals("resolving", callDelaySpan.getAttributes().get(
         AttributeKey.stringKey("grpc.delay_type")));
@@ -801,24 +799,21 @@ public class OpenTelemetryTracingModuleTest {
 
     EventData event1 = callDelaySpan.getEvents().get(0);
     assertEquals("Delay state transition", event1.getName());
-    assertEquals("resolving",
-        event1.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason1",
         event1.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
+    assertNull(event1.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
 
     EventData event2 = callDelaySpan.getEvents().get(1);
     assertEquals("Delay state transition", event2.getName());
-    assertEquals("resolving",
-        event2.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason2",
         event2.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
+    assertNull(event2.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
 
     EventData event3 = callDelaySpan.getEvents().get(2);
     assertEquals("Delay state transition", event3.getName());
-    assertEquals("resolving",
-        event3.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason3",
         event3.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
+    assertNull(event3.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
   }
 
   @Test
@@ -837,7 +832,7 @@ public class OpenTelemetryTracingModuleTest {
 
     List<SpanData> spans = openTelemetryRule.getSpans();
     for (SpanData span : spans) {
-      assertTrue(!span.getName().equals("Call Delay"));
+      assertTrue(!span.getName().equals("Delay"));
     }
   }
 
@@ -860,7 +855,7 @@ public class OpenTelemetryTracingModuleTest {
 
     List<SpanData> spans = openTelemetryRule.getSpans();
     for (SpanData span : spans) {
-      assertTrue(!span.getName().equals("Attempt Delay"));
+      assertTrue(!span.getName().equals("Delay"));
     }
   }
 
@@ -879,7 +874,7 @@ public class OpenTelemetryTracingModuleTest {
     clientSpan.end();
 
     List<SpanData> spans = openTelemetryRule.getSpans();
-    long callDelaySpanCount = spans.stream().filter(s -> "Call Delay".equals(s.getName())).count();
+    long callDelaySpanCount = spans.stream().filter(s -> "Delay".equals(s.getName())).count();
     assertEquals(2L, callDelaySpanCount);
   }
 
@@ -980,7 +975,7 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
-  public void clientCallDelayReasonChanged_nullDelayType_usesEmptyString() {
+  public void clientCallDelayReasonChanged_nullDelayType_omitsDelayTypeAttribute() {
     System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
     try {
       OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
@@ -1000,7 +995,7 @@ public class OpenTelemetryTracingModuleTest {
       SpanData delaySpan = spans.get(0);
       assertEquals(2, delaySpan.getEvents().size());
       EventData event = delaySpan.getEvents().get(1);
-      assertEquals("", event.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+      assertNull(event.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
       assertEquals("changed reason",
           event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
     } finally {
@@ -1009,7 +1004,7 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
-  public void clientAttemptDelayReasonChanged_nullDelayType_usesEmptyString() {
+  public void clientAttemptDelayReasonChanged_nullDelayType_omitsDelayTypeAttribute() {
     System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
     try {
       OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
@@ -1032,7 +1027,7 @@ public class OpenTelemetryTracingModuleTest {
       SpanData delaySpan = spans.get(0);
       assertEquals(2, delaySpan.getEvents().size());
       EventData event = delaySpan.getEvents().get(1);
-      assertEquals("", event.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+      assertNull(event.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
       assertEquals("changed reason",
           event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
     } finally {
@@ -1065,8 +1060,7 @@ public class OpenTelemetryTracingModuleTest {
 
     List<SpanData> spans = openTelemetryRule.getSpans();
     for (SpanData span : spans) {
-      assertTrue(!span.getName().equals("Call Delay"));
-      assertTrue(!span.getName().equals("Attempt Delay"));
+      assertTrue(!span.getName().equals("Delay"));
     }
   }
 

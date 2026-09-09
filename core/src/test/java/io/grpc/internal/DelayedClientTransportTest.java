@@ -42,6 +42,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -876,8 +877,8 @@ public class DelayedClientTransportTest {
     FakeStreamTracer fakeTracer = new FakeStreamTracer();
     ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
 
-    io.grpc.LoadBalancer.Subchannel disconnectedSubchannel =
-        mock(io.grpc.LoadBalancer.Subchannel.class);
+    Subchannel disconnectedSubchannel =
+        mock(Subchannel.class);
     when(disconnectedSubchannel.getInternalSubchannel())
         .thenReturn(newTransportProvider(null));
 

@@ -62,7 +62,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    * connection establishment) starts.
    *
    * <p>This method is invoked synchronously on the attempt thread. Implementations should start
-   * internal timers or child tracing spans (named strictly {@code "Attempt Delay"}) carrying the
+   * internal timers or child tracing spans (named strictly {@code "Delay"}) carrying the
    * canonical {@code grpc.delay_type} attribute.
    *
    * @param delayType canonical low-cardinality label categorizing the delay (e.g., "connecting")
@@ -162,7 +162,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
      * configuration parsing) starts before any individual RPC attempt is created.
      *
      * <p>Implementations should start logical timers and create child tracing spans (named strictly
-     * {@code "Call Delay"}) carrying the canonical {@code grpc.delay_type} attribute.
+     * {@code "Delay"}) carrying the canonical {@code grpc.delay_type} attribute.
      *
      * @param delayType canonical low-cardinality label categorizing the delay (e.g., "resolving")
      * @param delayReason high-cardinality diagnostic string describing granular runtime conditions

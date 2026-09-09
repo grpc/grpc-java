@@ -742,18 +742,26 @@ public abstract class LoadBalancer {
      * @since 1.84.0
      */
     public static PickResult withNoResult(String delayType, String delayReason) {
-      Preconditions.checkNotNull(delayType, "delayType");
-      Preconditions.checkNotNull(delayReason, "delayReason");
+      checkNotNull(delayType, "delayType");
+      checkNotNull(delayReason, "delayReason");
       return new PickResult(null, null, Status.OK, false, null, delayType, delayReason);
     }
 
-    /** Returns the delay type label if any. */
+    /**
+     * Returns the delay type label if any.
+     *
+     * @since 1.84.0
+     */
     @Nullable
     public String getDelayType() {
       return delayType;
     }
 
-    /** Returns the diagnostic delay reason if any. */
+    /**
+     * Returns the diagnostic delay reason if any.
+     *
+     * @since 1.84.0
+     */
     @Nullable
     public String getDelayReason() {
       return delayReason;
@@ -821,6 +829,8 @@ public abstract class LoadBalancer {
           .add("status", status)
           .add("drop", drop)
           .add("authority-override", authorityOverride)
+          .add("delayType", delayType)
+          .add("delayReason", delayReason)
           .toString();
     }
 
