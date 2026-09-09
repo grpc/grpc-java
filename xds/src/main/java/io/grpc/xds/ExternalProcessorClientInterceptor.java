@@ -132,7 +132,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             "s",
             LATENCY_BUCKETS,
             ImmutableList.of("grpc.target"),
-            ImmutableList.of("grpc.lb.backend_service"),
+            ImmutableList.of(),
             true);
 
         clientHalfCloseDuration = registry.registerDoubleHistogram(
@@ -142,7 +142,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             "s",
             LATENCY_BUCKETS,
             ImmutableList.of("grpc.target"),
-            ImmutableList.of("grpc.lb.backend_service"),
+            ImmutableList.of(),
             true);
 
         serverHeadersDuration = registry.registerDoubleHistogram(
@@ -152,7 +152,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             "s",
             LATENCY_BUCKETS,
             ImmutableList.of("grpc.target"),
-            ImmutableList.of("grpc.lb.backend_service"),
+            ImmutableList.of(),
             true);
 
         serverTrailersDuration = registry.registerDoubleHistogram(
@@ -162,7 +162,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             "s",
             LATENCY_BUCKETS,
             ImmutableList.of("grpc.target"),
-            ImmutableList.of("grpc.lb.backend_service"),
+            ImmutableList.of(),
             true);
       }
     }
@@ -256,8 +256,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     DataPlaneClientCall dataPlaneCall = new DataPlaneClientCall(
         delayedCall, rawCall, extProcStub, filterConfig, filterConfig.getMutationRulesConfig(),
-        scheduler, rawMethod, next, metricsRecorder, next.authority(),
-        callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY));
+        scheduler, rawMethod, next, metricsRecorder, next.authority());
 
     return (ClientCall<ReqT, RespT>) (ClientCall<?, ?>) dataPlaneCall;
   }
@@ -350,7 +349,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final Channel channel;
     private final MetricRecorder metricsRecorder;
     private final String target;
-    private final String backendService;
     private volatile Context callContext = Context.ROOT;
 
     private volatile long clientHeadersStartNanos;
@@ -383,8 +381,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         MethodDescriptor<?, ?> method,
         Channel channel,
         MetricRecorder metricsRecorder,
-        String target,
-        String backendService) {
+        String target) {
       super(delayedCall);
       this.delayedCall = delayedCall;
       this.rawCall = rawCall;
@@ -397,7 +394,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       this.channel = channel;
       this.metricsRecorder = checkNotNull(metricsRecorder, "metricsRecorder");
       this.target = checkNotNull(target, "target");
-      this.backendService = checkNotNull(backendService, "backendService");
     }
 
     private boolean activateCall() {
@@ -429,7 +425,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             instrument,
             durationSecs,
             ImmutableList.of(target),
-            ImmutableList.of(backendService));
+            ImmutableList.of());
       }
     }
 
@@ -1134,6 +1130,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
             .setRequestBody(HttpBody.newBuilder()
+                .setEndOfStream(true)
                 .setEndOfStreamWithoutMessage(true)
                 .build());
         mergeAccumulatedWindowUpdates(builder);
@@ -1167,7 +1164,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
-          if (!streamed.getEndOfStreamWithoutMessage()) {
+          boolean isEndOfStream = streamed.getEndOfStream();
+          boolean isEndOfStreamWithoutMessage =
+              isEndOfStream && streamed.getEndOfStreamWithoutMessage();
+          if (!isEndOfStreamWithoutMessage) {
             ByteString body = streamed.getBody();
             boolean sendImmediately = false;
             synchronized (streamLock) {
@@ -1184,7 +1184,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               trySendAccumulatedWindowUpdates();
             }
           }
-          if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
+          if (isEndOfStream) {
             synchronized (streamLock) {
               if (pendingUpstreamBodyMessages.isEmpty()) {
                 if (requestSideClosed.compareAndSet(false, true)) {
