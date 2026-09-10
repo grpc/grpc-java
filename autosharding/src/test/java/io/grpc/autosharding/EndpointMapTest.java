@@ -251,6 +251,24 @@ public class EndpointMapTest {
   }
 
   @Test
+  public void toPickerEndpoint_requestConnection_wakesUpChildBalancerOnSyncContext() {
+    EndpointHolder holder = createHolder(0);
+    holder.updateAddresses(
+        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress() {})),
+        Attributes.EMPTY);
+
+    PickerEndpoint pickerEndpoint = holder.toPickerEndpoint();
+    verify(mockProvider, org.mockito.Mockito.never()).newLoadBalancer(any());
+
+    // Trigger connection through PickerEndpoint (simulate AutoShardingPicker encountering IDLE)
+    pickerEndpoint.requestConnection();
+
+    verify(mockProvider).newLoadBalancer(any());
+    verify(mockDelegate).acceptResolvedAddresses(any());
+    verify(mockDelegate).requestConnection();
+  }
+
+  @Test
   public void toString_containsDebugFields() {
     EndpointHolder h = createHolder(3);
     endpointMap.put("host3", h);

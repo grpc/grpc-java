@@ -25,18 +25,20 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.FixedResultPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.util.LazyLoadBalancer;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -145,19 +147,22 @@ final class EndpointMap {
    */
   static final class EndpointHolder {
     private int index;
-    private final LazyChildLoadBalancer childLb;
+    private final LazyLoadBalancer childLb;
+    private final AtomicBoolean connectingScheduled = new AtomicBoolean(false);
+    private final Helper helper;
     private ConnectivityState state = IDLE;
     private SubchannelPicker picker = new FixedResultPicker(PickResult.withNoResult());
 
     EndpointHolder(
         int index,
         Helper helper,
-        LoadBalancerProvider pickFirstProvider,
+        LoadBalancer.Factory pickFirstFactory,
         @Nullable Runnable stateUpdateCallback) {
       this.index = index;
-      this.childLb = new LazyChildLoadBalancer(
-          new ChildHelper(checkNotNull(helper, "helper"), stateUpdateCallback),
-          checkNotNull(pickFirstProvider, "pickFirstProvider"));
+      this.helper = checkNotNull(helper, "helper");
+      this.childLb = new LazyLoadBalancer(
+          new ChildHelper(helper, stateUpdateCallback),
+          checkNotNull(pickFirstFactory, "pickFirstFactory"));
     }
 
     int getIndex() {
@@ -176,12 +181,21 @@ final class EndpointMap {
       return picker;
     }
 
-    LazyChildLoadBalancer getChildLb() {
+    LazyLoadBalancer getChildLb() {
       return childLb;
     }
 
     PickerEndpoint toPickerEndpoint() {
-      return new PickerEndpoint(state, picker, childLb);
+      return new PickerEndpoint(state, picker, this::exitIdle);
+    }
+
+    private void exitIdle() {
+      if (connectingScheduled.compareAndSet(false, true)) {
+        helper.getSynchronizationContext().execute(() -> {
+          connectingScheduled.set(false);
+          childLb.requestConnection();
+        });
+      }
     }
 
     void updateAddresses(List<EquivalentAddressGroup> eags, Attributes attributes) {
