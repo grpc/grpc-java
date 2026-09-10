@@ -14301,6 +14301,7 @@ public class ExternalProcessorClientInterceptorTest {
   @Test
   public void clientInterceptor_contextPropagatedToStartCall() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    final CountDownLatch extProcCompletedLatch = new CountDownLatch(1);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = 
         new ExternalProcessorGrpc.ExternalProcessorImplBase() {
           @Override
@@ -14321,11 +14322,14 @@ public class ExternalProcessorClientInterceptorTest {
               }
 
               @Override
-              public void onError(Throwable t) {}
+              public void onError(Throwable t) {
+                extProcCompletedLatch.countDown();
+              }
 
               @Override
               public void onCompleted() {
                 responseObserver.onCompleted();
+                extProcCompletedLatch.countDown();
               }
             };
           }
@@ -14390,6 +14394,13 @@ public class ExternalProcessorClientInterceptorTest {
 
     final AtomicReference<ClientCall<String, String>> proxyCallRef = new AtomicReference<>();
     ExecutorService callExecutor = Executors.newSingleThreadExecutor();
+    final CountDownLatch callClosedLatch = new CountDownLatch(1);
+    ClientCall.Listener<String> callListener = new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        callClosedLatch.countDown();
+      }
+    };
     try {
       testContext.run(() -> {
         ClientCall<String, String> proxyCall = interceptCall(
@@ -14398,7 +14409,7 @@ public class ExternalProcessorClientInterceptorTest {
             DEFAULT_CALL_OPTIONS.withExecutor(callExecutor),
             dataPlaneChannel);
         proxyCallRef.set(proxyCall);
-        proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+        proxyCall.start(callListener, new Metadata());
       });
 
       ClientCall<String, String> proxyCall = proxyCallRef.get();
@@ -14409,6 +14420,8 @@ public class ExternalProcessorClientInterceptorTest {
 
       assertThat(downstreamStartLatch.await(5, TimeUnit.SECONDS)).isTrue();
       assertThat(contextValueAtDownstreamStart.get()).isEqualTo("test-value");
+      assertThat(callClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(extProcCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
       proxyCall.cancel("cleanup", null);
     } finally {
@@ -14423,6 +14436,7 @@ public class ExternalProcessorClientInterceptorTest {
   @Test
   public void clientInterceptor_contextPropagatedToListenerCallbacks() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    final CountDownLatch extProcCompletedLatch = new CountDownLatch(1);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = 
         new ExternalProcessorGrpc.ExternalProcessorImplBase() {
           @Override
@@ -14443,11 +14457,14 @@ public class ExternalProcessorClientInterceptorTest {
               }
 
               @Override
-              public void onError(Throwable t) {}
+              public void onError(Throwable t) {
+                extProcCompletedLatch.countDown();
+              }
 
               @Override
               public void onCompleted() {
                 responseObserver.onCompleted();
+                extProcCompletedLatch.countDown();
               }
             };
           }
@@ -14542,6 +14559,7 @@ public class ExternalProcessorClientInterceptorTest {
       proxyCall.halfClose();
 
       assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(extProcCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
       assertThat(onHeadersContext.get()).isEqualTo("test-value");
       assertThat(onMessageContext.get()).isEqualTo("test-value");
@@ -14561,6 +14579,7 @@ public class ExternalProcessorClientInterceptorTest {
   @Test
   public void clientInterceptor_contextPropagatedToExtProcStub() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    final CountDownLatch extProcClosedLatch = new CountDownLatch(1);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = 
         new ExternalProcessorGrpc.ExternalProcessorImplBase() {
           @Override
@@ -14571,10 +14590,14 @@ public class ExternalProcessorClientInterceptorTest {
               public void onNext(ProcessingRequest request) {}
 
               @Override
-              public void onError(Throwable t) {}
+              public void onError(Throwable t) {
+                extProcClosedLatch.countDown();
+              }
 
               @Override
-              public void onCompleted() {}
+              public void onCompleted() {
+                extProcClosedLatch.countDown();
+              }
             };
           }
         };
@@ -14623,6 +14646,13 @@ public class ExternalProcessorClientInterceptorTest {
 
     final AtomicReference<ClientCall<String, String>> proxyCallRef = new AtomicReference<>();
     ExecutorService callExecutor = Executors.newSingleThreadExecutor();
+    final CountDownLatch callClosedLatch = new CountDownLatch(1);
+    ClientCall.Listener<String> callListener = new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        callClosedLatch.countDown();
+      }
+    };
     try {
       testContext.run(() -> {
         ClientCall<String, String> proxyCall = interceptCall(
@@ -14631,7 +14661,7 @@ public class ExternalProcessorClientInterceptorTest {
             DEFAULT_CALL_OPTIONS.withExecutor(callExecutor),
             dataPlaneChannel);
         proxyCallRef.set(proxyCall);
-        proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+        proxyCall.start(callListener, new Metadata());
       });
 
       ClientCall<String, String> proxyCall = proxyCallRef.get();
@@ -14640,6 +14670,8 @@ public class ExternalProcessorClientInterceptorTest {
       assertThat(contextAtExtProcCall.get()).isEqualTo("test-value");
 
       proxyCall.cancel("cleanup", null);
+      assertThat(callClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(extProcClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
     } finally {
       channelManager.close();
       shutdownAndAwaitTermination(extProcServerExecutor);
