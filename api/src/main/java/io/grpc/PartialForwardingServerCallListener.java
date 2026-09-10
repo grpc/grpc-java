@@ -51,6 +51,11 @@ abstract class PartialForwardingServerCallListener<ReqT>
   }
 
   @Override
+  public void onEvent(Object event) {
+    delegate().onEvent(event);
+  }
+
+  @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }

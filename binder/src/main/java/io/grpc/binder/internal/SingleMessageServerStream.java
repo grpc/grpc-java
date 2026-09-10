@@ -168,6 +168,11 @@ final class SingleMessageServerStream implements ServerStream {
   }
 
   @Override
+  public void triggerEvent(Object event) {
+    inbound.triggerEvent(event);
+  }
+
+  @Override
   public void optimizeForDirectExecutor() {
     // Ignore.
   }

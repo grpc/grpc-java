@@ -118,6 +118,16 @@ public final class Contexts {
         context.detach(previous);
       }
     }
+
+    @Override
+    public void onEvent(Object event) {
+      Context previous = context.attach();
+      try {
+        super.onEvent(event);
+      } finally {
+        context.detach(previous);
+      }
+    }
   }
 
   /**
