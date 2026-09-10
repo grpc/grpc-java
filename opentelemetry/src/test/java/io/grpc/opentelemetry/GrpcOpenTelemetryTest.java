@@ -318,9 +318,17 @@ public class GrpcOpenTelemetryTest {
             metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
                 .assertThat(metric)
                 .hasName("grpc.client.attempt.delay.duration")
+                .hasDescription(
+                    "EXPERIMENTAL. Time an RPC attempt spent waiting for a load balancing pick"
+                        + " or connection establishment.")
+                .hasUnit("s")
                 .hasHistogramSatisfying(
                     histogram -> histogram.hasPointsSatisfying(
                         point -> {
+                          point.hasAttribute(
+                              AttributeKey.stringKey("grpc.target"), "target:///");
+                          point.hasAttribute(
+                              AttributeKey.stringKey("grpc.method"), method.getFullMethodName());
                           point.hasAttribute(
                               AttributeKey.stringKey("grpc.delay_type"), "connecting");
                         })));
@@ -329,7 +337,65 @@ public class GrpcOpenTelemetryTest {
         .anySatisfy(
             metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
                 .assertThat(metric)
-                .hasName("grpc.client.call.delay.duration"));
+                .hasName("grpc.client.call.delay.duration")
+                .hasDescription(
+                    "EXPERIMENTAL. Time an RPC spent waiting at the call level before an attempt"
+                        + " was initiated, such as waiting for name resolution.")
+                .hasUnit("s")
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> {
+                          point.hasAttribute(
+                              AttributeKey.stringKey("grpc.target"), "target:///");
+                          point.hasAttribute(
+                              AttributeKey.stringKey("grpc.method"), method.getFullMethodName());
+                          point.hasAttribute(
+                              AttributeKey.stringKey("grpc.delay_type"), "resolving");
+                        })));
+  }
+
+  @Test
+  public void delayObservability_flagEnabled_notOptedIn_instrumentsNullAndNoMetrics() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    try {
+      OpenTelemetrySdk sdk = (OpenTelemetrySdk) openTelemetryRule.getOpenTelemetry();
+      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+          sdk.getMeterProvider().get("grpc-java"),
+          ImmutableMap.of(),
+          false);
+
+      assertThat(resource.clientAttemptDelayCounter()).isNull();
+      assertThat(resource.clientCallDelayCounter()).isNull();
+
+      OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+          new FakeClock().getStopwatchSupplier(), resource, emptyList(), emptyList());
+      OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
+          new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
+              module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
+              emptyList(), io.opentelemetry.context.Context.root());
+
+      // Verify call delay methods execute cleanly when counters are null
+      factory.recordCallDelayStart("resolving", "resolving name");
+      factory.recordCallDelayEnd();
+      factory.callEnded(Status.OK, CallOptions.DEFAULT);
+
+      // Verify attempt delay methods execute cleanly when counters are null
+      ClientStreamTracer delayTracer = factory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT).build(),
+          new Metadata());
+      delayTracer.recordAttemptDelayStart("connecting", "connecting to backend");
+      delayTracer.recordAttemptDelayReasonChanged("still connecting");
+      delayTracer.recordAttemptDelayEnd();
+      delayTracer.streamClosed(Status.OK);
+
+      for (MetricData m : openTelemetryRule.getMetrics()) {
+        assertThat(m.getName()).isNotIn(
+            ImmutableList.of(
+                "grpc.client.attempt.delay.duration", "grpc.client.call.delay.duration"));
+      }
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    }
   }
 
   @Test
