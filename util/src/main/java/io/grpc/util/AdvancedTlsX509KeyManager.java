@@ -332,7 +332,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
         try {
           X509Certificate[] certs = CertificateUtils.getX509Certificates(certInputStream);
           updateIdentityCredentials(certs, key);
-          return new UpdateResult(true, newKeyTime, newCertTime);
+          return new UpdateResult(true, newCertTime, newKeyTime);
         } finally {
           certInputStream.close();
         }
@@ -340,7 +340,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
         keyInputStream.close();
       }
     }
-    return new UpdateResult(false, oldKeyTime, oldCertTime);
+    return new UpdateResult(false, oldCertTime, oldKeyTime);
   }
 
   /**
