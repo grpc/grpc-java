@@ -39,6 +39,9 @@ abstract class OpenTelemetryMetricsResource {
   abstract DoubleHistogram clientAttemptDelayCounter();
 
   @Nullable
+  abstract DoubleHistogram clientCallDelayCounter();
+
+  @Nullable
   abstract LongHistogram clientTotalSentCompressedMessageSizeCounter();
 
   @Nullable
@@ -83,6 +86,9 @@ abstract class OpenTelemetryMetricsResource {
     abstract Builder clientAttemptDurationCounter(DoubleHistogram counter);
 
     abstract Builder clientAttemptDelayCounter(DoubleHistogram counter);
+
+    abstract Builder clientCallDelayCounter(DoubleHistogram counter);
+
 
     abstract Builder clientTotalSentCompressedMessageSizeCounter(LongHistogram counter);
 

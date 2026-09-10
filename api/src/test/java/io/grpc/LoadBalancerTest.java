@@ -91,6 +91,21 @@ public class LoadBalancerTest {
     assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
     assertThat(result.getStreamTracerFactory()).isNull();
     assertThat(result.isDrop()).isFalse();
+    assertThat(result.getDelayType()).isNull();
+    assertThat(result.getDelayReason()).isNull();
+  }
+
+  @Test
+  public void pickResult_withNoResult_withDelay() {
+    PickResult result = PickResult.withNoResult("connecting", "trying backends");
+    assertThat(result.getSubchannel()).isNull();
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
+    assertThat(result.getStreamTracerFactory()).isNull();
+    assertThat(result.isDrop()).isFalse();
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("trying backends");
+    assertThat(result.toString()).contains("delayType=connecting");
+    assertThat(result.toString()).contains("delayReason=trying backends");
   }
 
   @Test
@@ -118,6 +133,10 @@ public class LoadBalancerTest {
     PickResult sc3 = PickResult.withSubchannel(subchannel, tracerFactory);
     PickResult sc4 = PickResult.withSubchannel(subchannel2);
     PickResult nr = PickResult.withNoResult();
+    PickResult nrDelay1 = PickResult.withNoResult("connecting", "trying 10.0.0.1");
+    PickResult nrDelay2 = PickResult.withNoResult("connecting", "trying 10.0.0.1");
+    PickResult nrDelayDiffReason = PickResult.withNoResult("connecting", "trying 10.0.0.2");
+    PickResult nrDelayDiffType = PickResult.withNoResult("rls_lookup_pending", "trying 10.0.0.1");
     PickResult error1 = PickResult.withError(status);
     PickResult error2 = PickResult.withError(status2);
     PickResult error3 = PickResult.withError(status2);
@@ -131,6 +150,12 @@ public class LoadBalancerTest {
     assertThat(sc1).isEqualTo(sc2);
     assertThat(sc1).isNotEqualTo(sc3);
     assertThat(sc1).isNotEqualTo(sc4);
+
+    assertThat(nr).isEqualTo(nrDelay1);
+    assertThat(nrDelay1).isEqualTo(nrDelay2);
+    assertThat(nrDelay1.hashCode()).isEqualTo(nrDelay2.hashCode());
+    assertThat(nrDelay1).isEqualTo(nrDelayDiffReason);
+    assertThat(nrDelay1).isEqualTo(nrDelayDiffType);
 
     assertThat(error1).isNotEqualTo(error2);
     assertThat(error2).isEqualTo(error3);

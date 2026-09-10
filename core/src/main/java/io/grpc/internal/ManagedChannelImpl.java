@@ -923,6 +923,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, true);
             }
             pendingCalls.add(pendingCall);
+            pendingCall.notifyQueuedForNameResolution();
           } else {
             pendingCall.reprocess();
           }
@@ -1003,6 +1004,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final MethodDescriptor<ReqT, RespT> method;
       final CallOptions callOptions;
       private final long callCreationTime;
+      @GuardedBy("this")
+      private boolean queuedForResolution;
+      @GuardedBy("this")
+      private boolean delayEnded;
 
       PendingCall(Context context, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
         super(
@@ -1016,8 +1021,35 @@ final class ManagedChannelImpl extends ManagedChannel implements
         this.callCreationTime = ticker.nanoTime();
       }
 
+      private synchronized void notifyQueuedForNameResolution() {
+        if (delayEnded || queuedForResolution) {
+          return;
+        }
+        queuedForResolution = true;
+        for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+          if (delayEnded) {
+            break;
+          }
+          factory.recordCallDelayStart(
+              "resolving", "waiting for name resolution or service config");
+        }
+      }
+
+      private synchronized void endDelayIfNeeded() {
+        if (delayEnded) {
+          return;
+        }
+        delayEnded = true;
+        if (queuedForResolution) {
+          for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+            factory.recordCallDelayEnd();
+          }
+        }
+      }
+
       /** Called when it's ready to create a real call and reprocess the pending call. */
       void reprocess() {
+        endDelayIfNeeded();
         ClientCall<ReqT, RespT> realCall;
         Context previous = context.attach();
         try {
@@ -1043,6 +1075,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       @Override
       protected void callCancelled() {
+        endDelayIfNeeded();
         super.callCancelled();
         syncContext.execute(new PendingCallRemoval());
       }
