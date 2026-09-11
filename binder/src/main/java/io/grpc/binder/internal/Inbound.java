@@ -39,8 +39,6 @@ import javax.annotation.Nullable;
 /**
  * Handles incoming binder transactions for a single stream, turning those transactions into calls
  * to the stream listener.
- *
- * <p>Out-of-order messages are reassembled into their correct order.
  */
 abstract class Inbound<L extends StreamListener, T extends BinderTransport>
     implements StreamListener.MessageProducer {
@@ -75,6 +73,9 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
   private int firstQueuedTransactionIndex;
 
   @GuardedBy("this")
+  private int nextExpectedTransactionIndex;
+
+  @GuardedBy("this")
   private int nextCompleteMessageEnd;
 
   @Nullable
@@ -102,9 +103,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
    * delivery what we've sent.
    */
   enum State {
-    // We aren't yet connected to a BinderStream instance and listener. Due to potentially
-    // out-of-order messages, a server-side instance can remain in this state for multiple
-    // transactions.
+    // We aren't yet connected to a BinderStream instance and listener.
     UNINITIALIZED,
 
     // We're attached to a BinderStream instance and we have a listener we can report to.
@@ -344,6 +343,16 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
         return;
       }
       int index = parcel.readInt();
+      if (index != nextExpectedTransactionIndex) {
+        throw Status.UNAVAILABLE
+            .withDescription(
+                "Binder transaction sequence gap: expected "
+                    + nextExpectedTransactionIndex
+                    + ", received "
+                    + index)
+            .asException();
+      }
+      nextExpectedTransactionIndex += 1;
       boolean hasPrefix = TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_PREFIX);
       boolean hasMessageData = TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_MESSAGE_DATA);
       boolean hasSuffix = TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_SUFFIX);
@@ -352,7 +361,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
         onDeliveryState(State.PREFIX_DELIVERED);
       }
       if (hasMessageData) {
-        handleMessageData(flags, index, parcel);
+        handleMessageData(flags, parcel);
       }
       if (hasSuffix) {
         handleSuffix(flags, parcel);
@@ -383,7 +392,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
   abstract void handleSuffix(int flags, Parcel parcel) throws StatusException;
 
   @GuardedBy("this")
-  private void handleMessageData(int flags, int index, Parcel parcel) throws StatusException {
+  private void handleMessageData(int flags, Parcel parcel) throws StatusException {
     InputStream stream = null;
     byte[] block = null;
     boolean lastBlockOfMessage = true;
@@ -417,7 +426,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
       }
     }
     if (queuedTransactionData == null) {
-      if (numReceivedMessages == 0 && lastBlockOfMessage && index == firstQueuedTransactionIndex) {
+      if (numReceivedMessages == 0 && lastBlockOfMessage) {
         // Shortcut for when we receive a single message in one transaction.
         checkState(firstMessage == null);
         firstMessage = (stream != null) ? stream : new BlockInputStream(block);
@@ -426,24 +435,13 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
       }
       queuedTransactionData = new ArrayList<>(16);
     }
-    enqueueTransactionData(index, new TransactionData(stream, block, numBytes, lastBlockOfMessage));
+    enqueueTransactionData(new TransactionData(stream, block, numBytes, lastBlockOfMessage));
   }
 
   @GuardedBy("this")
-  private void enqueueTransactionData(int index, TransactionData data) {
-    int offset = index - firstQueuedTransactionIndex;
-    if (offset < queuedTransactionData.size()) {
-      queuedTransactionData.set(offset, data);
-      lookForCompleteMessage();
-    } else if (offset > queuedTransactionData.size()) {
-      do {
-        queuedTransactionData.add(null);
-      } while (offset > queuedTransactionData.size());
-      queuedTransactionData.add(data);
-    } else {
-      queuedTransactionData.add(data);
-      lookForCompleteMessage();
-    }
+  private void enqueueTransactionData(TransactionData data) {
+    queuedTransactionData.add(data);
+    lookForCompleteMessage();
   }
 
   @GuardedBy("this")
@@ -452,17 +450,12 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
     if (nextCompleteMessageEnd == 0) {
       for (int i = 0; i < queuedTransactionData.size(); i++) {
         TransactionData data = queuedTransactionData.get(i);
-        if (data == null) {
-          // Missing block.
+        numBytes += data.numBytes;
+        if (data.lastBlockOfMessage) {
+          // Found a complete message.
+          nextCompleteMessageEnd = i + 1;
+          reportInboundMessage(numBytes);
           return;
-        } else {
-          numBytes += data.numBytes;
-          if (data.lastBlockOfMessage) {
-            // Found a complete message.
-            nextCompleteMessageEnd = i + 1;
-            reportInboundMessage(numBytes);
-            return;
-          }
         }
       }
     }
