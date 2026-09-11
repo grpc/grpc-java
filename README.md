@@ -17,6 +17,13 @@ gRPC-Java - An RPC library and framework
 [![Line Coverage Status](https://coveralls.io/repos/grpc/grpc-java/badge.svg?branch=master&service=github)](https://coveralls.io/github/grpc/grpc-java?branch=master)
 [![Branch-adjusted Line Coverage Status](https://codecov.io/gh/grpc/grpc-java/branch/master/graph/badge.svg)](https://codecov.io/gh/grpc/grpc-java)
 
+Statistics
+---------------
+![Issues](https://img.shields.io/github/issues/grpc/grpc-java)
+![Pull Requests](https://img.shields.io/github/issues-pr/grpc/grpc-java)
+![Forks](https://img.shields.io/github/forks/grpc/grpc-java)
+![Stars](https://img.shields.io/github/stars/grpc/grpc-java)
+
 Supported Platforms
 -------------------
 
