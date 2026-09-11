@@ -22,6 +22,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.InsecureChannelCredentials;
@@ -1019,12 +1020,12 @@ public class GrpcBootstrapperImplTest {
   public void parseAuthorities_fallbackOnReachabilityOnly() throws Exception {
     CommonBootstrapperTestUtils.setEnableEndpointFallback(true);
     bootstrapper.setFileReader(
-        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap("true")));
+        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap(true)));
     BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.authorities().get("a.com").fallbackOnReachabilityOnly()).isTrue();
 
     bootstrapper.setFileReader(
-        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap("false")));
+        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap(false)));
     info = bootstrapper.bootstrap();
     assertThat(info.authorities().get("a.com").fallbackOnReachabilityOnly()).isFalse();
   }
@@ -1034,12 +1035,20 @@ public class GrpcBootstrapperImplTest {
       throws Exception {
     CommonBootstrapperTestUtils.setEnableEndpointFallback(false);
     bootstrapper.setFileReader(
-        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap("true")));
+        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap(true)));
     BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.authorities().get("a.com").fallbackOnReachabilityOnly()).isFalse();
   }
 
-  private static String buildAuthorityBootstrap(String fallbackOnReachabilityOnly) {
+  @Test
+  public void authorityInfo_defaultsFallbackOnReachabilityOnlyToFalse() {
+    AuthorityInfo authorityInfo = AuthorityInfo.create(
+        "xdstp://a.com/envoy.config.listener.v3.Listener/%s",
+        ImmutableList.of(ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create())));
+    assertThat(authorityInfo.fallbackOnReachabilityOnly()).isFalse();
+  }
+
+  private static String buildAuthorityBootstrap(boolean fallbackOnReachabilityOnly) {
     return "{\n"
         + "  \"authorities\": {\n"
         + "    \"a.com\": {\n"
