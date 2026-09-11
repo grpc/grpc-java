@@ -64,6 +64,8 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransport.PingCallback;
+import io.grpc.internal.DisconnectError;
+import io.grpc.internal.GoAwayDisconnectError;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
@@ -586,6 +588,55 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         "GOAWAY shut down transport. HTTP/2 error code: CANCEL, "
           + "debug data: this is a test",
         status.getDescription());
+  }
+
+  @Test
+  public void receivedGoAway_unrecognizedErrorCode_shouldFailNewStreamsAndReportMetric()
+      throws Exception {
+    // Read a GOAWAY with an unrecognized error code (e.g. Apache httpd error code 70007).
+    channelRead(goAwayFrame(0, 70007, Unpooled.copiedBuffer("apache error", UTF_8)));
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    ArgumentCaptor<DisconnectError> disconnectErrorCaptor =
+        ArgumentCaptor.forClass(DisconnectError.class);
+    verify(listener).transportShutdown(statusCaptor.capture(), disconnectErrorCaptor.capture());
+
+    assertEquals(Status.UNAVAILABLE.getCode(), statusCaptor.getValue().getCode());
+    assertEquals(
+        "GOAWAY shut down transport. Unrecognized HTTP/2 error code: 70007, "
+            + "debug data: apache error",
+        statusCaptor.getValue().getDescription());
+
+    DisconnectError disconnectError = disconnectErrorCaptor.getValue();
+    assertEquals(
+        new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR), disconnectError);
+
+    // Creating new stream must fail immediately with UNAVAILABLE
+    ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
+    assertTrue(future.isDone());
+    assertFalse(future.isSuccess());
+    Status status = Status.fromThrowable(future.cause());
+    assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
+    assertEquals(
+        "GOAWAY shut down transport. Unrecognized HTTP/2 error code: 70007, "
+            + "debug data: apache error",
+        status.getDescription());
+  }
+
+  @Test
+  public void receivedGoAway_unrecognizedErrorCode_shouldCloseActiveStreams() throws Exception {
+    createStream();
+
+    // Read a GOAWAY indicating our stream (id 3) was not processed.
+    channelRead(goAwayFrame(0, 70007, Unpooled.copiedBuffer("apache error", UTF_8)));
+
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(streamListener).closed(captor.capture(), eq(PROCESSED), ArgumentMatchers.notNull());
+    assertEquals(Status.INTERNAL.getCode(), captor.getValue().getCode());
+    assertEquals(
+        "Abrupt GOAWAY closed sent stream. Unrecognized HTTP/2 error code: 70007, "
+            + "debug data: apache error",
+        captor.getValue().getDescription());
   }
 
   // This test is not as useful as it looks, because the HTTP/2 Netty code catches and doesn't
