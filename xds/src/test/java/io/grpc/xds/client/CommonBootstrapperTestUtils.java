@@ -166,6 +166,13 @@ public class CommonBootstrapperTestUtils {
     return oldValue;
   }
 
+  /** Toggles the gRFC A95 endpoint fallback env var guard; returns the previous value. */
+  public static boolean setEnableEndpointFallback(boolean target) {
+    boolean oldValue = BootstrapperImpl.enableEndpointFallback;
+    BootstrapperImpl.enableEndpointFallback = target;
+    return oldValue;
+  }
+
   public static XdsClientImpl createXdsClient(List<String> serverUris,
                                               XdsTransportFactory xdsTransportFactory,
                                               FakeClock fakeClock,
