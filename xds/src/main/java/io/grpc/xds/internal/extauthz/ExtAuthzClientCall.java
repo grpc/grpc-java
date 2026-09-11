@@ -31,6 +31,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.internal.DelayedClientCall;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -64,7 +65,9 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
     this.callOptions = callOptions;
     this.next = next;
     this.method = method;
-    this.authzStub = authzStub;
+    this.authzStub = config.grpcService().timeout()
+        .map(t -> authzStub.withDeadlineAfter(t.toMillis(), TimeUnit.MILLISECONDS))
+        .orElse(authzStub);
     this.checkRequestBuilder = checkRequestBuilder;
     this.responseHandler = responseHandler;
     this.config = config;

@@ -34,6 +34,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -56,6 +57,7 @@ import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
 import io.grpc.xds.internal.headermutations.HeaderMutations;
 import io.grpc.xds.internal.headermutations.HeaderValueOption;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -627,6 +629,28 @@ public class ExtAuthzClientCallTest {
     verify(mockExecutor, org.mockito.Mockito.atLeastOnce()).execute(any(Runnable.class));
   }
 
+  @Test
+  public void start_withTimeout_appliesDeadlineToCheckRpc() throws Exception {
+    ExtAuthzConfig configWithTimeout = buildConfigWithTimeout(Duration.ofSeconds(10));
+    AtomicReference<Deadline> observedDeadline = new AtomicReference<>();
+    CountDownLatch checkReceived = new CountDownLatch(1);
+    doAnswer(invocation -> {
+      observedDeadline.set(Context.current().getDeadline());
+      checkReceived.countDown();
+      return null;
+    }).when(authzService).check(any(CheckRequest.class), ArgumentMatchers.any());
+
+    createCall(com.google.common.util.concurrent.MoreExecutors.directExecutor(), channel,
+        configWithTimeout).start(new CapturingListener<>(), new Metadata());
+
+    assertThat(checkReceived.await(5, TimeUnit.SECONDS)).isTrue();
+    Deadline deadline = observedDeadline.get();
+    // ExtAuthzFilterTest asserts the shared stub carries no deadline, so one observed here can
+    // only have been derived for this individual call.
+    assertThat(deadline).isNotNull();
+    assertThat(deadline.timeRemaining(TimeUnit.MILLISECONDS)).isAtMost(10_000L);
+  }
+
   private ExtAuthzClientCall<SimpleRequest, SimpleResponse>
       createCall() {
     return createCall(channel, config);
@@ -663,6 +687,34 @@ public class ExtAuthzClientCallTest {
         GrpcServiceConfig.builder()
             .googleGrpc(googleGrpc)
             .initialMetadata(ImmutableList.of())
+            .build();
+    return ExtAuthzConfig.builder()
+        .grpcService(grpcServiceConfig)
+        .failureModeAllow(false)
+        .failureModeAllowHeaderAdd(false)
+        .includePeerCertificate(false)
+        .denyAtDisable(false)
+        .filterEnabled(
+            Matchers.FractionMatcher.create(100, 100))
+        .statusOnError(Status.PERMISSION_DENIED)
+        .build();
+  }
+
+  private static ExtAuthzConfig buildConfigWithTimeout(Duration timeout) {
+    GrpcServiceConfig.GoogleGrpcConfig googleGrpc =
+        GrpcServiceConfig.GoogleGrpcConfig.builder()
+            .target("test-cluster")
+            .configuredChannelCredentials(
+                ConfiguredChannelCredentials.create(
+                    mock(ChannelCredentials.class),
+                    mock(ConfiguredChannelCredentials
+                        .ChannelCredsConfig.class)))
+            .build();
+    GrpcServiceConfig grpcServiceConfig =
+        GrpcServiceConfig.builder()
+            .googleGrpc(googleGrpc)
+            .initialMetadata(ImmutableList.of())
+            .timeout(timeout)
             .build();
     return ExtAuthzConfig.builder()
         .grpcService(grpcServiceConfig)
