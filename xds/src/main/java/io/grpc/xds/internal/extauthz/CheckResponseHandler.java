@@ -121,8 +121,10 @@ public class CheckResponseHandler {
       } else {
         internalHeader = HeaderValue.create(key, header.getValue());
       }
+      // TODO(sauravzg): Confirm failing the RPC is correct for gRPC-owned headers.
       if (HeaderValueValidationUtils.isDisallowed(internalHeader)) {
-        continue;
+        throw new HeaderMutationDisallowedException(
+            "Header mutation disallowed for gRPC-owned key: " + key);
       }
       HeaderValueOption.HeaderAppendAction action;
       switch (optionProto.getAppendAction()) {

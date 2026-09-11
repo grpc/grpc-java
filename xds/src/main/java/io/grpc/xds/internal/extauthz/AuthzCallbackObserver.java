@@ -74,12 +74,17 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
 
   @Override
   public void onNext(CheckResponse value) {
-    // Note: This implementation is currently exception-safe.
-    //
-    // TODO(sauravz): Revisit hardening if this invariant changes in the future.
-    // If an unhandled RuntimeException escapes onNext(), gRPC cancels the stream and
-    // invokes onError(). Under failure_mode_allow: true, this causes the call to fail
-    // open, which could inadvertently permit an unauthorized request.
+    try {
+      handleCheckResponse(value);
+    } catch (RuntimeException e) {
+      // A processing failure is not an authz communication failure, so failure_mode_allow
+      // must not apply here.
+      setCallAndDrain(new FailingClientCall<>(
+          Status.INTERNAL.withCause(e).withDescription("Failed to process authz response")));
+    }
+  }
+
+  private void handleCheckResponse(CheckResponse value) {
     AuthzResponse authzResponse = responseHandler.handleResponse(value);
     if (authzResponse.decision() == AuthzResponse.Decision.ALLOW) {
       ClientCall<ReqT, RespT> delegate = next.newCall(method, callOptions);

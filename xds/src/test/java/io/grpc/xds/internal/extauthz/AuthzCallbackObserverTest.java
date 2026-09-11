@@ -585,8 +585,8 @@ public class AuthzCallbackObserverTest {
     assertThat(capturedBackendMessage).isEqualTo(request);
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void deny_withMissingStatus_throwsIllegalArgumentException() {
+  @Test
+  public void deny_withMissingStatus_failsCallWithInternal() {
     CheckResponseHandler mockHandler = mock(CheckResponseHandler.class);
     AuthzResponse fakeAuthzResponse = new AuthzResponse() {
       @Override
@@ -621,8 +621,13 @@ public class AuthzCallbackObserverTest {
             CallOptions.DEFAULT,
             MoreExecutors.directExecutor(),
             mockHandler, failClosedConfig(), authzCtx);
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    delayedCall.start(listener, new Metadata());
+    delayedCall.request(1);
 
     observer.onNext(CheckResponse.getDefaultInstance());
+
+    assertThat(listener.getCloseStatus().getCode()).isEqualTo(Status.Code.INTERNAL);
   }
 
   @Test
@@ -692,6 +697,55 @@ public class AuthzCallbackObserverTest {
     assertThat(capturedBackendHeaders).isNull();
   }
 
+
+  @Test
+  public void deny_withMalformedHeader_failOpen_doesNotReachBackend() {
+    capturedBackendHeaders = null;
+    capturedBackendMessage = null;
+    doAnswer(invocation -> {
+      StreamObserver<CheckResponse> obs = invocation.getArgument(1);
+      obs.onNext(CheckResponse.newBuilder()
+          .setStatus(com.google.rpc.Status.newBuilder()
+              .setCode(com.google.rpc.Code.PERMISSION_DENIED_VALUE))
+          .setDeniedResponse(DeniedHttpResponse.newBuilder()
+              .setStatus(HttpStatus.newBuilder().setCode(StatusCode.Forbidden))
+              .addHeaders(HeaderValueOption.newBuilder()
+                  .setHeader(HeaderValue.newBuilder().setKey("x-deny-reason")
+                      .setValue("policy\nviolation"))))
+          .build());
+      obs.onCompleted();
+      return null;
+    }).when(authzService).check(any(), any());
+
+    TestDelayedCall<SimpleRequest, SimpleResponse> delayedCall =
+        new TestDelayedCall<>(MoreExecutors.directExecutor(), scheduler, null);
+    Context.CancellableContext authzCtx = Context.current().withCancellation();
+    AuthzCallbackObserver<SimpleRequest, SimpleResponse> observer =
+        new AuthzCallbackObserver<>(
+            delayedCall, channel,
+            SimpleServiceGrpc.getUnaryRpcMethod(),
+            CallOptions.DEFAULT,
+            MoreExecutors.directExecutor(),
+            responseHandler,
+            failOpenConfig(/*headerAdd=*/false), authzCtx);
+
+    SimpleRequest request =
+        SimpleRequest.newBuilder().setRequestMessage("malformed-header-payload").build();
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    delayedCall.start(listener, new Metadata());
+    delayedCall.sendMessage(request);
+    delayedCall.halfClose();
+    delayedCall.request(1);
+
+    authzCtx.run(() -> {
+      AuthorizationGrpc.newStub(channel)
+          .check(CheckRequest.getDefaultInstance(), observer);
+    });
+
+    assertThat(capturedBackendHeaders).isNull();
+    assertThat(capturedBackendMessage).isNull();
+    assertThat(listener.getCloseStatus().getCode()).isEqualTo(Status.Code.INTERNAL);
+  }
 
   private static final class TestDelayedCall<ReqT, RespT>
       extends DelayedClientCall<ReqT, RespT> {

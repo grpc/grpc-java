@@ -213,12 +213,10 @@ public class CheckResponseHandlerTest {
   }
 
   @Test
-  public void handleResponse_ok_binaryHeadersPreservedAndDisallowedHeadersDropped() {
+  public void handleResponse_ok_binaryHeadersPreserved() {
     HeaderValueOption binaryOption =
         HeaderValueOption.newBuilder().setHeader(HeaderValue.newBuilder().setKey("test-bin")
             .setRawValue(com.google.protobuf.ByteString.copyFromUtf8("test"))).build();
-    HeaderValueOption disallowedOption = HeaderValueOption.newBuilder()
-        .setHeader(HeaderValue.newBuilder().setKey("host").setValue("disallowed")).build();
 
     io.grpc.xds.internal.headermutations.HeaderValueOption expectedBinaryOption =
         io.grpc.xds.internal.headermutations.HeaderValueOption.create(
@@ -228,8 +226,7 @@ public class CheckResponseHandlerTest {
 
     CheckResponse checkResponse = CheckResponse.newBuilder()
         .setStatus(com.google.rpc.Status.newBuilder().setCode(Code.OK_VALUE).build())
-        .setOkResponse(OkHttpResponse.newBuilder().addHeaders(binaryOption)
-            .addHeaders(disallowedOption).build())
+        .setOkResponse(OkHttpResponse.newBuilder().addHeaders(binaryOption).build())
         .build();
     AuthzResponse authzResponse = responseHandler.handleResponse(checkResponse);
 
@@ -238,6 +235,23 @@ public class CheckResponseHandlerTest {
         .create(ImmutableList.of(expectedBinaryOption), ImmutableList.of());
 
     assertThat(authzResponse.requestHeaderMutations()).isEqualTo(expectedRequestMutations);
+  }
+
+  @Test
+  public void handleResponse_ok_grpcOwnedHeader_deniesCall() {
+    HeaderValueOption disallowedOption = HeaderValueOption.newBuilder()
+        .setHeader(HeaderValue.newBuilder().setKey("host").setValue("disallowed")).build();
+
+    CheckResponse checkResponse = CheckResponse.newBuilder()
+        .setStatus(com.google.rpc.Status.newBuilder().setCode(Code.OK_VALUE).build())
+        .setOkResponse(OkHttpResponse.newBuilder().addHeaders(disallowedOption).build())
+        .build();
+    AuthzResponse authzResponse = responseHandler.handleResponse(checkResponse);
+
+    assertThat(authzResponse.decision()).isEqualTo(Decision.DENY);
+    assertThat(authzResponse.status().get().getCode()).isEqualTo(Status.INTERNAL.getCode());
+    assertThat(authzResponse.status().get().getDescription())
+        .contains("Header mutation disallowed for gRPC-owned key: host");
   }
 
   @Test
