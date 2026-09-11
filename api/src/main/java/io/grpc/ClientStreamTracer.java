@@ -139,6 +139,15 @@ public abstract class ClientStreamTracer extends StreamTracer {
   }
 
   /**
+   * The stream was cancelled from the client side before a normal response was received.
+   *
+   * @param status the cancellation status
+   * @since 1.84.0
+   */
+  public void cancelled(Status status) {
+  }
+
+  /**
    * Factory class for {@link ClientStreamTracer}.
    */
   public abstract static class Factory {
