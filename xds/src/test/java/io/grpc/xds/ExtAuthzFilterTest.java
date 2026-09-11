@@ -174,7 +174,7 @@ public class ExtAuthzFilterTest {
   }
 
   @Test
-  public void buildClientInterceptor_withTimeout_appliesDeadline() {
+  public void buildClientInterceptor_withTimeout_doesNotBakeDeadlineIntoSharedStub() {
     GrpcServiceConfig.GoogleGrpcConfig googleGrpc = GrpcServiceConfig.GoogleGrpcConfig.builder()
         .target("test-cluster")
         .configuredChannelCredentials(io.grpc.xds.client.ConfiguredChannelCredentials.create(
@@ -204,7 +204,10 @@ public class ExtAuthzFilterTest {
     assertThat(created).isInstanceOf(ExtAuthzFilter.ExtAuthzClientInterceptor.class);
     ExtAuthzFilter.ExtAuthzClientInterceptor interceptor =
         (ExtAuthzFilter.ExtAuthzClientInterceptor) created;
-    assertThat(interceptor.getAuthzStubForTest().getCallOptions().getDeadline()).isNotNull();
+    // The stub is shared by every RPC this interceptor handles. Resolving the timeout into an
+    // absolute Deadline here would expire it for all later calls, so it is applied per-RPC by
+    // ExtAuthzClientCall instead.
+    assertThat(interceptor.getAuthzStubForTest().getCallOptions().getDeadline()).isNull();
   }
 
   @Test

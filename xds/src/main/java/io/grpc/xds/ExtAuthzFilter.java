@@ -42,7 +42,6 @@ import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.headermutations.HeaderMutationFilter;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -217,11 +216,6 @@ final class ExtAuthzFilter implements Filter {
     if (extAuthzConfig.grpcService().googleGrpc().callCredentials().isPresent()) {
       stub = stub.withCallCredentials(
           extAuthzConfig.grpcService().googleGrpc().callCredentials().get());
-    }
-    if (extAuthzConfig.grpcService().timeout().isPresent()) {
-      stub = stub.withDeadlineAfter(
-          extAuthzConfig.grpcService().timeout().get().toMillis(),
-          TimeUnit.MILLISECONDS);
     }
     return new ExtAuthzClientInterceptor(extAuthzConfig, stub, random,
         new CheckRequestBuilder(extAuthzConfig),
