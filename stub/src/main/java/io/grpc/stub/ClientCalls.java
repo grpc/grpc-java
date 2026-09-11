@@ -871,6 +871,7 @@ public final class ClientCalls {
 
     private final Lock waiterLock = new ReentrantLock();
     private final Condition waiterCondition = waiterLock.newCondition();
+    private boolean direct;
 
     // Non private to avoid synthetic class
     ThreadSafeThreadlessExecutor() {}
@@ -950,6 +951,20 @@ public final class ClientCalls {
       }
     }
 
+    /**
+     * Turn the executor into a "direct" executor. Further calls to {@link #execute(Runnable)} will
+     * executable the runnable immediately in the calling thread.
+     */
+    void becomeDirect() {
+      waiterLock.lock();
+      try {
+        direct = true;
+      } finally {
+        waiterLock.unlock();
+      }
+      drain();
+    }
+
     private void signalAll() {
       waiterLock.lock();
       try {
@@ -975,12 +990,21 @@ public final class ClientCalls {
 
     @Override
     public void execute(Runnable runnable) {
+      boolean added = false;
       waiterLock.lock();
       try {
-        add(runnable);
-        waiterCondition.signalAll(); // If anything is waiting let it wake up and process this task
+        if (!direct) {
+          added = true;
+          add(runnable);
+          // If anything is waiting, let it wake up and process this task.
+          waiterCondition.signalAll();
+        }
       } finally {
         waiterLock.unlock();
+      }
+      if (!added) {
+        runQuietly(runnable);
+        signalAll();
       }
     }
   }
