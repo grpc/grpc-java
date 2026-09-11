@@ -62,11 +62,14 @@ public class GrpcBootstrapperImplTest {
   private String originalBootstrapConfigFromEnvVar;
   private String originalBootstrapConfigFromSysProp;
   private boolean originalExperimentalXdsFallbackFlag;
+  private boolean originalEndpointFallbackFlag;
 
   @Before
   public void setUp() {
     saveEnvironment();
     originalExperimentalXdsFallbackFlag = CommonBootstrapperTestUtils.setEnableXdsFallback(true);
+    originalEndpointFallbackFlag =
+        CommonBootstrapperTestUtils.setEnableEndpointFallback(false);
     bootstrapper.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
   }
 
@@ -84,6 +87,7 @@ public class GrpcBootstrapperImplTest {
     bootstrapper.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
     bootstrapper.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
     CommonBootstrapperTestUtils.setEnableXdsFallback(originalExperimentalXdsFallbackFlag);
+    CommonBootstrapperTestUtils.setEnableEndpointFallback(originalEndpointFallbackFlag);
   }
 
   @Test
@@ -1007,6 +1011,51 @@ public class GrpcBootstrapperImplTest {
         .isEqualTo("xdstp://a.com/envoy.config.listener.v3.Listener/%s");
     assertThat(authorityInfo.xdsServers()).hasSize(1);
     assertThat(authorityInfo.xdsServers().get(0).target()).isEqualTo("td2.googleapis.com:443");
+    // gRFC A95: defaults to false when not specified.
+    assertThat(authorityInfo.fallbackOnReachabilityOnly()).isFalse();
+  }
+
+  @Test
+  public void parseAuthorities_fallbackOnReachabilityOnly() throws Exception {
+    CommonBootstrapperTestUtils.setEnableEndpointFallback(true);
+    bootstrapper.setFileReader(
+        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap("true")));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.authorities().get("a.com").fallbackOnReachabilityOnly()).isTrue();
+
+    bootstrapper.setFileReader(
+        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap("false")));
+    info = bootstrapper.bootstrap();
+    assertThat(info.authorities().get("a.com").fallbackOnReachabilityOnly()).isFalse();
+  }
+
+  @Test
+  public void parseAuthorities_fallbackOnReachabilityOnly_ignoredWhenEnvVarDisabled()
+      throws Exception {
+    CommonBootstrapperTestUtils.setEnableEndpointFallback(false);
+    bootstrapper.setFileReader(
+        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap("true")));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.authorities().get("a.com").fallbackOnReachabilityOnly()).isFalse();
+  }
+
+  private static String buildAuthorityBootstrap(String fallbackOnReachabilityOnly) {
+    return "{\n"
+        + "  \"authorities\": {\n"
+        + "    \"a.com\": {\n"
+        + "      \"client_listener_resource_name_template\": \"xdstp://a.com/v1.Listener/id-%s\",\n"
+        + "      \"fallback_on_reachability_only\": " + fallbackOnReachabilityOnly + "\n"
+        + "    }\n"
+        + "  },\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
   }
 
   @Test
