@@ -29,12 +29,9 @@ import android.os.Parcel;
 import android.os.RemoteException;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
-import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.MockServerTransportListener;
-import io.grpc.internal.ObjectPool;
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Before;
 import org.junit.Rule;
@@ -124,46 +121,5 @@ public final class BinderServerTransportTest {
     shadowOf(Looper.getMainLooper()).idle();
 
     assertThat(transportListener.isTerminated()).isTrue();
-  }
-
-  static class BinderServerTransportBuilder {
-    ObjectPool<ScheduledExecutorService> executorServicePool;
-    Attributes attributes;
-    List<ServerStreamTracer.Factory> streamTracerFactories;
-    OneWayBinderProxy.Decorator binderDecorator;
-    IBinder callbackBinder;
-
-    public BinderServerTransport build() {
-      return BinderServerTransport.create(
-          executorServicePool, attributes, streamTracerFactories, binderDecorator, callbackBinder);
-    }
-
-    public BinderServerTransportBuilder setExecutorServicePool(
-        ObjectPool<ScheduledExecutorService> executorServicePool) {
-      this.executorServicePool = executorServicePool;
-      return this;
-    }
-
-    public BinderServerTransportBuilder setAttributes(Attributes attributes) {
-      this.attributes = attributes;
-      return this;
-    }
-
-    public BinderServerTransportBuilder setStreamTracerFactories(
-        List<ServerStreamTracer.Factory> streamTracerFactories) {
-      this.streamTracerFactories = streamTracerFactories;
-      return this;
-    }
-
-    public BinderServerTransportBuilder setBinderDecorator(
-        OneWayBinderProxy.Decorator binderDecorator) {
-      this.binderDecorator = binderDecorator;
-      return this;
-    }
-
-    public BinderServerTransportBuilder setCallbackBinder(IBinder callbackBinder) {
-      this.callbackBinder = callbackBinder;
-      return this;
-    }
   }
 }
