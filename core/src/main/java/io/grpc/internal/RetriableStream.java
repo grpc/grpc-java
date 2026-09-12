@@ -754,7 +754,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     class DeadlineEntry implements BufferEntry {
       @Override
       public void runWith(Substream substream) {
-        substream.stream.setDeadline(deadline);
+        if (retryPolicy != null && retryPolicy.perAttemptRecvTimeoutNanos != null) {
+          Deadline perAttemptDeadline =
+              Deadline.after(retryPolicy.perAttemptRecvTimeoutNanos, TimeUnit.NANOSECONDS);
+          substream.stream.setDeadline(deadline.minimum(perAttemptDeadline));
+        } else {
+          substream.stream.setDeadline(deadline);
+        }
       }
     }
 
