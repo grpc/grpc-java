@@ -125,6 +125,18 @@ interface Filter extends Closeable {
   }
 
   /**
+   * Returns true if this filter requires access to the request or response message payloads for
+   * the given configuration.
+   *
+   * <p>When true, interceptors that provide raw message payload access (e.g. {@code
+   * RawMessageClientInterceptor}) will be installed in the client interceptor chain.
+   */
+  default boolean requiresPayloadAccess(
+      FilterConfig config, @Nullable FilterConfig overrideConfig) {
+    return false;
+  }
+
+  /**
    * Releases filter resources like shared resources and remote connections.
    *
    * <p>See {@link Provider#newInstance()} for details on filter instance creation.

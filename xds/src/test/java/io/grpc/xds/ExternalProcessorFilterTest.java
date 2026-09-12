@@ -24,6 +24,7 @@ import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcOverrides;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
+import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
@@ -340,5 +341,116 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfigOverride(Any.pack(structMessage), filterContext);
 
     assertThat(result.errorDetail).contains("Invalid proto:");
+  }
+
+  @Test
+  public void requiresPayloadAccess_defaultProcessingMode_returnsFalse() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName).build();
+    ExternalProcessorFilterConfig config =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    try (ExternalProcessorFilter filter = provider.newInstance(
+        Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
+      assertThat(filter.requiresPayloadAccess(config, null)).isFalse();
+    }
+  }
+
+  @Test
+  public void requiresPayloadAccess_explicitNone_returnsFalse() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig config =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    try (ExternalProcessorFilter filter = provider.newInstance(
+        Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
+      assertThat(filter.requiresPayloadAccess(config, null)).isFalse();
+    }
+  }
+
+  @Test
+  public void requiresPayloadAccess_requestBodyGrpc_returnsTrue() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig config =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    try (ExternalProcessorFilter filter = provider.newInstance(
+        Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
+      assertThat(filter.requiresPayloadAccess(config, null)).isTrue();
+    }
+  }
+
+  @Test
+  public void requiresPayloadAccess_responseBodyGrpc_returnsTrue() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig config =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    try (ExternalProcessorFilter filter = provider.newInstance(
+        Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
+      assertThat(filter.requiresPayloadAccess(config, null)).isTrue();
+    }
+  }
+
+  @Test
+  public void requiresPayloadAccess_overrideTurnsOnPayloadAccess_returnsTrue() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName).build();
+    ExternalProcessorFilterConfig config =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setProcessingMode(ProcessingMode.newBuilder()
+                .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+                .build())
+            .build())
+        .build();
+    ExternalProcessorFilterOverrideConfig overrideConfig =
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext).config;
+
+    try (ExternalProcessorFilter filter = provider.newInstance(
+        Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
+      assertThat(filter.requiresPayloadAccess(config, overrideConfig)).isTrue();
+    }
+  }
+
+  @Test
+  public void requiresPayloadAccess_overrideTurnsOffPayloadAccess_returnsFalse() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig config =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setProcessingMode(ProcessingMode.newBuilder()
+                .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+                .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+                .build())
+            .build())
+        .build();
+    ExternalProcessorFilterOverrideConfig overrideConfig =
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext).config;
+
+    try (ExternalProcessorFilter filter = provider.newInstance(
+        Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
+      assertThat(filter.requiresPayloadAccess(config, overrideConfig)).isFalse();
+    }
   }
 }
