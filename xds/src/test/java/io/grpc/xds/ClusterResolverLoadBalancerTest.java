@@ -96,7 +96,6 @@ import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
 import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
-import io.grpc.xds.client.LoadStatsManager2;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.XdsInternalAttributes;
 import java.net.InetSocketAddress;
@@ -276,8 +275,6 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void edsClustersWithRingHashEndpointLbPolicy() throws Exception {
-    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
     List<String> metricSpecs = Arrays.asList("cpu_utilization");
     BackendMetricPropagation backendMetricPropagation =
         BackendMetricPropagation.fromMetricSpecs(metricSpecs);
@@ -349,7 +346,6 @@ public class ClusterResolverLoadBalancerTest {
     assertClusterImplConfig(clusterImplConfig, CLUSTER, EDS_SERVICE_NAME, null, null,
         null, Collections.emptyList(), "ring_hash_experimental");
     assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
     RingHashConfig ringHashConfig = (RingHashConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig.childConfig);
     assertThat(ringHashConfig.minRingSize).isEqualTo(10L);
@@ -890,8 +886,6 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void onlyLogicalDnsCluster_endpointsResolved() {
-    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
     List<String> metricSpecs = Arrays.asList("cpu_utilization");
     BackendMetricPropagation backendMetricPropagation =
         BackendMetricPropagation.fromMetricSpecs(metricSpecs);
@@ -923,7 +917,6 @@ public class ClusterResolverLoadBalancerTest {
     assertClusterImplConfig(clusterImplConfig, CLUSTER, null, null, null, null,
         Collections.<DropOverload>emptyList(), "wrr_locality_experimental");
     assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
     assertAddressesEqual(
         Arrays.asList(new EquivalentAddressGroup(Arrays.asList(
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
