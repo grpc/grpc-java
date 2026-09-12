@@ -396,6 +396,12 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         return 0;
       }
 
+      // A hash greater than the largest ring entry wraps clockwise back to the first entry;
+      // otherwise the binary search below stops at the last entry instead of wrapping around.
+      if (requestHash > ring.get(ring.size() - 1).hash) {
+        return 0;
+      }
+
       int low = 0;
       int high = ring.size() - 1;
       int mid = (low + high) / 2;
