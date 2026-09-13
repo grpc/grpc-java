@@ -479,6 +479,32 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
+  public void pickWithHashAboveMaxRingEntry_wrapsAroundToFirstEntry() {
+    // Map each server address to exactly one ring entry, so the first and last ring entries
+    // belong to different hosts.
+    RingHashConfig config = new RingHashConfig(3, 3, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    initializeLbSubchannels(config, servers);
+    InOrder inOrder = Mockito.inOrder(helper);
+
+    // Bring all subchannels to READY so that any pick resolves to its ring entry's host.
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, CSI_READY);
+      inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    }
+    SubchannelPicker picker = pickerCaptor.getValue();
+
+    // Long.MIN_VALUE sorts below every ring entry, so it hits the first entry on the ring.
+    Subchannel firstEntryHost =
+        picker.pickSubchannel(getDefaultPickSubchannelArgs(Long.MIN_VALUE)).getSubchannel();
+    // Long.MAX_VALUE sorts above every ring entry; on a ring it must wrap clockwise back to the
+    // first entry rather than sticking to the last one.
+    Subchannel wrappedHost =
+        picker.pickSubchannel(getDefaultPickSubchannelArgs(Long.MAX_VALUE)).getSubchannel();
+    assertThat(wrappedHost).isSameInstanceAs(firstEntryHost);
+  }
+
+  @Test
   public void pickWithRandomHash_allSubchannelsReady() {
     loadBalancer = new RingHashLoadBalancer(helper, new FakeRandom());
     // Map each server address to exactly one ring entry.
