@@ -214,4 +214,19 @@ public class ProxyDetectorImplTest {
     assertTrue(e.getMessage(), e.getMessage().contains("null"));
     assertTrue(e.getMessage(), e.getMessage().contains(proxySelector.getClass().getName()));
   }
+
+  @Test
+  public void throwsWhenProxySelectorThrowsIllegalArgumentException() throws Exception {
+    IllegalArgumentException cause =
+        new IllegalArgumentException("port out of range: 899858473");
+    when(proxySelector.select(any(URI.class))).thenThrow(cause);
+
+    IOException exception =
+        assertThrows(IOException.class, () -> proxyDetector.proxyFor(destination));
+
+    assertEquals(cause, exception.getCause());
+    assertTrue(
+        exception.getMessage(),
+        exception.getMessage().contains(proxySelector.getClass().getName()));
+  }
 }
