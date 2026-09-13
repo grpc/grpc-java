@@ -22,6 +22,7 @@ import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LEDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.github.xds.core.v3.CollectionEntry;
 import com.github.xds.type.v3.TypedStruct;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -54,12 +56,15 @@ import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LbEndpointCollection;
+import io.envoyproxy.envoy.config.endpoint.v3.LedsClusterLocalityConfig;
 import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickDetailsConsumer;
@@ -81,8 +86,10 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
+import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -114,6 +121,7 @@ public class CdsLoadBalancer2Test {
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "backend-service-1.googleapis.com";
   private static final String NODE_ID = "node-id";
+  private static final String LEDS_NAME = "leds-collection-1";
   private final io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
       CommonTlsContextTestsUtil.buildUpstreamTlsContext("cert-instance-name", true);
   private static final Cluster EDS_CLUSTER = Cluster.newBuilder()
@@ -145,6 +153,7 @@ public class CdsLoadBalancer2Test {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private CdsLoadBalancer2 loadBalancer;
   private XdsConfig lastXdsConfig;
+  private boolean savedEnableEndpointFallback;
 
   @Before
   public void setUp() throws Exception {
@@ -199,10 +208,13 @@ public class CdsLoadBalancer2Test {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
         EDS_SERVICE_NAME, ControlPlaneRule.buildClusterLoadAssignment(
             "127.0.0.1", "", 1234, EDS_SERVICE_NAME)));
+
+    savedEnableEndpointFallback = BootstrapperImpl.enableEndpointFallback;
   }
 
   @After
   public void tearDown() {
+    BootstrapperImpl.enableEndpointFallback = savedEnableEndpointFallback;
     if (loadBalancer != null) {
       shutdownLoadBalancer();
     }
@@ -250,6 +262,70 @@ public class CdsLoadBalancer2Test {
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
+  }
+
+  @Test
+  public void edsCluster_ledsCollection_resolvesEndpoints() {
+    BootstrapperImpl.enableEndpointFallback = true;
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, EDS_CLUSTER));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
+        ImmutableMap.of(EDS_SERVICE_NAME, edsWithLeds(LEDS_NAME)));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LEDS, ImmutableMap.of(
+        LEDS_NAME, LbEndpointCollection.newBuilder()
+            .addEntries(inlineLbEndpoint("127.0.0.5", 1234))
+            .build()));
+
+    startXdsDepManager();
+
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.addresses).hasSize(1);
+    assertThat(Iterables.getOnlyElement(childBalancer.addresses).getAddresses())
+        .containsExactly(new InetSocketAddress("127.0.0.5", 1234));
+  }
+
+  @Test
+  public void edsCluster_ledsCollectionEmpty_localityUnreachable() {
+    BootstrapperImpl.enableEndpointFallback = true;
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, EDS_CLUSTER));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
+        ImmutableMap.of(EDS_SERVICE_NAME, edsWithLeds(LEDS_NAME)));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LEDS,
+        ImmutableMap.of(LEDS_NAME, LbEndpointCollection.getDefaultInstance()));
+
+    startXdsDepManager();
+
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertPickerStatus(pickerCaptor.getValue(), Status.UNAVAILABLE
+        .withDescription("No usable endpoint from cluster: " + CLUSTER));
+    assertThat(childBalancers).isEmpty();
+  }
+
+  private static ClusterLoadAssignment edsWithLeds(String collectionName) {
+    return ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+            .setLoadBalancingWeight(UInt32Value.of(10))
+            .setPriority(0)
+            .setLedsClusterLocalityConfig(LedsClusterLocalityConfig.newBuilder()
+                .setLedsConfig(ConfigSource.newBuilder()
+                    .setSelf(SelfConfigSource.getDefaultInstance()))
+                .setLedsCollectionName(collectionName)))
+        .build();
+  }
+
+  private static CollectionEntry inlineLbEndpoint(String address, int port) {
+    return CollectionEntry.newBuilder()
+        .setInlineEntry(CollectionEntry.InlineEntry.newBuilder()
+            .setResource(Any.pack(LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(SocketAddress.newBuilder()
+                            .setAddress(address)
+                            .setPortValue(port))))
+                .build())))
+        .build();
   }
 
   @Test
@@ -839,6 +915,7 @@ public class CdsLoadBalancer2Test {
     private final Helper helper;
     private Object config;
     private Attributes attributes;
+    private List<EquivalentAddressGroup> addresses;
     private Status upstreamError;
     private boolean shutdown;
 
@@ -851,6 +928,7 @@ public class CdsLoadBalancer2Test {
     public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
       attributes = resolvedAddresses.getAttributes();
+      addresses = resolvedAddresses.getAddresses();
       return Status.OK;
     }
 

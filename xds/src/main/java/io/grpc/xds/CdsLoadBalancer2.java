@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.UnsignedInts;
 import com.google.errorprone.annotations.CheckReturnValue;
@@ -58,6 +59,7 @@ import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.AggregateConfig;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.XdsLbEndpointCollectionResource.LbEndpointCollectionUpdate;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
@@ -139,12 +141,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
     if (clusterConfig.getChildren() instanceof EndpointConfig) {
       addBackendServicePickDetailsLabel = true;
-      StatusOr<EdsUpdate> edsUpdate = getEdsUpdate(xdsConfig, clusterName);
+      StatusOr<XdsClusterConfig.EndpointConfig> endpointConfig =
+          getEndpointConfig(xdsConfig, clusterName);
       StatusOr<ClusterResolutionResult> statusOrResult = clusterState.edsUpdateToResult(
           clusterName,
           clusterConfig.getClusterResource(),
           clusterConfig.getClusterResource().lbPolicyConfig(),
-          edsUpdate);
+          endpointConfig);
       if (!statusOrResult.hasValue()) {
         Status status = Status.UNAVAILABLE
             .withDescription(statusOrResult.getStatus().getDescription())
@@ -286,7 +289,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     return (a * b) >> FIXED_POINT_FRACTIONAL_BITS;
   }
 
-  private static StatusOr<EdsUpdate> getEdsUpdate(XdsConfig xdsConfig, String cluster) {
+  private static StatusOr<XdsClusterConfig.EndpointConfig> getEndpointConfig(
+      XdsConfig xdsConfig, String cluster) {
     StatusOr<XdsClusterConfig> clusterConfig = xdsConfig.getClusters().get(cluster);
     if (clusterConfig == null) {
       return StatusOr.fromStatus(Status.INTERNAL
@@ -299,9 +303,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       return StatusOr.fromStatus(Status.INTERNAL
           .withDescription("BUG: cluster resolver cluster with children of unknown type"));
     }
-    XdsClusterConfig.EndpointConfig endpointConfig =
-        (XdsClusterConfig.EndpointConfig) clusterConfig.getValue().getChildren();
-    return endpointConfig.getEndpoint();
+    return StatusOr.fromValue(
+        (XdsClusterConfig.EndpointConfig) clusterConfig.getValue().getChildren());
   }
 
   /**
@@ -332,7 +335,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         String clusterName,
         CdsUpdate discovery,
         Object lbConfig,
-        StatusOr<EdsUpdate> updateOr) {
+        StatusOr<XdsClusterConfig.EndpointConfig> endpointConfigOr) {
+      if (!endpointConfigOr.hasValue()) {
+        return StatusOr.fromStatus(endpointConfigOr.getStatus());
+      }
+      XdsClusterConfig.EndpointConfig endpointConfig = endpointConfigOr.getValue();
+      StatusOr<EdsUpdate> updateOr = endpointConfig.getEndpoint();
       if (!updateOr.hasValue()) {
         return StatusOr.fromStatus(updateOr.getStatus());
       }
@@ -369,6 +377,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
       for (Locality locality : localityLbEndpoints.keySet()) {
         LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
+        List<LbEndpoint> localityEndpoints = resolveEndpoints(localityLbInfo, endpointConfig);
         String priorityName = localityPriorityNames.get(locality);
         String localityName = localityName(locality);
         AddressFilter.PathChain pathChain =
@@ -382,13 +391,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         long endpointWeightSum = 0;
         if (pickFirstWeightedShuffling) {
           localityWeightSum = priorityLocalityWeightSums.get(priorityName);
-          for (LbEndpoint endpoint : localityLbInfo.endpoints()) {
+          for (LbEndpoint endpoint : localityEndpoints) {
             if (endpoint.isHealthy()) {
               endpointWeightSum += UnsignedInts.toLong(endpoint.loadBalancingWeight());
             }
           }
         }
-        for (LbEndpoint endpoint : localityLbInfo.endpoints()) {
+        for (LbEndpoint endpoint : localityEndpoints) {
           if (endpoint.isHealthy()) {
             discard = false;
             long weight;
@@ -457,6 +466,34 @@ final class CdsLoadBalancer2 extends LoadBalancer {
               prioritizedLocalityWeights, dropOverloads);
       return StatusOr.fromValue(new ClusterResolutionResult(addresses, priorityChildConfigs,
           sortedPriorityNames));
+    }
+
+    /**
+     * Returns the endpoints of a locality, which are either inlined in the EDS resource or fetched
+     * as a separate {@code LbEndpointCollection} resource (gRFC A95). If the referenced collection
+     * is missing or invalid, the locality is treated as unreachable.
+     */
+    private List<LbEndpoint> resolveEndpoints(
+        LocalityLbEndpoints localityLbInfo, XdsClusterConfig.EndpointConfig endpointConfig) {
+      if (localityLbInfo.endpointCollection() != null) {
+        return localityLbInfo.endpointCollection().endpoints();
+      }
+      String collectionName = localityLbInfo.lbEndpointCollectionName();
+      StatusOr<LbEndpointCollectionUpdate> collectionOr =
+          endpointConfig.getLbEndpointCollectionResources().get(collectionName);
+      if (collectionOr == null) {
+        logger.log(XdsLogLevel.INFO,
+            "LbEndpointCollection {0} not found; treating locality as unreachable",
+            collectionName);
+        return ImmutableList.of();
+      }
+      if (!collectionOr.hasValue()) {
+        logger.log(XdsLogLevel.INFO,
+            "LbEndpointCollection {0} unavailable ({1}); treating locality as unreachable",
+            collectionName, collectionOr.getStatus());
+        return ImmutableList.of();
+      }
+      return collectionOr.getValue().getEndpointCollection().endpoints();
     }
 
     private SocketAddress rewriteAddress(SocketAddress addr,
