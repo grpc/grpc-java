@@ -214,3 +214,10 @@ public class Http2ClientStreamTransportStateGrpcAcceptEncodingTest {
     public BaseTransportState(TransportTracer transportTracer) {
       this(transportTracer, CallOptions.DEFAULT);
     }
+
+    @Override
+    protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
+      // No-op for tests
+    }
+  }
+}
