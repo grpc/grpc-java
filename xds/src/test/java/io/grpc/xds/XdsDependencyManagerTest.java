@@ -355,20 +355,54 @@ public class XdsDependencyManagerTest {
         .get(CLUSTER_NAME)).getLbEndpointCollectionResources()).isEmpty();
   }
 
+  @Test
+  public void verify_ledsCollection_sharedByTwoLocalities() throws Exception {
+    BootstrapperImpl.enableEndpointFallback = true;
+    // Two distinct localities referring to the same LbEndpointCollection resource.
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.<String, Message>of(EDS_NAME,
+        ClusterLoadAssignment.newBuilder()
+            .setClusterName(EDS_NAME)
+            .addEndpoints(ledsLocality("region1", LEDS_NAME))
+            .addEndpoints(ledsLocality("region2", LEDS_NAME))
+            .build()));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LEDS, ImmutableMap.<String, Message>of(
+        LEDS_NAME, buildLbEndpointCollection("127.0.0.30")));
+
+    xdsDependencyManager.start(xdsConfigWatcher);
+
+    verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    XdsClusterConfig.EndpointConfig endpointConfig =
+        getEndpointConfig(xdsUpdateCaptor.getValue().getValue().getClusters().get(CLUSTER_NAME));
+    assertThat(endpointConfig.getEndpoint().getValue().localityLbEndpointsMap).hasSize(2);
+    // The collection is stored once and subscribed to once.
+    assertThat(endpointConfig.getLbEndpointCollectionResources().keySet())
+        .containsExactly(LEDS_NAME);
+    Map<XdsResourceType<?>, Map<String, ResourceMetadata>> watches =
+        xdsClient.getSubscribedResourcesMetadataSnapshot().get();
+    assertThat(watches.get(XdsLbEndpointCollectionResource.getInstance()).keySet())
+        .containsExactly(LEDS_NAME);
+  }
+
   /** Replaces the default EDS resource with one whose only locality points at a LEDS resource. */
   private void setEdsWithLeds(String collectionName) {
     ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
         .setClusterName(EDS_NAME)
-        .addEndpoints(LocalityLbEndpoints.newBuilder()
-            .setLoadBalancingWeight(UInt32Value.of(10))
-            .setPriority(0)
-            .setLedsClusterLocalityConfig(LedsClusterLocalityConfig.newBuilder()
-                .setLedsConfig(ConfigSource.newBuilder()
-                    .setSelf(SelfConfigSource.getDefaultInstance()))
-                .setLedsCollectionName(collectionName)))
+        .addEndpoints(ledsLocality("", collectionName))
         .build();
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
         ImmutableMap.<String, Message>of(EDS_NAME, clusterLoadAssignment));
+  }
+
+  /** Builds a locality in {@code region} whose endpoints come from a LEDS resource. */
+  private static LocalityLbEndpoints.Builder ledsLocality(String region, String collectionName) {
+    return LocalityLbEndpoints.newBuilder()
+        .setLocality(io.envoyproxy.envoy.config.core.v3.Locality.newBuilder().setRegion(region))
+        .setLoadBalancingWeight(UInt32Value.of(10))
+        .setPriority(0)
+        .setLedsClusterLocalityConfig(LedsClusterLocalityConfig.newBuilder()
+            .setLedsConfig(ConfigSource.newBuilder()
+                .setSelf(SelfConfigSource.getDefaultInstance()))
+            .setLedsCollectionName(collectionName));
   }
 
   private static LbEndpointCollection buildLbEndpointCollection(String address) {

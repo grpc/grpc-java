@@ -1255,6 +1255,20 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  public void parseLocalityLbEndpoints_endpointWithoutAddress() throws ResourceInvalidException {
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
+            .setPriority(0)
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.getDefaultInstance())
+            .build();
+    StructOrError<LocalityLbEndpoints> struct = XdsEndpointResource.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail()).isEqualTo("LbEndpoint with no endpoint/address");
+  }
+
+  @Test
   public void parseLocalityLbEndpoints_ledsClusterLocalityConfig()
       throws ResourceInvalidException {
     BootstrapperImpl.enableEndpointFallback = true;

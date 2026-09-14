@@ -23,6 +23,7 @@ import com.github.xds.core.v3.CollectionEntry;
 import com.github.xds.core.v3.ResourceLocator;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.testing.EqualsTester;
 import com.google.protobuf.Any;
 import com.google.protobuf.StringValue;
 import com.google.protobuf.UInt32Value;
@@ -130,6 +131,26 @@ public class XdsLbEndpointCollectionResourceTest {
     ResourceInvalidException ex = assertThrows(ResourceInvalidException.class,
         () -> resource.doParse(null, LbEndpoint.getDefaultInstance()));
     assertThat(ex).hasMessageThat().contains("Invalid message type");
+  }
+
+  @Test
+  public void lbEndpointCollectionUpdate_equalsAndHashCode() {
+    Endpoints.LbEndpointCollection collection = Endpoints.LbEndpointCollection.create(
+        ImmutableList.of(
+            Endpoints.LbEndpoint.create("172.14.14.5", 8888, 20, true, "", ImmutableMap.of())));
+    Endpoints.LbEndpointCollection otherCollection = Endpoints.LbEndpointCollection.create(
+        ImmutableList.of(
+            Endpoints.LbEndpoint.create("172.14.14.6", 8888, 20, true, "", ImmutableMap.of())));
+
+    new EqualsTester()
+        .addEqualityGroup(
+            new LbEndpointCollectionUpdate(collection),
+            new LbEndpointCollectionUpdate(collection))
+        .addEqualityGroup(new LbEndpointCollectionUpdate(otherCollection))
+        .addEqualityGroup(
+            new LbEndpointCollectionUpdate(
+                Endpoints.LbEndpointCollection.create(ImmutableList.of())))
+        .testEquals();
   }
 
   private static CollectionEntry inlineEntry(LbEndpoint endpoint) {

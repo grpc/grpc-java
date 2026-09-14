@@ -78,6 +78,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -300,6 +301,65 @@ public class CdsLoadBalancer2Test {
     assertPickerStatus(pickerCaptor.getValue(), Status.UNAVAILABLE
         .withDescription("No usable endpoint from cluster: " + CLUSTER));
     assertThat(childBalancers).isEmpty();
+  }
+
+  @Test
+  public void edsCluster_ledsCollectionNotFound_localityUnreachable() {
+    BootstrapperImpl.enableEndpointFallback = true;
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, EDS_CLUSTER));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
+        ImmutableMap.of(EDS_SERVICE_NAME, edsWithLeds(LEDS_NAME)));
+    // The control plane never sends the referenced LbEndpointCollection resource.
+
+    startXdsDepManager();
+
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertPickerStatus(pickerCaptor.getValue(), Status.UNAVAILABLE
+        .withDescription("No usable endpoint from cluster: " + CLUSTER));
+    assertThat(childBalancers).isEmpty();
+  }
+
+  /**
+   * XdsDependencyManager always puts an entry in the collection map for every collection a locality
+   * refers to, but the locality must still be treated as unreachable if that ever stops holding.
+   */
+  @Test
+  public void edsCluster_ledsCollectionAbsentFromConfig_localityUnreachable() {
+    BootstrapperImpl.enableEndpointFallback = true;
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, EDS_CLUSTER));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
+        ImmutableMap.of(EDS_SERVICE_NAME, edsWithLeds(LEDS_NAME)));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LEDS, ImmutableMap.of(
+        LEDS_NAME, LbEndpointCollection.newBuilder()
+            .addEntries(inlineLbEndpoint("127.0.0.5", 1234))
+            .build()));
+    startXdsDepManager();
+
+    // Re-deliver the published config with the collection dropped from the endpoint config.
+    XdsConfig.XdsClusterConfig clusterConfig = lastXdsConfig.getClusters().get(CLUSTER).getValue();
+    XdsConfig.XdsClusterConfig.EndpointConfig endpointConfig =
+        (XdsConfig.XdsClusterConfig.EndpointConfig) clusterConfig.getChildren();
+    XdsConfig strippedConfig = new XdsConfig.XdsConfigBuilder()
+        .setListener(lastXdsConfig.getListener())
+        .setRoute(lastXdsConfig.getRoute())
+        .setVirtualHost(lastXdsConfig.getVirtualHost())
+        .addCluster(CLUSTER, StatusOr.fromValue(new XdsConfig.XdsClusterConfig(
+            CLUSTER, clusterConfig.getClusterResource(),
+            new XdsConfig.XdsClusterConfig.EndpointConfig(endpointConfig.getEndpoint()))))
+        .build();
+
+    Status status = loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Collections.emptyList())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CONFIG, strippedConfig)
+            .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, xdsDepManager)
+            .build())
+        .setLoadBalancingPolicyConfig(new CdsConfig(CLUSTER))
+        .build());
+
+    assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(status.getDescription()).isEqualTo("No usable endpoint from cluster: " + CLUSTER);
   }
 
   private static ClusterLoadAssignment edsWithLeds(String collectionName) {
