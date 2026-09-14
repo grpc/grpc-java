@@ -51,11 +51,17 @@ Log statements made outside of an RPC, such as the server's startup message, are
 2026/09/14 15:22:04:132 PDT INFO  CustomLogServer - Server started, listening on 50051
 ```
 
-### Caveat
+### Why each callback sets the context
 
-The interceptor establishes the `ThreadContext` only for the `ServerCall.Listener` callbacks. It is
-not set while interceptors further down the chain run their `interceptCall()` method, so a
-downstream interceptor that logs from `interceptCall()` will not see these values.
+gRPC does not guarantee that every callback for a call runs on the same thread, and an application
+that supplies its own call executor may have each callback handled by a different worker. Logging
+frameworks read from thread-local storage, so the values have to be established on whichever thread
+is actually running the code that logs. That is why each `ServerCall.Listener` callback re-populates
+the `ThreadContext` and clears it again on the way out, instead of the interceptor setting it once
+and leaving it.
+
+The context is also established around `next.startCall()`, so that interceptors further down the
+chain see these values while their own `interceptCall()` runs.
 
 For more information, refer to gRPC Java's [README](../../README.md) and
 [tutorial](https://grpc.io/docs/languages/java/basics).

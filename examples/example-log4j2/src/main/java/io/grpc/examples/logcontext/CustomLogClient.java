@@ -47,6 +47,10 @@ public class CustomLogClient {
 
   private static final Logger logger = Logger.getLogger(CustomLogClient.class.getName());
 
+  // Resolved once rather than per RPC: InetAddress.getLocalHost() may block on a DNS lookup, and
+  // start() runs on the calling thread.
+  private static final String LOCAL_HOST_NAME = localHostName();
+
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
   /** Construct a client for accessing the server using the existing channel. */
@@ -60,7 +64,7 @@ public class CustomLogClient {
         return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
           @Override
           public void start(Listener<RespT> responseListener, Metadata headers) {
-            headers.put(HeaderServerInterceptor.CLIENT_NAME_KEY, localHostName());
+            headers.put(HeaderServerInterceptor.CLIENT_NAME_KEY, LOCAL_HOST_NAME);
             super.start(responseListener, headers);
           }
         };

@@ -18,9 +18,10 @@
   <Appenders>
     <Console name="Console" target="SYSTEM_ERR">
       <!--
-        %X prints the entire ThreadContext map, which is what HeaderServerInterceptor
-        populates. %notEmpty suppresses it for log statements made outside of an RPC,
-        where the map is empty. Use %X{requestId} to print a single key instead.
+        %X{requestId,clientName} prints just those two keys of the ThreadContext map, which
+        are the ones HeaderServerInterceptor populates; a bare %X would print the whole map.
+        %notEmpty suppresses the group, including its leading space, for log statements made
+        outside of an RPC, where those keys are absent.
       -->
       <PatternLayout
           pattern="%d{yyyy/MM/dd HH:mm:ss:SSS zzz} %-5level %logger{1} - %msg%notEmpty{ %X{requestId,clientName}}%n"/>

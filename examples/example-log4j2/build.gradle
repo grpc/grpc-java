@@ -23,7 +23,7 @@ java {
 // updating the version in our release process.
 def grpcVersion = '1.85.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protocVersion = '3.25.8'
-def log4jVersion = '2.26.0'
+def log4jVersion = '2.26.1'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
