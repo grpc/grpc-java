@@ -952,7 +952,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         // noop
       }
 
-      @Override
       @SuppressWarnings({"UnusedMethod", "UnusedVariable"})
       public void setMessageCompression(boolean enabled, String compressorName) {
         // noop
