@@ -1,0 +1,28 @@
+# BCR presubmit configuration for grpc-java
+# Tests the main module and the examples test module
+
+# Test the main grpc-java module
+matrix:
+  platform: ["debian10", "macos", "ubuntu2004", "windows"]
+  bazel: ["7.x", "8.x"]
+tasks:
+  verify_targets:
+    platform: ${{ platform }}
+    bazel: ${{ bazel }}
+    build_targets:
+      - '@grpc-java//:java_grpc_library__external_repo_test'
+
+# Test the examples module which uses grpc-java as a dependency
+bcr_test_module:
+  module_path: "examples"
+  matrix:
+    platform: ["debian10", "macos", "ubuntu2004", "windows"]
+    bazel: ["7.x", "8.x"]
+  tasks:
+    run_test_module:
+      name: "Run examples test module"
+      platform: ${{ platform }}
+      bazel: ${{ bazel }}
+      build_targets:
+        - '//src/main/java/io/grpc/examples/helloworld:hello-world-client'
+        - '//src/main/java/io/grpc/examples/helloworld:hello-world-server'
