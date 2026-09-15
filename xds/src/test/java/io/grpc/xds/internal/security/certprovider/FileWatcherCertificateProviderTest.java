@@ -200,6 +200,94 @@ public class FileWatcherCertificateProviderTest {
   }
 
   @Test
+  public void identityOnlyProvider_reloadsOnlyCert()
+      throws IOException, CertificateException, InterruptedException {
+    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, null, null,
+        600L, timeService, timeProvider);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, null, null, false, false, false, false);
+    provider.checkAndReloadCertificates();
+    verifyWatcherUpdates(CLIENT_PEM_FILE, null, null);
+    verifyTimeServiceAndScheduledFuture();
+  }
+
+  @Test
+  public void caRootsOnlyProvider_reloadsOnlyRoots()
+      throws IOException, CertificateException, InterruptedException {
+    provider = new FileWatcherCertificateProvider(watcher, false, null, null, rootFile, null,
+        600L, timeService, timeProvider);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    populateTarget(null, null, CA_PEM_FILE, null, false, false, false, false);
+    provider.checkAndReloadCertificates();
+    verifyWatcherUpdates(null, CA_PEM_FILE, null);
+    verifyTimeServiceAndScheduledFuture();
+  }
+
+  @Test
+  public void spiffeRootsOnlyProvider_reloadsOnlySpiffeMap() throws Exception {
+    provider = new FileWatcherCertificateProvider(watcher, false, null, null, null,
+        spiffeTrustMapFile, 600L, timeService, timeProvider);
+    TestScheduledFuture<?> scheduledFuture = new TestScheduledFuture<>();
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    populateTarget(null, null, null, SPIFFE_TRUST_MAP_FILE, false, false, false, false);
+    provider.checkAndReloadCertificates();
+    verifyWatcherUpdates(null, null, SPIFFE_TRUST_MAP_FILE);
+    verifyTimeServiceAndScheduledFuture();
+  }
+
+  @Test
+  public void provider_constructor_rejectsRootsOnlyWhenNotifyCertUpdatesTrue() {
+    try {
+      new FileWatcherCertificateProvider(watcher, true, null, null, rootFile, null, 600L,
+          timeService, timeProvider);
+      org.junit.Assert.fail("exception expected");
+    } catch (UnsupportedOperationException expected) {
+      assertThat(expected).hasMessageThat().contains("notifyCertUpdates");
+    }
+  }
+
+  @Test
+  public void provider_constructor_rejectsBothMissing() {
+    try {
+      new FileWatcherCertificateProvider(watcher, true, null, null, null, null, 600L, timeService,
+          timeProvider);
+      org.junit.Assert.fail("exception expected");
+    } catch (IllegalArgumentException expected) {
+      assertThat(expected).hasMessageThat().contains("identity");
+    }
+  }
+
+  @Test
+  public void provider_constructor_rejectsKeyWithoutCert() {
+    try {
+      new FileWatcherCertificateProvider(watcher, true, null, keyFile, rootFile, null, 600L,
+          timeService, timeProvider);
+      org.junit.Assert.fail("exception expected");
+    } catch (IllegalArgumentException expected) {
+      assertThat(expected).hasMessageThat().contains("certFile");
+    }
+  }
+
+  @Test
+  public void provider_constructor_rejectsCertWithoutKey() {
+    try {
+      new FileWatcherCertificateProvider(watcher, true, certFile, null, rootFile, null, 600L,
+          timeService, timeProvider);
+      org.junit.Assert.fail("exception expected");
+    } catch (IllegalArgumentException expected) {
+      assertThat(expected).hasMessageThat().contains("keyFile");
+    }
+  }
+
+  @Test
   public void closeDoesNotScheduleNext() throws IOException, CertificateException {
     TestScheduledFuture<?> scheduledFuture =
             new TestScheduledFuture<>();
