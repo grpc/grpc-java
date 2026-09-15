@@ -22,6 +22,7 @@ import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.app.admin.DevicePolicyManager;
@@ -35,9 +36,11 @@ import androidx.test.core.app.ApplicationProvider;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Status;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -524,14 +527,37 @@ public final class SecurityPoliciesTest {
   @Test
   public void testAllOf_failsIfOneSecurityPoliciesNotAllowed() throws Exception {
     policy =
-        SecurityPolicies.allOf(
-            SecurityPolicies.internalOnly(),
-            SecurityPolicies.permissionDenied("Not allowed SecurityPolicy"));
+            SecurityPolicies.allOf(
+                    SecurityPolicies.internalOnly(),
+                    SecurityPolicies.permissionDenied("Not allowed SecurityPolicy"));
 
     assertThat(policy.checkAuthorization(MY_UID).getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+            .isEqualTo(Status.PERMISSION_DENIED.getCode());
     assertThat(policy.checkAuthorization(MY_UID).getDescription())
-        .contains("Not allowed SecurityPolicy");
+            .contains("Not allowed SecurityPolicy");
+  }
+
+  @Test
+  public void testAllOfAsync_succeedsIfAllSecurityPoliciesAllowed() {
+    policy =
+        SecurityPolicies.allOf(
+            SecurityPolicies.internalOnly(),
+            makeAsyncPolicy(uid -> immediateFuture(Status.OK)));
+
+    assertThat(policy.checkAuthorization(MY_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  public void testAllOfAsync_failsIfOneSecurityPoliciesNotAllowed()  {
+    policy =
+        SecurityPolicies.allOf(
+            SecurityPolicies.internalOnly(),
+            makeAsyncPolicy(uid -> immediateFuture(Status.OK)),
+            makeAsyncPolicy(uid -> immediateFuture(Status.ABORTED)),
+            makeAsyncPolicy(uid -> immediateFuture(Status.INVALID_ARGUMENT)));
+
+    assertThat(policy.checkAuthorization(MY_UID).getCode())
+        .isEqualTo(Status.Code.ABORTED);
   }
 
   @Test
@@ -702,5 +728,14 @@ public final class SecurityPoliciesTest {
 
   private static byte[] getSha256Hash(Signature signature) {
     return Hashing.sha256().hashBytes(signature.toByteArray()).asBytes();
+  }
+
+  private static AsyncSecurityPolicy makeAsyncPolicy(Function<Integer, ListenableFuture<Status>> statusProvider) {
+    return new AsyncSecurityPolicy() {
+      @Override
+      public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+        return statusProvider.apply(uid);
+      }
+    };
   }
 }
