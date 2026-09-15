@@ -96,7 +96,6 @@ def _java_rpc_library_impl(ctx):
             proto_info = ctx.attr.srcs[0][ProtoInfo],
             proto_lang_toolchain_info = toolchain,
             generated_files = [srcjar],
-            plugin_output = srcjar.path,
         )
         java_toolchain = ctx.toolchains["@bazel_tools//tools/jdk:toolchain_type"].java
         java_plugins = []

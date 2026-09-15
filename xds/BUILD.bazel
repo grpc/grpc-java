@@ -322,7 +322,8 @@ java_grpc_library(
 
 proto_lang_toolchain(
     name = "java_grpc_library_toolchain",
-    command_line = "--rpc-plugin_out=%s",
+    command_line = "--rpc-plugin_out=$(OUT)",
+    output_files = "single",
     plugin = "//compiler:grpc_java_plugin",
     plugin_format_flag = "--plugin=protoc-gen-rpc-plugin=%s",
     runtime = ":java_grpc_library_deps",
