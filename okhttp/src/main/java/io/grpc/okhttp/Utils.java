@@ -75,15 +75,25 @@ class Utils {
     Preconditions.checkArgument(spec.isTls(), "plaintext ConnectionSpec is not accepted");
 
     List<com.squareup.okhttp.TlsVersion> tlsVersionList = spec.tlsVersions();
-    String[] tlsVersions = new String[tlsVersionList.size()];
-    for (int i = 0; i < tlsVersions.length; i++) {
-      tlsVersions[i] = tlsVersionList.get(i).javaName();
+    String[] tlsVersions;
+    if (tlsVersionList != null) {
+      tlsVersions = new String[tlsVersionList.size()];
+      for (int i = 0; i < tlsVersions.length; i++) {
+        tlsVersions[i] = tlsVersionList.get(i).javaName();
+      }
+    } else {
+      tlsVersions = null;
     }
 
     List<com.squareup.okhttp.CipherSuite> cipherSuiteList = spec.cipherSuites();
-    CipherSuite[] cipherSuites = new CipherSuite[cipherSuiteList.size()];
-    for (int i = 0; i < cipherSuites.length; i++) {
-      cipherSuites[i] = CipherSuite.valueOf(cipherSuiteList.get(i).name());
+    CipherSuite[] cipherSuites;
+    if (cipherSuiteList != null) {
+      cipherSuites = new CipherSuite[cipherSuiteList.size()];
+      for (int i = 0; i < cipherSuites.length; i++) {
+        cipherSuites[i] = CipherSuite.valueOf(cipherSuiteList.get(i).name());
+      }
+    } else {
+      cipherSuites = null;
     }
 
     return new ConnectionSpec.Builder(spec.isTls())
