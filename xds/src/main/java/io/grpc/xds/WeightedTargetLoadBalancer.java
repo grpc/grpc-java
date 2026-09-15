@@ -148,6 +148,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
 
     ConnectivityState overallState = null;
     List<WeightedChildPicker> errorPickers = new ArrayList<>();
+    List<WeightedChildPicker> connectingPickers = new ArrayList<>();
     for (String name : targets.keySet()) {
       ChildHelper childHelper = childHelpers.get(name);
       ConnectivityState childState = childHelper.currentState;
@@ -157,6 +158,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
         childPickers.add(new WeightedChildPicker(weight, childHelper.currentPicker));
       } else if (TRANSIENT_FAILURE == childState) {
         errorPickers.add(new WeightedChildPicker(weight, childHelper.currentPicker));
+      } else if (CONNECTING == childState || IDLE == childState) {
+        connectingPickers.add(new WeightedChildPicker(weight, childHelper.currentPicker));
       }
     }
 
@@ -164,6 +167,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     if (childPickers.isEmpty()) {
       if (overallState == TRANSIENT_FAILURE) {
         picker = new WeightedRandomPicker(errorPickers);
+      } else if (!connectingPickers.isEmpty()) {
+        picker = new WeightedRandomPicker(connectingPickers);
       } else {
         picker = new FixedResultPicker(
             PickResult.withNoResult("connecting", "weighted_target: connecting"));

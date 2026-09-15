@@ -23,6 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -56,6 +57,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -793,7 +795,7 @@ public class DelayedClientTransportTest {
     delayedTransport.reprocess(fakePicker(
         PickResult.withNoResult("rls_lookup_pending", "RLS request pending.")));
 
-    assertEquals(1, fakeTracer.delayEndedCount);
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.endedDelayTypes);
     assertEquals(Arrays.asList("connecting", "rls_lookup_pending"),
         fakeTracer.startedDelayTypes);
     assertEquals(Arrays.asList("pick_first: attempting to connect", "RLS request pending."),
@@ -801,7 +803,7 @@ public class DelayedClientTransportTest {
 
     delayedTransport.reprocess(mockPicker);
 
-    assertEquals(2, fakeTracer.delayEndedCount);
+    assertEquals(Arrays.asList("connecting", "rls_lookup_pending"), fakeTracer.endedDelayTypes);
   }
 
   @Test
@@ -818,7 +820,7 @@ public class DelayedClientTransportTest {
 
     stream.cancel(Status.CANCELLED);
 
-    assertEquals(1, fakeTracer.delayEndedCount);
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.endedDelayTypes);
   }
 
   @Test
@@ -835,7 +837,41 @@ public class DelayedClientTransportTest {
 
     delayedTransport.shutdownNow(Status.UNAVAILABLE);
 
-    assertEquals(1, fakeTracer.delayEndedCount);
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.endedDelayTypes);
+  }
+
+  /**
+   * The delay must end before the stream is closed. A started pending stream is closed inline by
+   * {@code setStream()}, so the delay can not be ended after the stream has been handed over.
+   */
+  @Test
+  public void streamDelayMetrics_shutdownNow_endsDelayBeforeClosingStartedStream() {
+    ClientStreamTracer tracer = mock(ClientStreamTracer.class);
+    ClientStream stream = delayedTransport.newStream(
+        method, headers, callOptions, new ClientStreamTracer[] {tracer});
+    stream.start(streamListener);
+
+    delayedTransport.shutdownNow(Status.UNAVAILABLE);
+
+    InOrder inOrder = inOrder(tracer);
+    inOrder.verify(tracer).recordDelayStart("connecting", "client channel: waiting for picker");
+    inOrder.verify(tracer).recordDelayEnd("connecting");
+    inOrder.verify(tracer).streamClosed(any(Status.class));
+  }
+
+  @Test
+  public void streamDelayMetrics_cancel_endsDelayBeforeClosingStream() {
+    ClientStreamTracer tracer = mock(ClientStreamTracer.class);
+    ClientStream stream = delayedTransport.newStream(
+        method, headers, callOptions, new ClientStreamTracer[] {tracer});
+    stream.start(streamListener);
+
+    stream.cancel(Status.CANCELLED);
+
+    InOrder inOrder = inOrder(tracer);
+    inOrder.verify(tracer).recordDelayStart("connecting", "client channel: waiting for picker");
+    inOrder.verify(tracer).recordDelayEnd("connecting");
+    inOrder.verify(tracer).streamClosed(same(Status.CANCELLED));
   }
 
   @Test
@@ -855,8 +891,52 @@ public class DelayedClientTransportTest {
 
     assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
     assertEquals(Collections.singletonList("attempt 1"), fakeTracer.startedDelayReasons);
+    // The delay type is passed on every callback, so that tracers don't have to store it.
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.changedDelayTypes);
     assertEquals(Collections.singletonList("attempt 2"), fakeTracer.changedDelayReasons);
-    assertEquals(0, fakeTracer.delayEndedCount);
+    assertThat(fakeTracer.endedDelayTypes).isEmpty();
+  }
+
+  @Test
+  public void streamDelayMetrics_unchangedPick_doesNotRepeatCallbacks() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertThat(fakeTracer.changedDelayReasons).isEmpty();
+    assertThat(fakeTracer.endedDelayTypes).isEmpty();
+  }
+
+  @Test
+  public void streamDelayMetrics_equalPickFailures_doNotRepeatCallbacks() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    delayedTransport.reprocess(
+        fakePicker(PickResult.withError(Status.UNAVAILABLE.withDescription("broken"))));
+    delayedTransport.newStream(
+        method, headers, callOptions.withWaitForReady(), customTracers);
+
+    assertEquals(Collections.singletonList("picker_failing_with_wait_for_ready"),
+        fakeTracer.startedDelayTypes);
+
+    // A distinct, but equal, failure produces the same reason, which is not a change.
+    delayedTransport.reprocess(
+        fakePicker(PickResult.withError(Status.UNAVAILABLE.withDescription("broken"))));
+
+    assertEquals(Collections.singletonList("picker_failing_with_wait_for_ready"),
+        fakeTracer.startedDelayTypes);
+    assertThat(fakeTracer.changedDelayReasons).isEmpty();
+    assertThat(fakeTracer.endedDelayTypes).isEmpty();
   }
 
   @Test
@@ -908,38 +988,6 @@ public class DelayedClientTransportTest {
         fakeTracer.startedDelayReasons);
   }
 
-  private static final class FakeStreamTracer extends ClientStreamTracer {
-    final List<String> startedDelayTypes = new ArrayList<>();
-    final List<String> startedDelayReasons = new ArrayList<>();
-    final List<String> changedDelayReasons = new ArrayList<>();
-    int delayEndedCount = 0;
-
-    @Override
-    public void recordAttemptDelayStart(String delayType, String delayReason) {
-      startedDelayTypes.add(delayType);
-      startedDelayReasons.add(delayReason);
-    }
-
-    @Override
-    public void recordAttemptDelayReasonChanged(String delayReason) {
-      changedDelayReasons.add(delayReason);
-    }
-
-    @Override
-    public void recordAttemptDelayEnd() {
-      delayEndedCount++;
-    }
-  }
-
-  private static SubchannelPicker fakePicker(final PickResult result) {
-    return new SubchannelPicker() {
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return result;
-      }
-    };
-  }
-
   @Test
   public void streamDelayMetrics_updateDelayAfterCancellation_isNoOp() {
     final FakeStreamTracer fakeTracer = new FakeStreamTracer();
@@ -953,7 +1001,7 @@ public class DelayedClientTransportTest {
     stream.start(streamListener);
 
     assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
-    assertEquals(0, fakeTracer.delayEndedCount);
+    assertThat(fakeTracer.endedDelayTypes).isEmpty();
 
     // Reprocess with a custom picker that cancels the stream during the pick.
     // This exactly simulates the concurrent timing race.
@@ -970,7 +1018,146 @@ public class DelayedClientTransportTest {
     // VERIFICATION:
     // The updateDelay called after the cancellation must be ignored because of our check.
     assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
-    assertEquals(1, fakeTracer.delayEndedCount);
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.endedDelayTypes);
+  }
+
+  /**
+   * The tracers are called by the channel itself, so calling them while a channel lock is held
+   * risks deadlocking with whatever the tracer does. This is the lock that {@code newStream()}
+   * holds while it queues the stream.
+   */
+  @Test
+  public void streamDelayMetrics_delayStartIsNotDeliveredUnderTransportLock() {
+    ClientStreamTracer tracer = new ClientStreamTracer() {
+      @Override
+      public void recordDelayStart(String delayType, String delayReason) {
+        assertCompletesOnOtherThread(
+            "transport lock is held while the tracers are called",
+            new Runnable() {
+              @Override
+              public void run() {
+                delayedTransport.hasPendingStreams();
+              }
+            });
+      }
+    };
+
+    delayedTransport.newStream(method, headers, callOptions, new ClientStreamTracer[] {tracer});
+  }
+
+  /**
+   * Same as above, for the stream monitor that {@code reprocess()} would hold while updating a
+   * delay. It is the same monitor that {@code cancel()} and {@code writeMessage()} use.
+   */
+  @Test
+  public void streamDelayMetrics_delayUpdateIsNotDeliveredUnderStreamMonitor() {
+    final ClientStream[] streamHolder = new ClientStream[1];
+    ClientStreamTracer tracer = new ClientStreamTracer() {
+      @Override
+      public void recordDelayReasonChanged(String delayType, String delayReason) {
+        assertCompletesOnOtherThread(
+            "the stream monitor is held while the tracers are called",
+            new Runnable() {
+              @Override
+              public void run() {
+                streamHolder[0].appendTimeoutInsight(new InsightBuilder());
+              }
+            });
+      }
+    };
+
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult("connecting", "attempt 1")));
+    streamHolder[0] = delayedTransport.newStream(
+        method, headers, callOptions, new ClientStreamTracer[] {tracer});
+    streamHolder[0].start(streamListener);
+
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult("connecting", "attempt 2")));
+  }
+
+  @Test
+  public void streamDelayMetrics_throwingTracer_doesNotBlockLaterCallbacks() {
+    final List<String> endedDelayTypes = new ArrayList<>();
+    ClientStreamTracer throwingTracer = new ClientStreamTracer() {
+      @Override
+      public void recordDelayStart(String delayType, String delayReason) {
+        throw new IllegalStateException("tracer is broken");
+      }
+
+      @Override
+      public void recordDelayEnd(String delayType) {
+        endedDelayTypes.add(delayType);
+      }
+    };
+
+    try {
+      delayedTransport.newStream(
+          method, headers, callOptions, new ClientStreamTracer[] {throwingTracer});
+      fail("Should have thrown");
+    } catch (IllegalStateException expected) {
+      assertEquals("tracer is broken", expected.getMessage());
+    }
+
+    delayedTransport.shutdownNow(Status.UNAVAILABLE);
+
+    assertEquals(Collections.singletonList("connecting"), endedDelayTypes);
+  }
+
+  /**
+   * Runs {@code task} on another thread and asserts that it finishes, which it can not do if the
+   * calling thread holds a lock that {@code task} needs.
+   */
+  private static void assertCompletesOnOtherThread(String message, final Runnable task) {
+    final CountDownLatch done = new CountDownLatch(1);
+    Thread thread = new Thread(new Runnable() {
+      @Override
+      public void run() {
+        task.run();
+        done.countDown();
+      }
+    });
+    thread.start();
+    boolean completed;
+    try {
+      completed = done.await(5, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError(e);
+    }
+    assertTrue(message, completed);
+  }
+
+  private static final class FakeStreamTracer extends ClientStreamTracer {
+    final List<String> startedDelayTypes = new ArrayList<>();
+    final List<String> startedDelayReasons = new ArrayList<>();
+    final List<String> changedDelayTypes = new ArrayList<>();
+    final List<String> changedDelayReasons = new ArrayList<>();
+    final List<String> endedDelayTypes = new ArrayList<>();
+
+    @Override
+    public void recordDelayStart(String delayType, String delayReason) {
+      startedDelayTypes.add(delayType);
+      startedDelayReasons.add(delayReason);
+    }
+
+    @Override
+    public void recordDelayReasonChanged(String delayType, String delayReason) {
+      changedDelayTypes.add(delayType);
+      changedDelayReasons.add(delayReason);
+    }
+
+    @Override
+    public void recordDelayEnd(String delayType) {
+      endedDelayTypes.add(delayType);
+    }
+  }
+
+  private static SubchannelPicker fakePicker(final PickResult result) {
+    return new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return result;
+      }
+    };
   }
 
   private static TransportProvider newTransportProvider(final ClientTransport transport) {

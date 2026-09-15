@@ -42,16 +42,16 @@ public class ForwardingClientStreamTracerTest {
   }
 
   @Test
-  public void attemptDelayMethodsForwarded() {
+  public void delayMethodsForwarded() {
     TestClientStreamTracer tracer = new TestClientStreamTracer();
-    tracer.recordAttemptDelayStart("connecting", "test");
-    verify(mockDelegate).recordAttemptDelayStart("connecting", "test");
+    tracer.recordDelayStart("connecting", "test");
+    verify(mockDelegate).recordDelayStart("connecting", "test");
 
-    tracer.recordAttemptDelayReasonChanged("test2");
-    verify(mockDelegate).recordAttemptDelayReasonChanged("test2");
+    tracer.recordDelayReasonChanged("connecting", "test2");
+    verify(mockDelegate).recordDelayReasonChanged("connecting", "test2");
 
-    tracer.recordAttemptDelayEnd();
-    verify(mockDelegate).recordAttemptDelayEnd();
+    tracer.recordDelayEnd("connecting");
+    verify(mockDelegate).recordDelayEnd("connecting");
   }
 
   private final class TestClientStreamTracer extends ForwardingClientStreamTracer {

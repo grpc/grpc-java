@@ -65,6 +65,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -158,6 +159,8 @@ public class WeightedTargetLoadBalancerTest {
 
   @Mock
   private Helper helper;
+  @Captor
+  private ArgumentCaptor<SubchannelPicker> pickerCaptor;
 
   private LoadBalancer weightedTargetLb;
   private int fooLbCreated;
@@ -440,7 +443,27 @@ public class WeightedTargetLoadBalancerTest {
     // But since those calls happen during the handling of teh resolved addresses of the parent
     // WeightedTargetLLoadBalancer, the overall balancing state should only be updated once.
     verify(helper, times(1)).updateBalancingState(any(), any());
+  }
 
+  @Test
+  public void connectingState_passesThroughChildDelayTypeAndReason() {
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
+        "target0", weightedLbConfig0);
+    weightedTargetLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
+            .build());
+
+    Helper childHelper = Iterables.getOnlyElement(childHelpers);
+    childHelper.updateBalancingState(
+        CONNECTING,
+        new FixedResultPicker(PickResult.withNoResult("cds_dynamic_discovery", "child_reason")));
+
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getDelayType()).isEqualTo("cds_dynamic_discovery");
+    assertThat(result.getDelayReason()).isEqualTo("weighted_target: child_reason");
   }
 
   private Object newChildConfig(LoadBalancerProvider provider, Object config) {

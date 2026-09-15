@@ -232,8 +232,7 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
-    if (isDelayObservabilityEnabled()
-        && isMetricEnabled("grpc.client.attempt.delay.duration", enableMetrics, disableDefault)) {
+    if (isMetricEnabled("grpc.client.attempt.delay.duration", enableMetrics, disableDefault)) {
       builder.clientAttemptDelayCounter(
           meter.histogramBuilder(
                   "grpc.client.attempt.delay.duration")
@@ -245,8 +244,7 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
-    if (isDelayObservabilityEnabled()
-        && isMetricEnabled("grpc.client.call.delay.duration", enableMetrics, disableDefault)) {
+    if (isMetricEnabled("grpc.client.call.delay.duration", enableMetrics, disableDefault)) {
       builder.clientCallDelayCounter(
           meter.histogramBuilder(
                   "grpc.client.call.delay.duration")
@@ -372,17 +370,6 @@ public final class GrpcOpenTelemetry {
     }
 
     return builder.build();
-  }
-
-  /**
-   * Checks whether experimental client attempt and call delay observability is globally enabled.
-   *
-   * <p>Guarded strictly by the {@code GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY} environment
-   * variable or JVM system property (defaults to {@code false}). When disabled, delay spans and
-   * duration histograms are suppressed to avoid runtime overhead.
-   */
-  static boolean isDelayObservabilityEnabled() {
-    return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", false);
   }
 
   static boolean isMetricEnabled(String metricName, Map<String, Boolean> enableMetrics,

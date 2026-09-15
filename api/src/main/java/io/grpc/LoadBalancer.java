@@ -842,6 +842,10 @@ public abstract class LoadBalancer {
     /**
      * Returns true if the {@link Subchannel}, {@link Status}, and
      * {@link ClientStreamTracer.Factory} all match.
+     *
+     * <p>The delay type and delay reason are deliberately excluded: they are diagnostic
+     * telemetry rather than part of the pick decision, and the channel re-reads them from each
+     * {@code PickResult} instead of comparing results.
      */
     @Override
     public boolean equals(Object other) {

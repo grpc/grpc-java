@@ -41,6 +41,14 @@ public final class OpenTelemetryConstants {
   public static final AttributeKey<String> CUSTOM_LABEL_KEY =
       AttributeKey.stringKey("grpc.client.call.custom");
 
+  /** Low-cardinality delay classification, used as a metric label and a delay span attribute. */
+  public static final AttributeKey<String> DELAY_TYPE_KEY =
+      AttributeKey.stringKey("grpc.delay_type");
+
+  /** High-cardinality delay diagnostic, recorded only as a delay span event attribute. */
+  public static final AttributeKey<String> DELAY_REASON_KEY =
+      AttributeKey.stringKey("grpc.delay_reason");
+
   public static final AttributeKey<String> DISCONNECT_ERROR_KEY =
       AttributeKey.stringKey("grpc.disconnect_error");
 

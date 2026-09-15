@@ -49,12 +49,13 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
+import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.testing.GrpcCleanupRule;
 import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.data.MetricData;
+import io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
@@ -113,13 +114,11 @@ public class GrpcOpenTelemetryTest {
   @Before
   public void setup() {
     originalEnableOtelTracing = GrpcOpenTelemetry.ENABLE_OTEL_TRACING;
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
   }
 
   @After
   public void tearDown() {
     GrpcOpenTelemetry.ENABLE_OTEL_TRACING = originalEnableOtelTracing;
-    System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
   }
 
   @Test
@@ -294,10 +293,10 @@ public class GrpcOpenTelemetryTest {
     ClientStreamTracer delayTracer = factory.newClientStreamTracer(
         ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(callOptions).build(),
         new Metadata());
-    delayTracer.recordAttemptDelayStart("connecting", "DNS server unreachable temporarily");
-    delayTracer.recordAttemptDelayEnd();
-    factory.recordCallDelayStart("resolving", "DNS resolution pending");
-    factory.recordCallDelayEnd();
+    delayTracer.recordDelayStart("connecting", "DNS server unreachable temporarily");
+    delayTracer.recordDelayEnd("connecting");
+    factory.recordDelayStart("resolving", "DNS resolution pending");
+    factory.recordDelayEnd("resolving");
 
     final CountDownLatch latch = new CountDownLatch(1);
     ClientCall<String, String> call = channel.newCall(method, callOptions);
@@ -312,11 +311,9 @@ public class GrpcOpenTelemetryTest {
     call.request(1);
     assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
-        .assertThat(openTelemetryRule.getMetrics())
+    OpenTelemetryAssertions.assertThat(openTelemetryRule.getMetrics())
         .anySatisfy(
-            metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
-                .assertThat(metric)
+            metric -> OpenTelemetryAssertions.assertThat(metric)
                 .hasName("grpc.client.attempt.delay.duration")
                 .hasDescription(
                     "EXPERIMENTAL. Time an RPC attempt spent waiting for a load balancing pick"
@@ -326,17 +323,15 @@ public class GrpcOpenTelemetryTest {
                     histogram -> histogram.hasPointsSatisfying(
                         point -> {
                           point.hasAttribute(
-                              AttributeKey.stringKey("grpc.target"), "target:///");
+                              OpenTelemetryConstants.TARGET_KEY, "target:///");
                           point.hasAttribute(
-                              AttributeKey.stringKey("grpc.method"), method.getFullMethodName());
+                              OpenTelemetryConstants.METHOD_KEY, method.getFullMethodName());
                           point.hasAttribute(
-                              AttributeKey.stringKey("grpc.delay_type"), "connecting");
+                              OpenTelemetryConstants.DELAY_TYPE_KEY, "connecting");
                         })));
-    io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
-        .assertThat(openTelemetryRule.getMetrics())
+    OpenTelemetryAssertions.assertThat(openTelemetryRule.getMetrics())
         .anySatisfy(
-            metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
-                .assertThat(metric)
+            metric -> OpenTelemetryAssertions.assertThat(metric)
                 .hasName("grpc.client.call.delay.duration")
                 .hasDescription(
                     "EXPERIMENTAL. Time an RPC spent waiting at the call level before an attempt"
@@ -346,55 +341,50 @@ public class GrpcOpenTelemetryTest {
                     histogram -> histogram.hasPointsSatisfying(
                         point -> {
                           point.hasAttribute(
-                              AttributeKey.stringKey("grpc.target"), "target:///");
+                              OpenTelemetryConstants.TARGET_KEY, "target:///");
                           point.hasAttribute(
-                              AttributeKey.stringKey("grpc.method"), method.getFullMethodName());
+                              OpenTelemetryConstants.METHOD_KEY, method.getFullMethodName());
                           point.hasAttribute(
-                              AttributeKey.stringKey("grpc.delay_type"), "resolving");
+                              OpenTelemetryConstants.DELAY_TYPE_KEY, "resolving");
                         })));
   }
 
   @Test
-  public void delayObservability_flagEnabled_notOptedIn_instrumentsNullAndNoMetrics() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
-    try {
-      OpenTelemetrySdk sdk = (OpenTelemetrySdk) openTelemetryRule.getOpenTelemetry();
-      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
-          sdk.getMeterProvider().get("grpc-java"),
-          ImmutableMap.of(),
-          false);
+  public void delayMetrics_notOptedIn_instrumentsNullAndNoMetrics() {
+    OpenTelemetrySdk sdk = (OpenTelemetrySdk) openTelemetryRule.getOpenTelemetry();
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        sdk.getMeterProvider().get("grpc-java"),
+        ImmutableMap.of(),
+        false);
 
-      assertThat(resource.clientAttemptDelayCounter()).isNull();
-      assertThat(resource.clientCallDelayCounter()).isNull();
+    assertThat(resource.clientAttemptDelayCounter()).isNull();
+    assertThat(resource.clientCallDelayCounter()).isNull();
 
-      OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-          new FakeClock().getStopwatchSupplier(), resource, emptyList(), emptyList());
-      OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
-          new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
-              module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
-              emptyList(), io.opentelemetry.context.Context.root());
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        new FakeClock().getStopwatchSupplier(), resource, emptyList(), emptyList());
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
+            module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
+            emptyList(), io.opentelemetry.context.Context.root());
 
-      // Verify call delay methods execute cleanly when counters are null
-      factory.recordCallDelayStart("resolving", "resolving name");
-      factory.recordCallDelayEnd();
-      factory.callEnded(Status.OK, CallOptions.DEFAULT);
+    // Verify call delay methods execute cleanly when counters are null
+    factory.recordDelayStart("resolving", "resolving name");
+    factory.recordDelayEnd("resolving");
+    factory.callEnded(Status.OK);
 
-      // Verify attempt delay methods execute cleanly when counters are null
-      ClientStreamTracer delayTracer = factory.newClientStreamTracer(
-          ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT).build(),
-          new Metadata());
-      delayTracer.recordAttemptDelayStart("connecting", "connecting to backend");
-      delayTracer.recordAttemptDelayReasonChanged("still connecting");
-      delayTracer.recordAttemptDelayEnd();
-      delayTracer.streamClosed(Status.OK);
+    // Verify attempt delay methods execute cleanly when counters are null
+    ClientStreamTracer delayTracer = factory.newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT).build(),
+        new Metadata());
+    delayTracer.recordDelayStart("connecting", "connecting to backend");
+    delayTracer.recordDelayReasonChanged("connecting", "still connecting");
+    delayTracer.recordDelayEnd("connecting");
+    delayTracer.streamClosed(Status.OK);
 
-      for (MetricData m : openTelemetryRule.getMetrics()) {
-        assertThat(m.getName()).isNotIn(
-            ImmutableList.of(
-                "grpc.client.attempt.delay.duration", "grpc.client.call.delay.duration"));
-      }
-    } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    for (MetricData m : openTelemetryRule.getMetrics()) {
+      assertThat(m.getName()).isNotIn(
+          ImmutableList.of(
+              "grpc.client.attempt.delay.duration", "grpc.client.call.delay.duration"));
     }
   }
 
@@ -447,8 +437,8 @@ public class GrpcOpenTelemetryTest {
     ClientStreamTracer tracer = factory.newClientStreamTracer(
         ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT).build(),
         new Metadata());
-    tracer.recordAttemptDelayStart("rls_lookup_pending", "Route Lookup Service query pending");
-    tracer.recordAttemptDelayEnd();
+    tracer.recordDelayStart("rls_lookup_pending", "Route Lookup Service query pending");
+    tracer.recordDelayEnd("rls_lookup_pending");
 
     final CountDownLatch latch = new CountDownLatch(1);
     ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
@@ -463,17 +453,15 @@ public class GrpcOpenTelemetryTest {
     call.request(1);
     assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
-        .assertThat(openTelemetryRule.getMetrics())
+    OpenTelemetryAssertions.assertThat(openTelemetryRule.getMetrics())
         .anySatisfy(
-            metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
-                .assertThat(metric)
+            metric -> OpenTelemetryAssertions.assertThat(metric)
                 .hasName("grpc.client.attempt.delay.duration")
                 .hasHistogramSatisfying(
                     histogram -> histogram.hasPointsSatisfying(
                         point -> {
                           point.hasAttribute(
-                              AttributeKey.stringKey("grpc.delay_type"), "rls_lookup_pending");
+                              OpenTelemetryConstants.DELAY_TYPE_KEY, "rls_lookup_pending");
                         })));
   }
 

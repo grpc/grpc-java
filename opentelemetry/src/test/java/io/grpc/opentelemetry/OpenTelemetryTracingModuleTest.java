@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -77,7 +78,6 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.GrpcServerRule;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
 import io.opentelemetry.api.trace.SpanContext;
@@ -100,6 +100,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -107,7 +108,6 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -206,7 +206,6 @@ public class OpenTelemetryTracingModuleTest {
 
   @Before
   public void setUp() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
     tracerRule = openTelemetryRule.getOpenTelemetry().getTracer(
         OpenTelemetryConstants.INSTRUMENTATION_SCOPE);
     TracerProvider mockTracerProvider = mock(TracerProvider.class);
@@ -220,11 +219,6 @@ public class OpenTelemetryTracingModuleTest {
     when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan);
     when(mockSpanBuilder.setParent(any())).thenReturn(mockSpanBuilder);
     when(mockTracer.spanBuilder(any())).thenReturn(mockSpanBuilder);
-  }
-
-  @After
-  public void tearDown() {
-    System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
   }
 
   // Use mock instead of OpenTelemetryRule to verify inOrder and propagator.
@@ -306,7 +300,7 @@ public class OpenTelemetryTracingModuleTest {
   public void clientDelayTracingMocking() {
     Span mockDelaySpan = mock(Span.class);
     when(mockSpanBuilder.setAttribute(
-            org.mockito.ArgumentMatchers.anyString(),
+            eq(OpenTelemetryConstants.DELAY_TYPE_KEY),
             org.mockito.ArgumentMatchers.anyString()))
         .thenReturn(mockSpanBuilder);
     when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan, mockDelaySpan);
@@ -317,14 +311,16 @@ public class OpenTelemetryTracingModuleTest {
     ClientStreamTracer clientStreamTracer =
         callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
 
-    clientStreamTracer.recordAttemptDelayStart("connecting", "pick_first: attempting to connect");
-    clientStreamTracer.recordAttemptDelayEnd();
+    clientStreamTracer.recordDelayStart("connecting", "pick_first: attempting to connect");
+    clientStreamTracer.recordDelayEnd("connecting");
 
     verify(mockTracer).spanBuilder(eq("Delay"));
-    verify(mockSpanBuilder).setAttribute(eq("grpc.delay_type"), eq("connecting"));
+    verify(mockSpanBuilder).setAttribute(
+        eq(OpenTelemetryConstants.DELAY_TYPE_KEY), eq("connecting"));
     verify(mockDelaySpan).addEvent(
-        eq("Delay state transition"),
-        org.mockito.ArgumentMatchers.<io.opentelemetry.api.common.Attributes>any());
+        eq("Delay triggered"),
+        eq(io.opentelemetry.api.common.Attributes.of(
+            OpenTelemetryConstants.DELAY_REASON_KEY, "pick_first: attempting to connect")));
     verify(mockDelaySpan).end();
   }
 
@@ -332,7 +328,7 @@ public class OpenTelemetryTracingModuleTest {
   public void clientCallDelayTracingMocking() {
     Span mockDelaySpan = mock(Span.class);
     when(mockSpanBuilder.setAttribute(
-            org.mockito.ArgumentMatchers.anyString(),
+            eq(OpenTelemetryConstants.DELAY_TYPE_KEY),
             org.mockito.ArgumentMatchers.anyString()))
         .thenReturn(mockSpanBuilder);
     when(mockSpanBuilder.startSpan()).thenReturn(mockDelaySpan);
@@ -341,14 +337,16 @@ public class OpenTelemetryTracingModuleTest {
     CallAttemptsTracerFactory callTracer =
         tracingModule.newClientCallTracer(mockClientSpan, method);
 
-    callTracer.recordCallDelayStart("resolving", "waiting for DNS query");
-    callTracer.recordCallDelayEnd();
+    callTracer.recordDelayStart("resolving", "waiting for DNS query");
+    callTracer.recordDelayEnd("resolving");
 
     verify(mockTracer).spanBuilder(eq("Delay"));
-    verify(mockSpanBuilder).setAttribute(eq("grpc.delay_type"), eq("resolving"));
+    verify(mockSpanBuilder).setAttribute(
+        eq(OpenTelemetryConstants.DELAY_TYPE_KEY), eq("resolving"));
     verify(mockDelaySpan).addEvent(
-        eq("Delay state transition"),
-        org.mockito.ArgumentMatchers.<io.opentelemetry.api.common.Attributes>any());
+        eq("Delay triggered"),
+        eq(io.opentelemetry.api.common.Attributes.of(
+            OpenTelemetryConstants.DELAY_REASON_KEY, "waiting for DNS query")));
     verify(mockDelaySpan).end();
   }
 
@@ -439,18 +437,20 @@ public class OpenTelemetryTracingModuleTest {
     }
     assertNotNull(callDelaySpan);
     assertEquals("resolving",
-        callDelaySpan.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+        callDelaySpan.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
 
-    boolean foundTransition = false;
+    boolean foundDelayTriggered = false;
     for (EventData event : callDelaySpan.getEvents()) {
-      if ("Delay state transition".equals(event.getName())
-          && "waiting for name resolution or service config".equals(
-              event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))) {
-        foundTransition = true;
-        break;
+      if ("Delay triggered".equals(event.getName())) {
+        String delayReason = event.getAttributes().get(OpenTelemetryConstants.DELAY_REASON_KEY);
+        assertNotNull(delayReason);
+        // The exact wording belongs to the channel; only require that it describes the wait.
+        assertTrue(delayReason, delayReason.contains("name resolution"));
+        assertNull(event.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
+        foundDelayTriggered = true;
       }
     }
-    assertTrue(foundTransition);
+    assertTrue(foundDelayTriggered);
   }
 
   @Test
@@ -576,13 +576,13 @@ public class OpenTelemetryTracingModuleTest {
     }
     assertNotNull(delaySpanData);
     assertEquals("connecting",
-        delaySpanData.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+        delaySpanData.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
 
     boolean foundTransition = false;
     for (EventData event : delaySpanData.getEvents()) {
-      if ("Delay state transition".equals(event.getName())
+      if ("Delay triggered".equals(event.getName())
           && "Simulated slow TLS handshake with backend".equals(
-              event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))) {
+              event.getAttributes().get(OpenTelemetryConstants.DELAY_REASON_KEY))) {
         foundTransition = true;
         break;
       }
@@ -707,10 +707,10 @@ public class OpenTelemetryTracingModuleTest {
     ClientStreamTracer clientStreamTracer =
         callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
 
-    clientStreamTracer.recordAttemptDelayStart("connecting", "reason1");
-    clientStreamTracer.recordAttemptDelayReasonChanged("reason2");
-    clientStreamTracer.recordAttemptDelayStart("connecting", "reason3");
-    clientStreamTracer.recordAttemptDelayEnd();
+    clientStreamTracer.recordDelayStart("connecting", "reason1");
+    clientStreamTracer.recordDelayReasonChanged("connecting", "reason2");
+    clientStreamTracer.recordDelayReasonChanged("connecting", "reason3");
+    clientStreamTracer.recordDelayEnd("connecting");
     clientStreamTracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
     clientSpan.end();
@@ -721,54 +721,26 @@ public class OpenTelemetryTracingModuleTest {
 
     assertEquals("Delay", delaySpanData.getName());
     assertEquals("connecting", delaySpanData.getAttributes().get(
-        AttributeKey.stringKey("grpc.delay_type")));
+        OpenTelemetryConstants.DELAY_TYPE_KEY));
     assertEquals(3, delaySpanData.getEvents().size());
 
     EventData event1 = delaySpanData.getEvents().get(0);
-    assertEquals("Delay state transition", event1.getName());
+    assertEquals("Delay triggered", event1.getName());
     assertEquals("reason1", event1.getAttributes().get(
-        AttributeKey.stringKey("grpc.delay_reason")));
-    assertNull(event1.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+        OpenTelemetryConstants.DELAY_REASON_KEY));
+    assertNull(event1.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
 
     EventData event2 = delaySpanData.getEvents().get(1);
-    assertEquals("Delay state transition", event2.getName());
+    assertEquals("Delay triggered", event2.getName());
     assertEquals("reason2", event2.getAttributes().get(
-        AttributeKey.stringKey("grpc.delay_reason")));
-    assertNull(event2.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+        OpenTelemetryConstants.DELAY_REASON_KEY));
+    assertNull(event2.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
 
     EventData event3 = delaySpanData.getEvents().get(2);
-    assertEquals("Delay state transition", event3.getName());
+    assertEquals("Delay triggered", event3.getName());
     assertEquals("reason3", event3.getAttributes().get(
-        AttributeKey.stringKey("grpc.delay_reason")));
-    assertNull(event3.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
-  }
-
-  @Test
-  public void clientAttemptDelayStart_featureFlagDisabled_zeroChildSpans() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "false");
-    try {
-      OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
-          openTelemetryRule.getOpenTelemetry());
-      Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
-      CallAttemptsTracerFactory callTracer =
-          tracingModule.newClientCallTracer(clientSpan, method);
-      ClientStreamTracer clientStreamTracer =
-          callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
-
-      clientStreamTracer.recordAttemptDelayStart("connecting", "attempting to connect");
-      clientStreamTracer.recordAttemptDelayEnd();
-      clientStreamTracer.streamClosed(Status.OK);
-      callTracer.callEnded(Status.OK);
-      clientSpan.end();
-
-      List<SpanData> spans = openTelemetryRule.getSpans();
-      assertEquals(2, spans.size());
-      for (SpanData span : spans) {
-        assertTrue(!span.getName().equals("Delay"));
-      }
-    } finally {
-      System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
-    }
+        OpenTelemetryConstants.DELAY_REASON_KEY));
+    assertNull(event3.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
   }
 
   @Test
@@ -779,10 +751,10 @@ public class OpenTelemetryTracingModuleTest {
     CallAttemptsTracerFactory callTracer =
         tracingModule.newClientCallTracer(clientSpan, method);
 
-    callTracer.recordCallDelayStart("resolving", "reason1");
-    callTracer.recordCallDelayReasonChanged("reason2");
-    callTracer.recordCallDelayStart("resolving", "reason3");
-    callTracer.recordCallDelayEnd();
+    callTracer.recordDelayStart("resolving", "reason1");
+    callTracer.recordDelayReasonChanged("resolving", "reason2");
+    callTracer.recordDelayReasonChanged("resolving", "reason3");
+    callTracer.recordDelayEnd("resolving");
     callTracer.callEnded(Status.OK);
     clientSpan.end();
 
@@ -794,26 +766,26 @@ public class OpenTelemetryTracingModuleTest {
         .orElseThrow(() -> new AssertionError("Expected 'Delay' span not found"));
 
     assertEquals("resolving", callDelaySpan.getAttributes().get(
-        AttributeKey.stringKey("grpc.delay_type")));
+        OpenTelemetryConstants.DELAY_TYPE_KEY));
     assertEquals(3, callDelaySpan.getEvents().size());
 
     EventData event1 = callDelaySpan.getEvents().get(0);
-    assertEquals("Delay state transition", event1.getName());
+    assertEquals("Delay triggered", event1.getName());
     assertEquals("reason1",
-        event1.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
-    assertNull(event1.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+        event1.getAttributes().get(OpenTelemetryConstants.DELAY_REASON_KEY));
+    assertNull(event1.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
 
     EventData event2 = callDelaySpan.getEvents().get(1);
-    assertEquals("Delay state transition", event2.getName());
+    assertEquals("Delay triggered", event2.getName());
     assertEquals("reason2",
-        event2.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
-    assertNull(event2.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+        event2.getAttributes().get(OpenTelemetryConstants.DELAY_REASON_KEY));
+    assertNull(event2.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
 
     EventData event3 = callDelaySpan.getEvents().get(2);
-    assertEquals("Delay state transition", event3.getName());
+    assertEquals("Delay triggered", event3.getName());
     assertEquals("reason3",
-        event3.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
-    assertNull(event3.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+        event3.getAttributes().get(OpenTelemetryConstants.DELAY_REASON_KEY));
+    assertNull(event3.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
   }
 
   @Test
@@ -825,15 +797,12 @@ public class OpenTelemetryTracingModuleTest {
         tracingModule.newClientCallTracer(clientSpan, method);
 
     callTracer.callEnded(Status.OK);
-    callTracer.recordCallDelayStart("resolving", "reasonAfterCallEnded");
-    callTracer.recordCallDelayReasonChanged("reason2");
-    callTracer.recordCallDelayEnd();
+    callTracer.recordDelayStart("resolving", "reasonAfterCallEnded");
+    callTracer.recordDelayReasonChanged("resolving", "reason2");
+    callTracer.recordDelayEnd("resolving");
     clientSpan.end();
 
-    List<SpanData> spans = openTelemetryRule.getSpans();
-    for (SpanData span : spans) {
-      assertTrue(!span.getName().equals("Delay"));
-    }
+    assertTrue(delaySpans(openTelemetryRule.getSpans()).isEmpty());
   }
 
   @Test
@@ -847,35 +816,258 @@ public class OpenTelemetryTracingModuleTest {
         callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
 
     clientStreamTracer.streamClosed(Status.OK);
-    clientStreamTracer.recordAttemptDelayStart("connecting", "reasonAfterStreamClosed");
-    clientStreamTracer.recordAttemptDelayReasonChanged("reason2");
-    clientStreamTracer.recordAttemptDelayEnd();
+    clientStreamTracer.recordDelayStart("connecting", "reasonAfterStreamClosed");
+    clientStreamTracer.recordDelayReasonChanged("connecting", "reason2");
+    clientStreamTracer.recordDelayEnd("connecting");
     callTracer.callEnded(Status.OK);
     clientSpan.end();
 
-    List<SpanData> spans = openTelemetryRule.getSpans();
-    for (SpanData span : spans) {
-      assertTrue(!span.getName().equals("Delay"));
-    }
+    assertTrue(delaySpans(openTelemetryRule.getSpans()).isEmpty());
   }
 
+  /**
+   * The sequence the channel actually produces when the delay type changes: it ends the current
+   * delay and then starts the next one.
+   */
   @Test
-  public void clientCallDelayStart_delayTypeTransition_closesPreviousSpan() {
+  public void clientCallDelay_delayTypeChange_producesOneSpanPerDelayType() {
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
         openTelemetryRule.getOpenTelemetry());
     Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
     CallAttemptsTracerFactory callTracer =
         tracingModule.newClientCallTracer(clientSpan, method);
 
-    callTracer.recordCallDelayStart("resolving", "dns lookup");
-    callTracer.recordCallDelayStart("connecting", "pick first connect");
-    callTracer.recordCallDelayEnd();
+    callTracer.recordDelayStart("resolving", "waiting for DNS query for example.com");
+    callTracer.recordDelayEnd("resolving");
+    callTracer.recordDelayStart("connecting", "waiting for subchannel to connect");
+    callTracer.recordDelayEnd("connecting");
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
+
+    List<SpanData> delaySpans = delaySpans(openTelemetryRule.getSpans());
+    assertEquals(2, delaySpans.size());
+    SpanData resolvingSpan = delaySpanWithType(delaySpans, "resolving");
+    SpanData connectingSpan = delaySpanWithType(delaySpans, "connecting");
+    assertDelayTriggeredEvent(resolvingSpan, "waiting for DNS query for example.com");
+    assertDelayTriggeredEvent(connectingSpan, "waiting for subchannel to connect");
+    // Both delays are call-scoped, so both hang off the call span.
+    assertEquals(clientSpan.getSpanContext().getSpanId(), resolvingSpan.getParentSpanId());
+    assertEquals(clientSpan.getSpanContext().getSpanId(), connectingSpan.getParentSpanId());
+    assertTrue(resolvingSpan.getEndEpochNanos() <= connectingSpan.getStartEpochNanos());
+  }
+
+  /**
+   * Defensive rollover: a new delay type arrives while the previous delay is still open. The
+   * previous span must be ended before the new one is opened, so the two never overlap.
+   */
+  @Test
+  public void clientCallDelayStart_delayTypeTransition_rollsOverToNewSpan() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+
+    callTracer.recordDelayStart("resolving", "dns lookup");
+    callTracer.recordDelayStart("connecting", "pick first connect");
+    callTracer.recordDelayEnd("connecting");
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
+
+    List<SpanData> delaySpans = delaySpans(openTelemetryRule.getSpans());
+    assertEquals(2, delaySpans.size());
+    SpanData resolvingSpan = delaySpanWithType(delaySpans, "resolving");
+    SpanData connectingSpan = delaySpanWithType(delaySpans, "connecting");
+    assertDelayTriggeredEvent(resolvingSpan, "dns lookup");
+    assertDelayTriggeredEvent(connectingSpan, "pick first connect");
+    assertEquals(clientSpan.getSpanContext().getSpanId(), resolvingSpan.getParentSpanId());
+    assertEquals(clientSpan.getSpanContext().getSpanId(), connectingSpan.getParentSpanId());
+    assertTrue(resolvingSpan.getEndEpochNanos() <= connectingSpan.getStartEpochNanos());
+  }
+
+  /**
+   * The sequence the channel actually produces at the attempt level when a pick is re-queued with
+   * a different delay type: end the current delay, then start the next one.
+   */
+  @Test
+  public void clientAttemptDelay_delayTypeChange_producesOneSpanPerDelayType() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+    ClientStreamTracer clientStreamTracer =
+        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    clientStreamTracer.recordDelayStart(
+        "rls_lookup_pending", "Route Lookup Service query pending on rls-server:8080");
+    clientStreamTracer.recordDelayEnd("rls_lookup_pending");
+    clientStreamTracer.recordDelayStart(
+        "connecting", "waiting for subchannel to connect to 192.168.1.50:8080");
+    clientStreamTracer.recordDelayEnd("connecting");
+    clientStreamTracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
     clientSpan.end();
 
     List<SpanData> spans = openTelemetryRule.getSpans();
-    long callDelaySpanCount = spans.stream().filter(s -> "Delay".equals(s.getName())).count();
-    assertEquals(2L, callDelaySpanCount);
+    List<SpanData> delaySpans = delaySpans(spans);
+    assertEquals(2, delaySpans.size());
+    SpanData rlsSpan = delaySpanWithType(delaySpans, "rls_lookup_pending");
+    SpanData connectingSpan = delaySpanWithType(delaySpans, "connecting");
+    assertDelayTriggeredEvent(rlsSpan, "Route Lookup Service query pending on rls-server:8080");
+    assertDelayTriggeredEvent(
+        connectingSpan, "waiting for subchannel to connect to 192.168.1.50:8080");
+    // Attempt-scoped delays hang off the attempt span, not the call span.
+    String attemptSpanId = spanWithName(spans, "Attempt.package1.service2.method3").getSpanId();
+    assertEquals(attemptSpanId, rlsSpan.getParentSpanId());
+    assertEquals(attemptSpanId, connectingSpan.getParentSpanId());
+    assertTrue(rlsSpan.getEndEpochNanos() <= connectingSpan.getStartEpochNanos());
+  }
+
+  /**
+   * Defensive rollover at the attempt level, e.g. A121's {@code rls_lookup_pending -> connecting}
+   * transition arriving without an intervening end.
+   */
+  @Test
+  public void clientAttemptDelayStart_delayTypeTransition_rollsOverToNewSpan() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+    ClientStreamTracer clientStreamTracer =
+        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    clientStreamTracer.recordDelayStart(
+        "rls_lookup_pending", "Route Lookup Service query pending on rls-server:8080");
+    clientStreamTracer.recordDelayStart(
+        "connecting", "waiting for subchannel to connect to 192.168.1.50:8080");
+    clientStreamTracer.recordDelayEnd("connecting");
+    clientStreamTracer.streamClosed(Status.OK);
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    List<SpanData> delaySpans = delaySpans(spans);
+    assertEquals(2, delaySpans.size());
+    SpanData rlsSpan = delaySpanWithType(delaySpans, "rls_lookup_pending");
+    SpanData connectingSpan = delaySpanWithType(delaySpans, "connecting");
+    assertDelayTriggeredEvent(rlsSpan, "Route Lookup Service query pending on rls-server:8080");
+    assertDelayTriggeredEvent(
+        connectingSpan, "waiting for subchannel to connect to 192.168.1.50:8080");
+    String attemptSpanId = spanWithName(spans, "Attempt.package1.service2.method3").getSpanId();
+    assertEquals(attemptSpanId, rlsSpan.getParentSpanId());
+    assertEquals(attemptSpanId, connectingSpan.getParentSpanId());
+    // The first delay is closed before the second one opens: the spans never overlap.
+    assertTrue(rlsSpan.getEndEpochNanos() <= connectingSpan.getStartEpochNanos());
+  }
+
+  @Test
+  public void clientCallDelayStart_sameTypeWhileActive_keepsExistingSpanAndAddsEvent() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+
+    callTracer.recordDelayStart("resolving", "reason1");
+    callTracer.recordDelayStart("resolving", "reason2");
+    callTracer.recordDelayEnd("resolving");
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
+
+    List<SpanData> delaySpans = delaySpans(openTelemetryRule.getSpans());
+    assertEquals(1, delaySpans.size());
+    SpanData delaySpan = delaySpans.get(0);
+    assertEquals("resolving", delaySpan.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
+    assertEquals(2, delaySpan.getEvents().size());
+    assertEquals("reason1", delaySpan.getEvents().get(0).getAttributes().get(
+        OpenTelemetryConstants.DELAY_REASON_KEY));
+    assertEquals("reason2", delaySpan.getEvents().get(1).getAttributes().get(
+        OpenTelemetryConstants.DELAY_REASON_KEY));
+  }
+
+  @Test
+  public void clientAttemptDelayStart_sameTypeWhileActive_keepsExistingSpanAndAddsEvent() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+    ClientStreamTracer clientStreamTracer =
+        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    clientStreamTracer.recordDelayStart("connecting", "reason1");
+    clientStreamTracer.recordDelayStart("connecting", "reason2");
+    clientStreamTracer.recordDelayEnd("connecting");
+    clientStreamTracer.streamClosed(Status.OK);
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
+
+    List<SpanData> delaySpans = delaySpans(openTelemetryRule.getSpans());
+    assertEquals(1, delaySpans.size());
+    SpanData delaySpan = delaySpans.get(0);
+    assertEquals(
+        "connecting", delaySpan.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
+    assertEquals(2, delaySpan.getEvents().size());
+    assertEquals("reason1", delaySpan.getEvents().get(0).getAttributes().get(
+        OpenTelemetryConstants.DELAY_REASON_KEY));
+    assertEquals("reason2", delaySpan.getEvents().get(1).getAttributes().get(
+        OpenTelemetryConstants.DELAY_REASON_KEY));
+  }
+
+  /**
+   * A121: an open delay is terminated by the call tracer itself when the RPC is cancelled or
+   * reaches its deadline, so the channel does not end it explicitly on those paths.
+   */
+  @Test
+  public void clientCallEnded_withOpenDelay_endsDelaySpan() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+
+    callTracer.recordDelayStart("resolving", "waiting for DNS query");
+    callTracer.callEnded(Status.CANCELLED);
+    clientSpan.end();
+
+    List<SpanData> delaySpans = delaySpans(openTelemetryRule.getSpans());
+    assertEquals(1, delaySpans.size());
+    SpanData delaySpan = delaySpans.get(0);
+    assertTrue(delaySpan.hasEnded());
+    assertEquals("resolving", delaySpan.getAttributes().get(
+        OpenTelemetryConstants.DELAY_TYPE_KEY));
+    assertDelayTriggeredEvent(delaySpan, "waiting for DNS query");
+  }
+
+  /** Attempt-level twin of {@link #clientCallEnded_withOpenDelay_endsDelaySpan}. */
+  @Test
+  public void clientStreamClosed_withOpenDelay_endsDelaySpan() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+    ClientStreamTracer clientStreamTracer =
+        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    clientStreamTracer.recordDelayStart("connecting", "waiting for subchannel to connect");
+    clientStreamTracer.streamClosed(Status.CANCELLED);
+    callTracer.callEnded(Status.CANCELLED);
+    clientSpan.end();
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    List<SpanData> delaySpans = delaySpans(spans);
+    assertEquals(1, delaySpans.size());
+    SpanData delaySpan = delaySpans.get(0);
+    assertTrue(delaySpan.hasEnded());
+    assertEquals("connecting", delaySpan.getAttributes().get(
+        OpenTelemetryConstants.DELAY_TYPE_KEY));
+    assertDelayTriggeredEvent(delaySpan, "waiting for subchannel to connect");
+    assertEquals(
+        spanWithName(spans, "Attempt.package1.service2.method3").getSpanId(),
+        delaySpan.getParentSpanId());
   }
 
   @Test
@@ -888,10 +1080,10 @@ public class OpenTelemetryTracingModuleTest {
 
     callTracer.callEnded(Status.OK);
     callTracer.callEnded(Status.CANCELLED);
-    clientSpan.end();
 
     List<SpanData> spans = openTelemetryRule.getSpans();
-    assertNotNull(spans);
+    assertEquals(1, spans.size());
+    assertEquals(StatusCode.OK, spans.get(0).getStatus().getStatusCode());
   }
 
   @Test
@@ -907,10 +1099,10 @@ public class OpenTelemetryTracingModuleTest {
     clientStreamTracer.streamClosed(Status.OK);
     clientStreamTracer.streamClosed(Status.CANCELLED);
     callTracer.callEnded(Status.OK);
-    clientSpan.end();
 
     List<SpanData> spans = openTelemetryRule.getSpans();
-    assertNotNull(spans);
+    SpanData attemptSpan = spanWithName(spans, "Attempt.package1.service2.method3");
+    assertEquals(StatusCode.OK, attemptSpan.getStatus().getStatusCode());
   }
 
   @Test
@@ -926,118 +1118,28 @@ public class OpenTelemetryTracingModuleTest {
     serverTracer.streamClosed(Status.CANCELLED);
 
     List<SpanData> spans = openTelemetryRule.getSpans();
-    assertNotNull(spans);
+    assertEquals(1, spans.size());
+    assertEquals(StatusCode.OK, spans.get(0).getStatus().getStatusCode());
   }
 
   @Test
   public void clientCallDelayReasonChanged_noActiveSpan_noOp() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
-    try {
-      OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
-          openTelemetryRule.getOpenTelemetry());
-      Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
-      CallAttemptsTracerFactory callTracer =
-          tracingModule.newClientCallTracer(clientSpan, method);
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
 
-      callTracer.recordCallDelayReasonChanged("reasonWithoutSpan");
-      callTracer.callEnded(Status.OK);
-      clientSpan.end();
+    callTracer.recordDelayReasonChanged("resolving", "reasonWithoutSpan");
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
 
-      List<SpanData> spans = openTelemetryRule.getSpans();
-      assertNotNull(spans);
-    } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
-    }
+    // No delay was started, so the reason change is dropped instead of creating a span.
+    assertTrue(delaySpans(openTelemetryRule.getSpans()).isEmpty());
   }
 
   @Test
   public void clientAttemptDelayReasonChanged_noActiveSpan_noOp() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
-    try {
-      OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
-          openTelemetryRule.getOpenTelemetry());
-      Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
-      CallAttemptsTracerFactory callTracer =
-          tracingModule.newClientCallTracer(clientSpan, method);
-      ClientStreamTracer clientStreamTracer =
-          callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
-
-      clientStreamTracer.recordAttemptDelayReasonChanged("reasonWithoutSpan");
-      clientStreamTracer.streamClosed(Status.OK);
-      callTracer.callEnded(Status.OK);
-      clientSpan.end();
-
-      List<SpanData> spans = openTelemetryRule.getSpans();
-      assertNotNull(spans);
-    } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
-    }
-  }
-
-  @Test
-  public void clientCallDelayReasonChanged_nullDelayType_omitsDelayTypeAttribute() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
-    try {
-      OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
-          openTelemetryRule.getOpenTelemetry());
-      Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
-      CallAttemptsTracerFactory callTracer =
-          tracingModule.newClientCallTracer(clientSpan, method);
-
-      callTracer.recordCallDelayStart(null, "start reason");
-      callTracer.recordCallDelayReasonChanged("changed reason");
-      callTracer.recordCallDelayEnd();
-      callTracer.callEnded(Status.OK);
-      clientSpan.end();
-
-      List<SpanData> spans = openTelemetryRule.getSpans();
-      assertEquals(2, spans.size());
-      SpanData delaySpan = spans.get(0);
-      assertEquals(2, delaySpan.getEvents().size());
-      EventData event = delaySpan.getEvents().get(1);
-      assertNull(event.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
-      assertEquals("changed reason",
-          event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
-    } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
-    }
-  }
-
-  @Test
-  public void clientAttemptDelayReasonChanged_nullDelayType_omitsDelayTypeAttribute() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
-    try {
-      OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
-          openTelemetryRule.getOpenTelemetry());
-      Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
-      CallAttemptsTracerFactory callTracer =
-          tracingModule.newClientCallTracer(clientSpan, method);
-      ClientStreamTracer clientStreamTracer =
-          callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
-
-      clientStreamTracer.recordAttemptDelayStart(null, "start reason");
-      clientStreamTracer.recordAttemptDelayReasonChanged("changed reason");
-      clientStreamTracer.recordAttemptDelayEnd();
-      clientStreamTracer.streamClosed(Status.OK);
-      callTracer.callEnded(Status.OK);
-      clientSpan.end();
-
-      List<SpanData> spans = openTelemetryRule.getSpans();
-      assertEquals(3, spans.size());
-      SpanData delaySpan = spans.get(0);
-      assertEquals(2, delaySpan.getEvents().size());
-      EventData event = delaySpan.getEvents().get(1);
-      assertNull(event.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
-      assertEquals("changed reason",
-          event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")));
-    } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
-    }
-  }
-
-  @Test
-  public void delayTracing_featureFlagDisabled_allMethodsNoOp() {
-    System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
         openTelemetryRule.getOpenTelemetry());
     Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
@@ -1046,22 +1148,86 @@ public class OpenTelemetryTracingModuleTest {
     ClientStreamTracer clientStreamTracer =
         callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
 
-    callTracer.recordCallDelayStart("resolving", "reason1");
-    callTracer.recordCallDelayReasonChanged("reason2");
-    callTracer.recordCallDelayEnd();
+    clientStreamTracer.recordDelayReasonChanged("connecting", "reasonWithoutSpan");
+    clientStreamTracer.streamClosed(Status.OK);
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
 
-    clientStreamTracer.recordAttemptDelayStart("connecting", "reason1");
-    clientStreamTracer.recordAttemptDelayReasonChanged("reason2");
-    clientStreamTracer.recordAttemptDelayEnd();
+    // No delay was started, so the reason change is dropped instead of creating a span.
+    assertTrue(delaySpans(openTelemetryRule.getSpans()).isEmpty());
+  }
+
+  @Test
+  public void clientCallDelay_nullArguments_throwNullPointerException() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+
+    assertEquals("delayType",
+        assertThrows(
+            NullPointerException.class,
+            () -> callTracer.recordDelayStart(null, "reason")).getMessage());
+    assertEquals("delayReason",
+        assertThrows(
+            NullPointerException.class,
+            () -> callTracer.recordDelayStart("resolving", null)).getMessage());
+    assertEquals("delayType",
+        assertThrows(
+            NullPointerException.class,
+            () -> callTracer.recordDelayReasonChanged(null, "reason")).getMessage());
+    assertEquals("delayReason",
+        assertThrows(
+            NullPointerException.class,
+            () -> callTracer.recordDelayReasonChanged("resolving", null)).getMessage());
+    assertEquals("delayType",
+        assertThrows(
+            NullPointerException.class, () -> callTracer.recordDelayEnd(null)).getMessage());
+
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
+
+    // A rejected call must not leave a half-initialized delay span behind.
+    assertTrue(delaySpans(openTelemetryRule.getSpans()).isEmpty());
+  }
+
+  @Test
+  public void clientAttemptDelay_nullArguments_throwNullPointerException() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+    ClientStreamTracer clientStreamTracer =
+        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    assertEquals("delayType",
+        assertThrows(
+            NullPointerException.class,
+            () -> clientStreamTracer.recordDelayStart(null, "reason")).getMessage());
+    assertEquals("delayReason",
+        assertThrows(
+            NullPointerException.class,
+            () -> clientStreamTracer.recordDelayStart("connecting", null)).getMessage());
+    assertEquals("delayType",
+        assertThrows(
+            NullPointerException.class,
+            () -> clientStreamTracer.recordDelayReasonChanged(null, "reason")).getMessage());
+    assertEquals("delayReason",
+        assertThrows(
+            NullPointerException.class,
+            () -> clientStreamTracer.recordDelayReasonChanged("connecting", null)).getMessage());
+    assertEquals("delayType",
+        assertThrows(
+            NullPointerException.class,
+            () -> clientStreamTracer.recordDelayEnd(null)).getMessage());
 
     clientStreamTracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
     clientSpan.end();
 
-    List<SpanData> spans = openTelemetryRule.getSpans();
-    for (SpanData span : spans) {
-      assertTrue(!span.getName().equals("Delay"));
-    }
+    assertTrue(delaySpans(openTelemetryRule.getSpans()).isEmpty());
   }
 
   @Test
@@ -1557,5 +1723,44 @@ public class OpenTelemetryTracingModuleTest {
     assertEquals(
         "Recv.io.grpc.Bar", OpenTelemetryTracingModule.generateTraceSpanName(
             true, "io.grpc/Bar"));
+  }
+
+  private static List<SpanData> delaySpans(List<SpanData> spans) {
+    List<SpanData> delaySpans = new ArrayList<>();
+    for (SpanData span : spans) {
+      if ("Delay".equals(span.getName())) {
+        delaySpans.add(span);
+      }
+    }
+    return delaySpans;
+  }
+
+  private static SpanData delaySpanWithType(List<SpanData> delaySpans, String delayType) {
+    for (SpanData span : delaySpans) {
+      if (delayType.equals(span.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY))) {
+        return span;
+      }
+    }
+    throw new AssertionError("No 'Delay' span with grpc.delay_type " + delayType);
+  }
+
+  private static SpanData spanWithName(List<SpanData> spans, String name) {
+    for (SpanData span : spans) {
+      if (name.equals(span.getName())) {
+        return span;
+      }
+    }
+    throw new AssertionError("No span named " + name);
+  }
+
+  /** Asserts that the span carries exactly one "Delay triggered" event with the given reason. */
+  private static void assertDelayTriggeredEvent(SpanData delaySpan, String delayReason) {
+    assertEquals(1, delaySpan.getEvents().size());
+    EventData event = delaySpan.getEvents().get(0);
+    assertEquals("Delay triggered", event.getName());
+    assertEquals(delayReason, event.getAttributes().get(
+        OpenTelemetryConstants.DELAY_REASON_KEY));
+    // A121: the event carries only the reason; the type is an attribute of the span.
+    assertNull(event.getAttributes().get(OpenTelemetryConstants.DELAY_TYPE_KEY));
   }
 }

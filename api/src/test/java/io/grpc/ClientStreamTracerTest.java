@@ -61,13 +61,13 @@ public class ClientStreamTracerTest {
   @Test
   public void defaultDelayMethodsNoOp() {
     ClientStreamTracer tracer = new ClientStreamTracer() {};
-    tracer.recordAttemptDelayStart("connecting", "test");
-    tracer.recordAttemptDelayReasonChanged("test2");
-    tracer.recordAttemptDelayEnd();
+    tracer.recordDelayStart("connecting", "test");
+    tracer.recordDelayReasonChanged("connecting", "test2");
+    tracer.recordDelayEnd("connecting");
 
     ClientStreamTracer.Factory factory = new ClientStreamTracer.Factory() {};
-    factory.recordCallDelayStart("resolving", "test");
-    factory.recordCallDelayReasonChanged("test2");
-    factory.recordCallDelayEnd();
+    factory.recordDelayStart("resolving", "test");
+    factory.recordDelayReasonChanged("resolving", "test2");
+    factory.recordDelayEnd("resolving");
   }
 }
