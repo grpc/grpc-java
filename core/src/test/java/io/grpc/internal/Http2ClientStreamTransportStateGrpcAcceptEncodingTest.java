@@ -33,7 +33,7 @@ import io.grpc.CallOptions;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.Status.Code;
+import io.grpc.InternalStatus;
 import io.grpc.internal.Http2ClientStreamTransportState;
 import io.grpc.internal.TransportTracer;
 import org.junit.Before;
@@ -182,6 +182,8 @@ public class Http2ClientStreamTransportStateGrpcAcceptEncodingTest {
 
     Metadata trailers = new Metadata();
     trailers.put(Metadata.Key.of("grpc-status", Metadata.ASCII_STRING_MARSHALLER), "0");
+    trailers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
+        "application/grpc");
     state.transportTrailersReceived(trailers);
 
     verify(mockListener).closed(Status.OK, PROCESSED, trailers);
@@ -217,7 +219,18 @@ public class Http2ClientStreamTransportStateGrpcAcceptEncodingTest {
 
     @Override
     protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
-      // No-op for tests
+      transportReportStatus(status, stopDelivery, trailers);
+    }
+
+    @Override
+    public void deframeFailed(Throwable cause) {}
+
+    @Override
+    public void bytesRead(int numBytes) {}
+
+    @Override
+    public void runOnTransportThread(Runnable r) {
+      r.run();
     }
   }
 }

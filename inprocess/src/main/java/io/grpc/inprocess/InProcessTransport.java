@@ -668,10 +668,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         // noop
       }
 
-      public void setMessageCompression(boolean enabled, String compressorName) {
-        // noop
-      }
-
       @Override
       public void optimizeForDirectExecutor() {}
 
@@ -953,7 +949,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
-      @SuppressWarnings({"UnusedMethod", "UnusedVariable"})
       public void setMessageCompression(boolean enabled, String compressorName) {
         // noop
       }
