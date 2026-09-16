@@ -9,7 +9,7 @@ load("@rules_java//java:defs.bzl", "JavaInfo", "JavaPluginInfo", "java_common")
 # sources, then those sources are compiled. `proto_lang_toolchain` configures
 # the first phase, but it is language-agnostic and so cannot express anything
 # about the second. This provider carries that Java-specific configuration.
-JavaRpcJavaConfigInfo = provider(
+_JavaRpcJavaConfigInfo = provider(
     doc = "Java compilation settings for the sources protoc generates.",
     fields = {
         "java_plugins": "(list[Target]) JavaPluginInfo targets to run as " +
@@ -18,7 +18,7 @@ JavaRpcJavaConfigInfo = provider(
 )
 
 def _java_rpc_java_config_impl(ctx):
-    return [JavaRpcJavaConfigInfo(java_plugins = ctx.attr.java_plugins)]
+    return [_JavaRpcJavaConfigInfo(java_plugins = ctx.attr.java_plugins)]
 
 java_rpc_java_config = rule(
     doc = """Java compilation settings to accompany a `proto_lang_toolchain`.
@@ -33,7 +33,7 @@ Java compilation that follows it.""",
             doc = "Annotation processors to run over the generated sources.",
         ),
     },
-    provides = [JavaRpcJavaConfigInfo],
+    provides = [_JavaRpcJavaConfigInfo],
     implementation = _java_rpc_java_config_impl,
 )
 
@@ -65,7 +65,7 @@ def _java_rpc_library_impl(ctx):
         output_source_jar = ctx.outputs.srcjar,
         plugins = [
             plugin[JavaPluginInfo]
-            for plugin in ctx.attr._java_config[JavaRpcJavaConfigInfo].java_plugins
+            for plugin in ctx.attr._java_config[_JavaRpcJavaConfigInfo].java_plugins
         ],
         deps = [
             java_common.make_non_strict(deps_java_info),
@@ -92,7 +92,7 @@ _java_grpc_library = rule(
         ),
         "_java_config": attr.label(
             default = Label("//compiler:java_grpc_library_java_config"),
-            providers = [JavaRpcJavaConfigInfo],
+            providers = [_JavaRpcJavaConfigInfo],
         ),
     },
     toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
@@ -124,7 +124,7 @@ INTERNAL_java_grpc_library_for_xds = rule(
         ),
         "_java_config": attr.label(
             default = Label("//xds:java_grpc_library_java_config"),
-            providers = [JavaRpcJavaConfigInfo],
+            providers = [_JavaRpcJavaConfigInfo],
         ),
     },
     toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
@@ -156,7 +156,7 @@ _java_lite_grpc_library = rule(
         ),
         "_java_config": attr.label(
             default = Label("//compiler:java_lite_grpc_library_java_config"),
-            providers = [JavaRpcJavaConfigInfo],
+            providers = [_JavaRpcJavaConfigInfo],
         ),
     },
     toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
