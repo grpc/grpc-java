@@ -187,11 +187,14 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   }
 
   private void clearKeysAndCerts() {
+    // savedTrustedRoots/savedSpiffeTrustMap are deliberately not cleared here: the root/CA
+    // provider instance is independent of the identity cert provider instance (they may be two
+    // separate file_watcher instances polling on different schedules) and may not push another
+    // update for a long time, or ever again. Clearing them after a rebuild triggered solely by an
+    // identity-cert update would make updateSslContextWhenReady() get stuck waiting forever for a
+    // root update that never comes, silently freezing the SslContext on the original identity
+    // cert. The last known-good trust roots remain valid until the root provider pushes new ones.
     savedKey = null;
-    if (!isUsingSystemRootCerts) {
-      savedTrustedRoots = null;
-      savedSpiffeTrustMap = null;
-    }
     savedCertChain = null;
   }
 
