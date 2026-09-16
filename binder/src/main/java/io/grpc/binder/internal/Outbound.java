@@ -90,8 +90,8 @@ abstract class Outbound {
   private boolean suffixReady;
 
   /**
-   * The index of the next transaction we'll send, allowing the receiver to re-assemble out-of-order
-   * messages.
+   * The index of the next transaction we'll send, allowing the receiver to detect dropped
+   * transactions.
    */
   @GuardedBy("this")
   private int transactionIndex;
