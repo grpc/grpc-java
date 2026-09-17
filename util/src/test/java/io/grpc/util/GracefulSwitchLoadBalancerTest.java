@@ -39,6 +39,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
@@ -193,6 +194,44 @@ public class GracefulSwitchLoadBalancerTest {
     verify(lb2).handleNameResolutionError(Status.CANCELLED);
 
     verifyNoMoreInteractions(lb0, lb1, lb2);
+  }
+
+  @Test
+  public void pendingPicker_reportsConnectingDelayWhilePolicySwitchIsInFlight() {
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
+
+    // Nothing is READY yet, so the placeholder picker built by the switch reaches the channel
+    // before the incoming policy has reported anything of its own.
+    assertIsOk(gracefulSwitchLb.acceptResolvedAddresses(addressesBuilder()
+        .setLoadBalancingPolicyConfig(createConfig(lbPolicies[0], FAKE_CONFIG))
+        .build()));
+
+    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getSubchannel()).isNull();
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason())
+        .isEqualTo("waiting for the new load balancing policy to report a picker");
+
+    LoadBalancer lb0 = balancers.get(lbPolicies[0]);
+    Helper helper0 = helpers.get(lb0);
+    SubchannelPicker readyPicker = mock(SubchannelPicker.class);
+    helper0.updateBalancingState(READY, readyPicker);
+    verify(mockHelper).updateBalancingState(READY, readyPicker);
+
+    // With lb0 READY the switch is graceful, so the placeholder is withheld from the channel.
+    assertIsOk(gracefulSwitchLb.acceptResolvedAddresses(addressesBuilder()
+        .setLoadBalancingPolicyConfig(createConfig(lbPolicies[1], FAKE_CONFIG))
+        .build()));
+    verify(mockHelper, times(1)).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+
+    // ... until lb0 drops out of READY, which forces the swap and publishes the placeholder.
+    helper0.updateBalancingState(CONNECTING, readyPicker);
+    verify(mockHelper, times(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult swapped = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(swapped.getDelayReason())
+        .isEqualTo("waiting for the new load balancing policy to report a picker");
   }
 
   @Test

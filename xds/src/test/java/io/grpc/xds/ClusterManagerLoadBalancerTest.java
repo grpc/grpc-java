@@ -166,6 +166,31 @@ public class ClusterManagerLoadBalancerTest {
   }
 
   @Test
+  public void childDelayPassedThrough() {
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a"));
+
+    FakeLoadBalancer childBalancer = getChildBalancerByName("policy_a");
+    SubchannelPicker picker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withNoResult("connecting", "underlying reason");
+      }
+    };
+
+    childBalancer.helper.updateBalancingState(ConnectivityState.CONNECTING, picker);
+    verify(helper, atLeast(2)).updateBalancingState(
+        eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+
+    SubchannelPicker cmPicker = pickerCaptor.getValue();
+    PickResult res = pickSubchannel(cmPicker, "childA");
+
+    assertThat(res.hasResult()).isFalse();
+    assertThat(res.getDelayType()).isEqualTo("connecting");
+    assertThat(res.getDelayReason())
+        .isEqualTo("xds_cluster_manager: child 'childA': underlying reason");
+  }
+
+  @Test
   public void updateBalancingStateFromChildBalancers() {
     deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
 

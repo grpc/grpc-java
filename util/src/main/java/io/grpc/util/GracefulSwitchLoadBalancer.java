@@ -65,6 +65,9 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     public void shutdown() {}
   };
 
+  private static final String DELAY_REASON_SWITCHING =
+      "waiting for the new load balancing policy to report a picker";
+
   private final Helper helper;
 
   // While the new policy is not fully switched on, the pendingLb is handling new updates from name
@@ -115,7 +118,12 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingLb = defaultBalancer;
     pendingBalancerFactory = null;
     pendingState = ConnectivityState.CONNECTING;
-    pendingPicker = new FixedResultPicker(PickResult.withNoResult());
+    // This placeholder can reach the channel: swap() below publishes it as-is when the outgoing
+    // policy is not READY, before the incoming one has reported anything. Annotate it per gRFC
+    // A121 so an RPC queued during a policy switch says so, rather than falling back to the
+    // channel's generic "waiting for picker".
+    pendingPicker = new FixedResultPicker(
+        PickResult.withNoResult("connecting", DELAY_REASON_SWITCHING));
 
     if (newBalancerFactory.equals(currentBalancerFactory)) {
       return;

@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BACKEND_SERVICE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.CUSTOM_LABEL_KEY;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.DELAY_TYPE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
@@ -52,6 +53,7 @@ import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.context.Context;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -205,8 +207,24 @@ final class OpenTelemetryMetricsModule {
     volatile String backendService;
     long attemptNanos;
     Code statusCode;
-    @Nullable private volatile Stopwatch activeDelayStopwatch;
-    @Nullable private volatile String activeDelayType;
+    @GuardedBy("this")
+    @Nullable private Stopwatch activeDelayStopwatch;
+    /**
+     * Type of the delay currently being timed, or {@code null} if no delay is open.
+     *
+     * <p>The channel owns the delay type and supplies it on every call, so this is never used to
+     * label a normal {@link #recordDelayEnd}. It exists solely as the fallback label for the two
+     * cases where the delay has to be terminated without the channel naming it: automatic
+     * termination when the attempt finishes while a delay is still open (the cancellation and
+     * deadline paths of gRFC A121), and rollover when a delay of a different type is started
+     * before the current one was ended.
+     */
+    @GuardedBy("this")
+    @Nullable private String activeDelayType;
+    @GuardedBy("this")
+    private boolean streamCreated;
+    @GuardedBy("this")
+    private boolean streamClosed;
 
     ClientTracer(CallAttemptsTracerFactory attemptsState, OpenTelemetryMetricsModule module,
         StreamInfo info, String target, String fullMethodName,
@@ -222,51 +240,95 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public void streamCreated(io.grpc.Attributes transportAtts, Metadata headers) {
-      recordAttemptDelayEnd();
+      synchronized (this) {
+        streamCreated = true;
+      }
+      // A delay can only be outstanding here if the channel did not end it itself; the wait is
+      // over either way, so terminate it.
+      terminateOpenDelay();
     }
 
     @Override
-    public void recordAttemptDelayStart(String delayType, String delayReason) {
-      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
-          || (activeDelayStopwatch != null && Objects.equals(activeDelayType, delayType))) {
-        // Do not reset the stopwatch if the delay type is unchanged.
+    public void recordDelayStart(String delayType, String delayReason) {
+      checkNotNull(delayType, "delayType");
+      if (module.resource.clientAttemptDelayCounter() == null) {
+        // Nothing to record, so do not pay for timing the delay.
         return;
       }
-      recordAttemptDelayEnd();
-      activeDelayType = delayType;
-      activeDelayStopwatch = module.stopwatchSupplier.get().start();
+      long rolledOverNanos = 0;
+      String rolledOverType = null;
+      synchronized (this) {
+        if (streamClosed || streamCreated) {
+          return;
+        }
+        if (activeDelayStopwatch != null) {
+          if (delayType.equals(activeDelayType)) {
+            // Redundant start: keep timing the delay from when it actually started.
+            return;
+          }
+          // The channel normally ends a delay before starting the next one. If it did not, close
+          // out the previous segment under its own type so the new one is timed separately.
+          rolledOverNanos = activeDelayStopwatch.stop().elapsed(TimeUnit.NANOSECONDS);
+          rolledOverType = activeDelayType;
+        }
+        activeDelayStopwatch = module.stopwatchSupplier.get().start();
+        activeDelayType = delayType;
+      }
+      if (rolledOverType != null) {
+        recordDelay(rolledOverNanos, rolledOverType);
+      }
     }
 
     @Override
-    public void recordAttemptDelayReasonChanged(String delayReason) {
-      // Reason strings are high-cardinality diagnostics intended for tracing spans.
-    }
-
-    @Override
-    public void recordAttemptDelayEnd() {
-      Stopwatch delayStopwatch = activeDelayStopwatch;
-      String delayType = activeDelayType;
-      if (delayStopwatch != null && delayType != null) {
-        delayStopwatch.stop();
-        long delayNanos = delayStopwatch.elapsed(TimeUnit.NANOSECONDS);
+    public void recordDelayEnd(String delayType) {
+      checkNotNull(delayType, "delayType");
+      long delayNanos;
+      synchronized (this) {
+        if (activeDelayStopwatch == null) {
+          return;
+        }
+        delayNanos = activeDelayStopwatch.stop().elapsed(TimeUnit.NANOSECONDS);
         activeDelayStopwatch = null;
         activeDelayType = null;
-        if (module.resource.clientAttemptDelayCounter() != null) {
-          AttributesBuilder builder = Attributes.builder()
-              .put(METHOD_KEY, fullMethodName)
-              .put(TARGET_KEY, target)
-              .put("grpc.delay_type", delayType);
-          if (module.customLabelEnabled) {
-            builder.put(
-                CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
-          }
-          for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
-            plugin.addLabels(builder);
-          }
-          module.resource.clientAttemptDelayCounter()
-              .record(delayNanos * SECONDS_PER_NANO, builder.build(), attemptsState.otelContext);
-        }
       }
+      recordDelay(delayNanos, delayType);
+    }
+
+    /**
+     * Ends a delay that is still open, labeled with the type the channel gave when it started.
+     * No-op if no delay is open.
+     */
+    private void terminateOpenDelay() {
+      long delayNanos;
+      String delayType;
+      synchronized (this) {
+        if (activeDelayStopwatch == null) {
+          return;
+        }
+        delayNanos = activeDelayStopwatch.stop().elapsed(TimeUnit.NANOSECONDS);
+        delayType = activeDelayType;
+        activeDelayStopwatch = null;
+        activeDelayType = null;
+      }
+      recordDelay(delayNanos, delayType);
+    }
+
+    /**
+     * Records a delay to {@code grpc.client.attempt.delay.duration}. Must be called without
+     * holding any lock, since it calls into user-supplied OpenTelemetry code.
+     */
+    private void recordDelay(long delayNanos, String delayType) {
+      DoubleHistogram delayHistogram = module.resource.clientAttemptDelayCounter();
+      if (delayHistogram == null) {
+        return;
+      }
+      // gRFC A121 defines grpc.method, grpc.target, and grpc.delay_type for the delay histograms.
+      // Per-subchannel optional labels (grpc.lb.locality, grpc.lb.backend_service) are excluded
+      // because subchannel selection has not completed while an attempt delay is active.
+      delayHistogram.record(
+          delayNanos * SECONDS_PER_NANO,
+          attemptsState.callLevelBaseAttributes.toBuilder().put(DELAY_TYPE_KEY, delayType).build(),
+          attemptsState.otelContext);
     }
 
     @Override
@@ -315,7 +377,13 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public void streamClosed(Status status) {
-      recordAttemptDelayEnd();
+      synchronized (this) {
+        streamClosed = true;
+      }
+      // If the attempt finishes while a delay is still open (e.g. the RPC was cancelled or its
+      // deadline expired while queued), gRFC A121 expects the partial duration to be recorded.
+      // Records outside the lock above, which also serialises the delay callbacks.
+      terminateOpenDelay();
       stopwatch.stop();
       attemptNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       Deadline deadline = info.getCallOptions().getDeadline();
@@ -328,37 +396,17 @@ final class OpenTelemetryMetricsModule {
           statusCode = Code.DEADLINE_EXCEEDED;
         }
       }
-      attemptsState.attemptEnded(info.getCallOptions());
+      attemptsState.attemptEnded();
       recordFinishedAttempt();
     }
 
     void recordFinishedAttempt() {
-      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+      AttributesBuilder builder = Attributes.builder()
           .put(METHOD_KEY, fullMethodName)
           .put(TARGET_KEY, target)
           .put(STATUS_KEY, statusCode.toString());
-      if (module.localityEnabled) {
-        String savedLocality = locality;
-        if (savedLocality == null) {
-          savedLocality = "";
-        }
-        builder.put(LOCALITY_KEY, savedLocality);
-      }
-      if (module.backendServiceEnabled) {
-        String savedBackendService = backendService;
-        if (savedBackendService == null) {
-          savedBackendService = "";
-        }
-        builder.put(BACKEND_SERVICE_KEY, savedBackendService);
-      }
-      if (module.customLabelEnabled) {
-        builder.put(
-            CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
-      }
-      for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
-        plugin.addLabels(builder);
-      }
-      io.opentelemetry.api.common.Attributes attribute = builder.build();
+      addOptionalLabels(builder);
+      Attributes attribute = builder.build();
 
       if (module.resource.clientAttemptDurationCounter() != null ) {
         module.resource.clientAttemptDurationCounter()
@@ -371,6 +419,22 @@ final class OpenTelemetryMetricsModule {
       if (module.resource.clientTotalReceivedCompressedMessageSizeCounter() != null) {
         module.resource.clientTotalReceivedCompressedMessageSizeCounter()
             .record(inboundWireSize, attribute, attemptsState.otelContext);
+      }
+    }
+
+    private void addOptionalLabels(AttributesBuilder builder) {
+      if (module.localityEnabled) {
+        builder.put(LOCALITY_KEY, Objects.toString(locality, ""));
+      }
+      if (module.backendServiceEnabled) {
+        builder.put(BACKEND_SERVICE_KEY, Objects.toString(backendService, ""));
+      }
+      if (module.customLabelEnabled) {
+        builder.put(
+            CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+      }
+      for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
+        plugin.addLabels(builder);
       }
     }
   }
@@ -387,6 +451,21 @@ final class OpenTelemetryMetricsModule {
     private final List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins;
     private final Context otelContext;
     private Status status;
+    @GuardedBy("lock")
+    @Nullable private Stopwatch activeCallDelayStopwatch;
+    /**
+     * Type of the call-level delay currently being timed, or {@code null} if no delay is open.
+     *
+     * <p>The channel owns the delay type and supplies it on every call, so this is never used to
+     * label a normal {@link #recordDelayEnd}. It exists solely as the fallback label for the two
+     * cases where the delay has to be terminated without the channel naming it: automatic
+     * termination when the call ends while a delay is still open (the cancellation and deadline
+     * paths of gRFC A121), and rollover when a delay of a different type is started before the
+     * current one was ended.
+     */
+    @GuardedBy("lock")
+    @Nullable private String activeCallDelayType;
+    private final Attributes callLevelBaseAttributes;
     private long retryDelayNanos;
     private long callLatencyNanos;
     private final Object lock = new Object();
@@ -412,18 +491,18 @@ final class OpenTelemetryMetricsModule {
       this.attemptDelayStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
-      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+      AttributesBuilder builder = Attributes.builder()
           .put(METHOD_KEY, fullMethodName)
           .put(TARGET_KEY, target);
       if (module.customLabelEnabled) {
         builder.put(
             CUSTOM_LABEL_KEY, callOptions.getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
       }
-      io.opentelemetry.api.common.Attributes attribute = builder.build();
+      this.callLevelBaseAttributes = builder.build();
 
-      // Record here in case mewClientStreamTracer() would never be called.
+      // Record here in case newClientStreamTracer() would never be called.
       if (module.resource.clientAttemptCountCounter() != null) {
-        module.resource.clientAttemptCountCounter().add(1, attribute, otelContext);
+        module.resource.clientAttemptCountCounter().add(1, callLevelBaseAttributes, otelContext);
       }
     }
 
@@ -443,14 +522,14 @@ final class OpenTelemetryMetricsModule {
       // CallAttemptsTracerFactory constructor. attemptsPerCall will be non-zero after the first
       // attempt, as first attempt cannot be a transparent retry.
       if (attemptsPerCall.get() > 0) {
-        AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+        AttributesBuilder builder = Attributes.builder()
             .put(METHOD_KEY, fullMethodName)
             .put(TARGET_KEY, target);
         if (module.customLabelEnabled) {
           builder.put(
               CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
         }
-        io.opentelemetry.api.common.Attributes attribute = builder.build();
+        Attributes attribute = builder.build();
         if (module.resource.clientAttemptCountCounter() != null) {
           module.resource.clientAttemptCountCounter().add(1, attribute, otelContext);
         }
@@ -478,7 +557,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     // Called whenever each attempt is ended.
-    void attemptEnded(CallOptions callOptions) {
+    void attemptEnded() {
       boolean shouldRecordFinishedCall = false;
       synchronized (lock) {
         if (--activeStreams == 0) {
@@ -490,11 +569,11 @@ final class OpenTelemetryMetricsModule {
         }
       }
       if (shouldRecordFinishedCall) {
-        recordFinishedCall(callOptions);
+        recordFinishedCall();
       }
     }
 
-    void callEnded(Status status, CallOptions callOptions) {
+    void callEnded(Status status) {
       callStopWatch.stop();
       this.status = status;
       boolean shouldRecordFinishedCall = false;
@@ -509,12 +588,16 @@ final class OpenTelemetryMetricsModule {
           finishedCallToBeRecorded = true;
         }
       }
+      // If the call ends while a delay is still open (e.g. the RPC was cancelled or its deadline
+      // expired while waiting for name resolution), gRFC A121 expects the partial duration to be
+      // recorded. Records outside the lock above, which also serialises the delay callbacks.
+      terminateOpenDelay();
       if (shouldRecordFinishedCall) {
-        recordFinishedCall(callOptions);
+        recordFinishedCall();
       }
     }
 
-    void recordFinishedCall(CallOptions callOptions) {
+    void recordFinishedCall() {
       if (attemptsPerCall.get() == 0) {
         ClientTracer tracer = newClientTracer(null);
         tracer.attemptNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
@@ -523,20 +606,11 @@ final class OpenTelemetryMetricsModule {
       }
       callLatencyNanos = callStopWatch.elapsed(TimeUnit.NANOSECONDS);
 
-      // Base attributes
-      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
-          .put(METHOD_KEY, fullMethodName)
-          .put(TARGET_KEY, target);
-      if (module.customLabelEnabled) {
-        builder.put(CUSTOM_LABEL_KEY, callOptions.getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
-      }
-      io.opentelemetry.api.common.Attributes baseAttributes = builder.build();
-
       // Duration
       if (module.resource.clientCallDurationCounter() != null) {
         module.resource.clientCallDurationCounter().record(
             callLatencyNanos * SECONDS_PER_NANO,
-            baseAttributes.toBuilder()
+            callLevelBaseAttributes.toBuilder()
                 .put(STATUS_KEY, status.getCode().toString())
                 .build(),
             otelContext
@@ -548,7 +622,7 @@ final class OpenTelemetryMetricsModule {
         long retriesPerCall = Math.max(attemptsPerCall.get() - 1, 0);
         if (retriesPerCall > 0) {
           module.resource.clientCallRetriesCounter()
-              .record(retriesPerCall, baseAttributes, otelContext);
+              .record(retriesPerCall, callLevelBaseAttributes, otelContext);
         }
       }
 
@@ -557,7 +631,7 @@ final class OpenTelemetryMetricsModule {
         long hedges = hedgedAttemptsPerCall.get();
         if (hedges > 0) {
           module.resource.clientCallHedgesCounter()
-              .record(hedges, baseAttributes, otelContext);
+              .record(hedges, callLevelBaseAttributes, otelContext);
         }
       }
 
@@ -566,7 +640,7 @@ final class OpenTelemetryMetricsModule {
         long transparentRetries = transparentRetriesPerCall.get();
         if (transparentRetries > 0) {
           module.resource.clientCallTransparentRetriesCounter()
-              .record(transparentRetries, baseAttributes, otelContext);
+              .record(transparentRetries, callLevelBaseAttributes, otelContext);
         }
       }
 
@@ -574,10 +648,90 @@ final class OpenTelemetryMetricsModule {
       if (module.resource.clientCallRetryDelayCounter() != null) {
         module.resource.clientCallRetryDelayCounter().record(
             retryDelayNanos * SECONDS_PER_NANO,
-            baseAttributes,
+            callLevelBaseAttributes,
             otelContext
         );
       }
+    }
+
+    @Override
+    public void recordDelayStart(String delayType, String delayReason) {
+      checkNotNull(delayType, "delayType");
+      if (module.resource.clientCallDelayCounter() == null) {
+        // Nothing to record, so do not pay for timing the delay.
+        return;
+      }
+      long rolledOverNanos = 0;
+      String rolledOverType = null;
+      synchronized (lock) {
+        if (callEnded) {
+          return;
+        }
+        if (activeCallDelayStopwatch != null) {
+          if (delayType.equals(activeCallDelayType)) {
+            // Redundant start: keep timing the delay from when it actually started.
+            return;
+          }
+          // The channel normally ends a delay before starting the next one. If it did not, close
+          // out the previous segment under its own type so the new one is timed separately.
+          rolledOverNanos = activeCallDelayStopwatch.stop().elapsed(TimeUnit.NANOSECONDS);
+          rolledOverType = activeCallDelayType;
+        }
+        activeCallDelayStopwatch = module.stopwatchSupplier.get().start();
+        activeCallDelayType = delayType;
+      }
+      if (rolledOverType != null) {
+        recordDelay(rolledOverNanos, rolledOverType);
+      }
+    }
+
+    @Override
+    public void recordDelayEnd(String delayType) {
+      checkNotNull(delayType, "delayType");
+      long delayNanos;
+      synchronized (lock) {
+        if (activeCallDelayStopwatch == null) {
+          return;
+        }
+        delayNanos = activeCallDelayStopwatch.stop().elapsed(TimeUnit.NANOSECONDS);
+        activeCallDelayStopwatch = null;
+        activeCallDelayType = null;
+      }
+      recordDelay(delayNanos, delayType);
+    }
+
+    /**
+     * Ends a call-level delay that is still open, labeled with the type the channel gave when it
+     * started. No-op if no delay is open.
+     */
+    private void terminateOpenDelay() {
+      long delayNanos;
+      String delayType;
+      synchronized (lock) {
+        if (activeCallDelayStopwatch == null) {
+          return;
+        }
+        delayNanos = activeCallDelayStopwatch.stop().elapsed(TimeUnit.NANOSECONDS);
+        delayType = activeCallDelayType;
+        activeCallDelayStopwatch = null;
+        activeCallDelayType = null;
+      }
+      recordDelay(delayNanos, delayType);
+    }
+
+    /**
+     * Records a delay to {@code grpc.client.call.delay.duration}. Must be called without holding
+     * {@code lock}, since it calls into user-supplied OpenTelemetry code.
+     */
+    private void recordDelay(long delayNanos, String delayType) {
+      DoubleHistogram delayHistogram = module.resource.clientCallDelayCounter();
+      if (delayHistogram == null) {
+        return;
+      }
+      delayHistogram.record(
+          delayNanos * SECONDS_PER_NANO,
+          callLevelBaseAttributes.toBuilder().put(DELAY_TYPE_KEY, delayType).build(),
+          otelContext);
     }
   }
 
@@ -790,7 +944,6 @@ final class OpenTelemetryMetricsModule {
           callOptions = plugin.filterCallOptions(callOptions);
         }
       }
-      final CallOptions finalCallOptions = callOptions;
       // Only record method name as an attribute if isSampledToLocalTracing is set to true,
       // which is true for all generated methods. Otherwise, programatically
       // created methods result in high cardinality metrics.
@@ -810,7 +963,7 @@ final class OpenTelemetryMetricsModule {
               new SimpleForwardingClientCallListener<RespT>(responseListener) {
                 @Override
                 public void onClose(Status status, Metadata trailers) {
-                  tracerFactory.callEnded(status, finalCallOptions);
+                  tracerFactory.callEnded(status);
                   super.onClose(status, trailers);
                 }
               },

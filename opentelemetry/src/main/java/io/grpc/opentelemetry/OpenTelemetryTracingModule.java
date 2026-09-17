@@ -20,9 +20,11 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.DELAY_REASON_KEY;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.DELAY_TYPE_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Attributes;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -37,11 +39,12 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerStreamTracer;
+import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
-import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
@@ -49,7 +52,6 @@ import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.context.propagation.ContextPropagators;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -60,6 +62,11 @@ import javax.annotation.Nullable;
  */
 final class OpenTelemetryTracingModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryTracingModule.class.getName());
+
+  /** Name of the child span that bounds a single delay, as defined by gRFC A121. */
+  private static final String DELAY_SPAN_NAME = "Delay";
+  /** Name of the event that carries each value of {@code grpc.delay_reason}, per gRFC A121. */
+  private static final String DELAY_TRIGGERED_EVENT_NAME = "Delay triggered";
 
   @VisibleForTesting
   final io.grpc.Context.Key<Span> otelSpan = io.grpc.Context.key("opentelemetry-span-key");
@@ -144,6 +151,30 @@ final class OpenTelemetryTracingModule {
     volatile int callEnded;
     private final Span clientSpan;
     private final String fullMethodName;
+    @GuardedBy("this")
+    @Nullable private Span activeCallDelaySpan;
+    /**
+     * The delay type {@link #activeCallDelaySpan} was opened with, or {@code null} if no delay is
+     * open.
+     *
+     * <p>gRFC A121 makes the channel the owner of the delay type and has it supply the type on
+     * every call, so this field is deliberately never used to decide a transition nor to label a
+     * normal {@link #recordDelayEnd}. It is kept solely as the fallback label for the two paths
+     * that carry no delay type: the spec-mandated automatic termination of a still-open delay from
+     * {@link #callEnded} (cancellation or deadline), and the defensive rollover in
+     * {@link #recordDelayStart} when a new delay type arrives without an intervening end.
+     */
+    @GuardedBy("this")
+    @Nullable private String activeCallDelayType;
+    /**
+     * Incremented every time the active delay span is replaced or cleared. A
+     * {@link #recordDelayStart} that started a span while not holding the monitor publishes it only
+     * if the epoch it observed is still current; otherwise it ends the span itself. This is what
+     * lets the {@link Span} operations happen outside the monitor without leaking or double-ending
+     * a span.
+     */
+    @GuardedBy("this")
+    private long delayEpoch;
 
     CallAttemptsTracerFactory(Span clientSpan, MethodDescriptor<?, ?> method) {
       checkNotNull(method, "method");
@@ -169,6 +200,27 @@ final class OpenTelemetryTracingModule {
     }
 
     /**
+     * Returns whether {@link #callEnded} has already run.
+     *
+     * <p>The delay methods below check this twice: once as a lock-free fast path and once again
+     * inside {@code synchronized (this)}. Both checks must stay. The pair is race-free only
+     * because of this ordering invariant: {@link #callEnded} publishes the {@code callEnded} flag
+     * <em>before</em> acquiring the monitor, while a delay span is only ever created, published or
+     * cleared while holding that same monitor. A delay span published under the monitor is
+     * therefore either seen by {@code callEnded}'s own end (so it is closed), or it is created
+     * after the flag is visible and the inner check rejects it. Moving the delay termination in
+     * {@code callEnded} above the flag publication, or dropping the inner check, silently
+     * reintroduces a window in which a delay span is started after the call ended and is never
+     * ended: a span leak that no existing test would catch.
+     */
+    private boolean isCallEnded() {
+      if (callEndedUpdater != null) {
+        return callEndedUpdater.get(this) != 0;
+      }
+      return callEnded != 0;
+    }
+
+    /**
      * Record a finished call and mark the current time as the end time.
      *
      * <p>Can be called from any thread without synchronization.  Calling it the second time or more
@@ -185,7 +237,131 @@ final class OpenTelemetryTracingModule {
         }
         callEnded = 1;
       }
+      // Must stay below the flag publication above; see isCallEnded().
+      String openDelayType = endActiveDelaySpan();
+      if (openDelayType != null) {
+        // A121: the tracer terminates an open delay by itself when the RPC is cancelled or reaches
+        // its deadline, so the channel does not have to end it on those paths.
+        logger.log(
+            Level.FINE, "Call ended while a {0} delay was open; the delay span was terminated",
+            openDelayType);
+      }
       endSpanWithStatus(clientSpan, status);
+    }
+
+    @Override
+    public void recordDelayStart(String delayType, String delayReason) {
+      checkNotNull(delayType, "delayType");
+      checkNotNull(delayReason, "delayReason");
+      if (isCallEnded()) {
+        return;
+      }
+      Span existingSameTypeSpan = null;
+      Span previousDelaySpan = null;
+      String previousDelayType = null;
+      long epoch;
+      synchronized (this) {
+        if (isCallEnded()) {
+          return;
+        }
+        if (activeCallDelaySpan != null && delayType.equals(activeCallDelayType)) {
+          existingSameTypeSpan = activeCallDelaySpan;
+          epoch = delayEpoch;
+        } else {
+          previousDelaySpan = activeCallDelaySpan;
+          previousDelayType = activeCallDelayType;
+          activeCallDelaySpan = null;
+          activeCallDelayType = null;
+          epoch = ++delayEpoch;
+        }
+      }
+      if (existingSameTypeSpan != null) {
+        existingSameTypeSpan.addEvent(
+            DELAY_TRIGGERED_EVENT_NAME, Attributes.of(DELAY_REASON_KEY, delayReason));
+        return;
+      }
+      if (previousDelaySpan != null) {
+        // Defensive: A121 has the channel end a delay before starting the next one, so an open
+        // span here means the delay type rolled over without an intervening end. Close the
+        // previous segment before opening the new one so the two spans do not overlap.
+        logger.log(
+            Level.FINE, "Delay type changed from {0} to {1} without an intervening end",
+            new Object[] {previousDelayType, delayType});
+        previousDelaySpan.end();
+      }
+      Span delaySpan = otelTracer.spanBuilder(DELAY_SPAN_NAME)
+          .setParent(Context.current().with(clientSpan))
+          .setAttribute(DELAY_TYPE_KEY, delayType)
+          .startSpan();
+      // Recorded before the span is published so that the initial reason can never be lost to a
+      // concurrent end.
+      delaySpan.addEvent(
+          DELAY_TRIGGERED_EVENT_NAME, Attributes.of(DELAY_REASON_KEY, delayReason));
+      boolean stale;
+      synchronized (this) {
+        stale = isCallEnded() || delayEpoch != epoch;
+        if (!stale) {
+          activeCallDelaySpan = delaySpan;
+          activeCallDelayType = delayType;
+        }
+      }
+      if (stale) {
+        // The call ended, or another delay transition happened, while this span was being created.
+        // Nobody else can see it, so this thread is the one that must end it.
+        delaySpan.end();
+      }
+    }
+
+    @Override
+    public void recordDelayReasonChanged(String delayType, String delayReason) {
+      checkNotNull(delayType, "delayType");
+      checkNotNull(delayReason, "delayReason");
+      if (isCallEnded()) {
+        return;
+      }
+      Span delaySpan;
+      synchronized (this) {
+        if (isCallEnded()) {
+          return;
+        }
+        delaySpan = activeCallDelaySpan;
+      }
+      if (delaySpan != null) {
+        // A121 records only the reason on the event; the type is an attribute of the span itself.
+        // If the delay ends concurrently the SDK drops this event, which is the correct outcome:
+        // the reason arrived after the delay was over.
+        delaySpan.addEvent(
+            DELAY_TRIGGERED_EVENT_NAME, Attributes.of(DELAY_REASON_KEY, delayReason));
+      }
+    }
+
+    @Override
+    public void recordDelayEnd(String delayType) {
+      checkNotNull(delayType, "delayType");
+      endActiveDelaySpan();
+    }
+
+    /**
+     * Ends the open delay span, if any, without holding the monitor across {@link Span#end}.
+     * Returns the delay type the span was opened with, or {@code null} if no delay was open.
+     */
+    @Nullable
+    private String endActiveDelaySpan() {
+      Span delaySpan;
+      String delayType;
+      synchronized (this) {
+        delaySpan = activeCallDelaySpan;
+        delayType = activeCallDelayType;
+        activeCallDelaySpan = null;
+        activeCallDelayType = null;
+        // Invalidates a span that a concurrent recordDelayStart() is creating right now, so that
+        // it ends its own span instead of publishing it after this end.
+        delayEpoch++;
+      }
+      if (delaySpan != null) {
+        delaySpan.end();
+      }
+      return delayType;
     }
   }
 
@@ -194,8 +370,30 @@ final class OpenTelemetryTracingModule {
     private final Span parentSpan;
     volatile int seqNo;
     boolean isPendingStream;
-    @Nullable private volatile Span activeDelaySpan;
-    @Nullable private volatile String activeDelayType;
+    @GuardedBy("this")
+    @Nullable private Span activeDelaySpan;
+    /**
+     * Fallback label for the two paths that carry no delay type: automatic termination of a
+     * still-open delay from {@link #streamClosed}, and the defensive rollover in
+     * {@link #recordDelayStart}. See {@code CallAttemptsTracerFactory.activeCallDelayType}.
+     */
+    @GuardedBy("this")
+    @Nullable private String activeDelayType;
+    /** See {@code CallAttemptsTracerFactory.delayEpoch}. */
+    @GuardedBy("this")
+    private long delayEpoch;
+    /**
+     * Unlike {@code CallAttemptsTracerFactory.callEnded}, this flag is written and read only under
+     * this monitor, so there is no lock-free fast path and hence no double-check to preserve here:
+     * the single check inside the monitor is authoritative. The call-scoped tracer needs the
+     * volatile flag because it is also read by {@code callEnded}'s atomic updater; see
+     * {@code CallAttemptsTracerFactory.isCallEnded()} for the ordering invariant that makes the
+     * double-check there race-free.
+     */
+    @GuardedBy("this")
+    private boolean streamCreated;
+    @GuardedBy("this")
+    private boolean streamClosed;
 
     ClientTracer(Span span, Span parentSpan) {
       this.span = checkNotNull(span, "span");
@@ -203,8 +401,11 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void streamCreated(Attributes transportAtts, Metadata headers) {
-      recordAttemptDelayEnd();
+    public void streamCreated(io.grpc.Attributes transportAtts, Metadata headers) {
+      synchronized (this) {
+        streamCreated = true;
+      }
+      endActiveDelaySpan();
       contextPropagators.getTextMapPropagator().inject(Context.current().with(span), headers,
           metadataSetter);
       if (isPendingStream) {
@@ -218,53 +419,112 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void recordAttemptDelayStart(String delayType, String delayReason) {
-      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()) {
+    public void recordDelayStart(String delayType, String delayReason) {
+      checkNotNull(delayType, "delayType");
+      checkNotNull(delayReason, "delayReason");
+      Span existingSameTypeSpan = null;
+      Span previousDelaySpan = null;
+      String previousDelayType = null;
+      long epoch;
+      synchronized (this) {
+        if (streamClosed || streamCreated) {
+          return;
+        }
+        if (activeDelaySpan != null && delayType.equals(activeDelayType)) {
+          existingSameTypeSpan = activeDelaySpan;
+          epoch = delayEpoch;
+        } else {
+          previousDelaySpan = activeDelaySpan;
+          previousDelayType = activeDelayType;
+          activeDelaySpan = null;
+          activeDelayType = null;
+          epoch = ++delayEpoch;
+        }
+      }
+      if (existingSameTypeSpan != null) {
+        existingSameTypeSpan.addEvent(
+            DELAY_TRIGGERED_EVENT_NAME, Attributes.of(DELAY_REASON_KEY, delayReason));
         return;
       }
-      if (activeDelaySpan != null && Objects.equals(activeDelayType, delayType)) {
-        // Do not recreate the span if the delay type is unchanged (e.g., priority failover).
-        recordAttemptDelayReasonChanged(delayReason);
-        return;
+      if (previousDelaySpan != null) {
+        // Defensive: A121 has the channel end a delay before starting the next one, so an open
+        // span here means the delay type rolled over (e.g. rls_lookup_pending -> connecting)
+        // without an intervening end. Close the previous segment before opening the new one.
+        logger.log(
+            Level.FINE, "Delay type changed from {0} to {1} without an intervening end",
+            new Object[] {previousDelayType, delayType});
+        previousDelaySpan.end();
       }
-      // Close any previous delay segment before starting a new canonical segment.
-      recordAttemptDelayEnd();
-      activeDelayType = delayType;
-      // All attempt queuing segments use the strict child span name "Attempt Delay".
-      Span delaySpan = otelTracer.spanBuilder("Attempt Delay")
+      // All attempt queuing segments use the strict child span name "Delay".
+      Span delaySpan = otelTracer.spanBuilder(DELAY_SPAN_NAME)
           .setParent(Context.current().with(span))
-          .setAttribute("grpc.delay_type", delayType)
+          .setAttribute(DELAY_TYPE_KEY, delayType)
           .startSpan();
-      activeDelaySpan = delaySpan;
+      // Recorded before the span is published so that the initial reason can never be lost to a
+      // concurrent end.
       delaySpan.addEvent(
-          "Delay state transition",
-          io.opentelemetry.api.common.Attributes.of(
-              AttributeKey.stringKey("grpc.delay_type"), delayType,
-              AttributeKey.stringKey("grpc.delay_reason"), delayReason));
-    }
-
-    @Override
-    public void recordAttemptDelayReasonChanged(String delayReason) {
-      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled() || activeDelaySpan == null) {
-        return;
+          DELAY_TRIGGERED_EVENT_NAME, Attributes.of(DELAY_REASON_KEY, delayReason));
+      boolean stale;
+      synchronized (this) {
+        stale = streamClosed || streamCreated || delayEpoch != epoch;
+        if (!stale) {
+          activeDelaySpan = delaySpan;
+          activeDelayType = delayType;
+        }
       }
-      String type = activeDelayType;
-      activeDelaySpan.addEvent(
-          "Delay state transition",
-          io.opentelemetry.api.common.Attributes.of(
-              AttributeKey.stringKey("grpc.delay_type"), type != null ? type : "",
-              AttributeKey.stringKey("grpc.delay_reason"), delayReason));
+      if (stale) {
+        // The stream closed, or another delay transition happened, while this span was being
+        // created. Nobody else can see it, so this thread is the one that must end it.
+        delaySpan.end();
+      }
     }
 
     @Override
-    public void recordAttemptDelayEnd() {
-      Span delaySpan = activeDelaySpan;
+    public void recordDelayReasonChanged(String delayType, String delayReason) {
+      checkNotNull(delayType, "delayType");
+      checkNotNull(delayReason, "delayReason");
+      Span delaySpan;
+      synchronized (this) {
+        if (streamClosed || streamCreated) {
+          return;
+        }
+        delaySpan = activeDelaySpan;
+      }
       if (delaySpan != null) {
-        // End active child span upon pick completion or transport cancellation.
-        delaySpan.end();
+        // A121 records only the reason on the event; the type is an attribute of the span itself.
+        delaySpan.addEvent(
+            DELAY_TRIGGERED_EVENT_NAME, Attributes.of(DELAY_REASON_KEY, delayReason));
+      }
+    }
+
+    @Override
+    public void recordDelayEnd(String delayType) {
+      checkNotNull(delayType, "delayType");
+      endActiveDelaySpan();
+    }
+
+    /**
+     * Ends the active child span upon pick completion, stream creation or stream closure, without
+     * holding the monitor across {@link Span#end}. Returns the delay type the span was opened
+     * with, or {@code null} if no delay was open.
+     */
+    @Nullable
+    private String endActiveDelaySpan() {
+      Span delaySpan;
+      String delayType;
+      synchronized (this) {
+        delaySpan = activeDelaySpan;
+        delayType = activeDelayType;
         activeDelaySpan = null;
         activeDelayType = null;
+        // Invalidates a span that a concurrent recordDelayStart() is creating right now, so that
+        // it ends its own span instead of publishing it after this end.
+        delayEpoch++;
       }
+      if (delaySpan != null) {
+        delaySpan.end();
+      }
+      return delayType;
     }
 
     @Override
@@ -292,8 +552,22 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void streamClosed(io.grpc.Status status) {
-      recordAttemptDelayEnd();
+    public void streamClosed(Status status) {
+      synchronized (this) {
+        if (streamClosed) {
+          return;
+        }
+        streamClosed = true;
+      }
+      // Outside the monitor: both of these call into user-supplied OpenTelemetry code.
+      String openDelayType = endActiveDelaySpan();
+      if (openDelayType != null) {
+        // A121: the tracer terminates an open delay by itself when the attempt is cancelled or
+        // reaches its deadline, so the channel does not have to end it on those paths.
+        logger.log(
+            Level.FINE, "Stream closed while a {0} delay was open; the delay span was terminated",
+            openDelayType);
+      }
       endSpanWithStatus(span, status);
     }
   }
@@ -518,7 +792,7 @@ final class OpenTelemetryTracingModule {
   //                                                  'message-size' = 7854) ----|
   private void recordOutboundMessageSentEvent(Span span,
       int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-    AttributesBuilder attributesBuilder = io.opentelemetry.api.common.Attributes.builder();
+    AttributesBuilder attributesBuilder = Attributes.builder();
     attributesBuilder.put("sequence-number", seqNo);
     if (optionalUncompressedSize != -1) {
       attributesBuilder.put("message-size", optionalUncompressedSize);
@@ -530,14 +804,14 @@ final class OpenTelemetryTracingModule {
   }
 
   private void recordInboundCompressedMessage(Span span, int seqNo, long optionalWireSize) {
-    AttributesBuilder attributesBuilder = io.opentelemetry.api.common.Attributes.builder();
+    AttributesBuilder attributesBuilder = Attributes.builder();
     attributesBuilder.put("sequence-number", seqNo);
     attributesBuilder.put("message-size-compressed", optionalWireSize);
     span.addEvent("Inbound compressed message", attributesBuilder.build());
   }
 
   private void recordInboundMessageSize(Span span, int seqNo, long bytes) {
-    AttributesBuilder attributesBuilder = io.opentelemetry.api.common.Attributes.builder();
+    AttributesBuilder attributesBuilder = Attributes.builder();
     attributesBuilder.put("sequence-number", seqNo);
     attributesBuilder.put("message-size", bytes);
     span.addEvent("Inbound message", attributesBuilder.build());

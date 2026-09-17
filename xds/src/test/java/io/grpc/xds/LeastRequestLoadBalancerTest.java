@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.LoadBalancerMatchers.pickerReturns;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -240,7 +239,11 @@ public class LeastRequestLoadBalancerTest {
     Subchannel subchannel = getSubchannel(servers.get(0));
 
     inOrder.verify(helper)
-        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayType())
+        .isEqualTo("connecting");
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayReason())
+        .contains("least_request: waiting for any endpoint to connect");
     assertThat(childLbState.getCurrentState()).isEqualTo(CONNECTING);
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
@@ -253,8 +256,15 @@ public class LeastRequestLoadBalancerTest {
     assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
     refreshInvokedAndUpdateBS(inOrder, CONNECTING);
-    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs))
-        .isEqualTo(PickResult.withNoResult());
+    PickResult pr = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(pr.getStatus().isOk()).isTrue();
+    assertThat(pr.getSubchannel()).isNull();
+    // The failing endpoint drops out of the attempting set; its two siblings are still connecting
+    // and are named in the aggregate reason, sorted for a stable string.
+    assertThat(pr.getDelayType()).isEqualTo("connecting");
+    assertThat(pr.getDelayReason())
+        .isEqualTo("least_request: waiting for any endpoint to connect "
+            + "(attempting [FakeSocketAddress-server1], [FakeSocketAddress-server2])");
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(helper).refreshNameResolution();
@@ -306,7 +316,9 @@ public class LeastRequestLoadBalancerTest {
             .build());
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     inOrder.verify(helper)
-        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayReason())
+        .contains("least_request: waiting for any endpoint to connect");
 
     List<Subchannel> savedSubchannels = new ArrayList<>(subchannels.values());
     loadBalancer.shutdown();
@@ -329,7 +341,9 @@ public class LeastRequestLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     inOrder.verify(helper)
-        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayReason())
+        .contains("least_request: waiting for any endpoint to connect");
 
     // Simulate state transitions for each subchannel individually.
     List<ChildLbState> children = new ArrayList<>(loadBalancer.getChildLbStates());
@@ -343,6 +357,12 @@ public class LeastRequestLoadBalancerTest {
     }
 
     verify(helper, atLeast(loadBalancer.getChildLbStates().size())).refreshNameResolution();
+    // Each endpoint that fails shrinks the set still being attempted, so the aggregate connecting
+    // delay reason changes and is republished, until no endpoint is left to wait for.
+    inOrder.verify(helper, times(2))
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayReason())
+        .contains("least_request: waiting for any endpoint to connect");
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     assertThat(getStatusString(pickerCaptor.getValue()))
         .contains("Status{code=UNKNOWN, description=connection broken");
@@ -390,7 +410,9 @@ public class LeastRequestLoadBalancerTest {
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper)
-        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayReason())
+        .contains("least_request: waiting for any endpoint to connect");
 
     // Simulate state transitions for each subchannel individually.
     for (Subchannel sc : subchannels.values()) {
@@ -399,6 +421,9 @@ public class LeastRequestLoadBalancerTest {
       Status error = Status.UNKNOWN.withDescription("connection broken");
       deliverSubchannelState(sc, ConnectivityStateInfo.forTransientFailure(error));
       inOrder.verify(helper).refreshNameResolution();
+      // The failed endpoint drops out of the set being attempted, so the aggregate connecting
+      // delay reason changes and has to be republished even though the state is still CONNECTING.
+      inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any());
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(READY));
       inOrder.verify(helper).updateBalancingState(eq(READY), isA(ReadyPicker.class));
       // Simulate receiving go-away so READY subchannels transit to IDLE.
@@ -406,10 +431,42 @@ public class LeastRequestLoadBalancerTest {
       inOrder.verify(helper).refreshNameResolution();
       verify(sc, times(2)).requestConnection();
       inOrder.verify(helper)
-          .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
+          .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+      assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayReason())
+          .contains("least_request: waiting for any endpoint to connect");
     }
 
     AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
+  }
+
+  @Test
+  public void connectingDelayReasonUpdates() throws Exception {
+    InOrder inOrder = inOrder(helper);
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
+
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult pickResult1 = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(pickResult1.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult1.getDelayReason())
+        .contains("least_request: waiting for any endpoint to connect (attempting ");
+    assertThat(pickResult1.getDelayReason()).contains("server0");
+    assertThat(pickResult1.getDelayReason()).contains("server1");
+    assertThat(pickResult1.getDelayReason()).contains("server2");
+
+    Subchannel sc0 = getSubchannel(servers.get(0));
+    deliverSubchannelState(sc0, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    inOrder.verify(helper, atLeast(0)).refreshNameResolution();
+    inOrder.verify(helper, atLeast(1)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult pickResult2 = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(pickResult2.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult2.getDelayReason())
+        .contains("least_request: waiting for any endpoint to connect (attempting ");
+    assertThat(pickResult2.getDelayReason()).doesNotContain("server0");
+    assertThat(pickResult2.getDelayReason()).contains("server1");
+    assertThat(pickResult2.getDelayReason()).contains("server2");
   }
 
   @Test

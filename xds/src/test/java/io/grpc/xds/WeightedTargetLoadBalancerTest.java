@@ -18,7 +18,9 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancerMatchers.pickerReturns;
 import static org.mockito.ArgumentMatchers.any;
@@ -65,6 +67,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -158,6 +161,8 @@ public class WeightedTargetLoadBalancerTest {
 
   @Mock
   private Helper helper;
+  @Captor
+  private ArgumentCaptor<SubchannelPicker> pickerCaptor;
 
   private LoadBalancer weightedTargetLb;
   private int fooLbCreated;
@@ -440,7 +445,74 @@ public class WeightedTargetLoadBalancerTest {
     // But since those calls happen during the handling of teh resolved addresses of the parent
     // WeightedTargetLLoadBalancer, the overall balancing state should only be updated once.
     verify(helper, times(1)).updateBalancingState(any(), any());
+  }
 
+  @Test
+  public void connectingState_passesThroughChildDelayTypeAndReason() {
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
+        "target0", weightedLbConfig0);
+    weightedTargetLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
+            .build());
+
+    Helper childHelper = Iterables.getOnlyElement(childHelpers);
+    childHelper.updateBalancingState(
+        CONNECTING,
+        new FixedResultPicker(PickResult.withNoResult("cds_dynamic_discovery", "child_reason")));
+
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    // The wrapper delegates to the child FixedResultPicker, which ignores the pick args.
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getDelayType()).isEqualTo("cds_dynamic_discovery");
+    assertThat(result.getDelayReason()).isEqualTo("weighted_target: child_reason");
+  }
+
+  @Test
+  public void idleState_passesThroughChildDelayTypeAndReason() {
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
+        "target0", weightedLbConfig0);
+    weightedTargetLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
+            .build());
+
+    Helper childHelper = Iterables.getOnlyElement(childHelpers);
+    childHelper.updateBalancingState(
+        IDLE,
+        new FixedResultPicker(PickResult.withNoResult("some_idle_type", "child_reason")));
+
+    verify(helper, atLeastOnce()).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    // The wrapper delegates to the child FixedResultPicker, which ignores the pick args.
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getDelayType()).isEqualTo("some_idle_type");
+    assertThat(result.getDelayReason()).isEqualTo("weighted_target: child_reason");
+  }
+
+  @Test
+  public void noChildIsReadyConnectingOrFailing_fallsBackToConnectingDelay() {
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
+        "target0", weightedLbConfig0);
+    weightedTargetLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
+            .build());
+
+    // SHUTDOWN is the one child state that contributes to neither the ready, the failing nor the
+    // connecting picker list, so the policy has no child picker to delegate to and has to emit
+    // its own queued result.
+    Helper childHelper = Iterables.getOnlyElement(childHelpers);
+    childHelper.updateBalancingState(
+        SHUTDOWN, new FixedResultPicker(PickResult.withNoResult("some_type", "some_reason")));
+
+    verify(helper, atLeastOnce()).updateBalancingState(eq(SHUTDOWN), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.hasResult()).isFalse();
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("weighted_target: connecting");
   }
 
   private Object newChildConfig(LoadBalancerProvider provider, Object config) {

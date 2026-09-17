@@ -145,6 +145,45 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
+  public void connectingDelayReason_namesAttemptingEndpoints_andShrinksOnFailure() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+
+    initializeLbSubchannels(config, servers);
+
+    // ring:
+    //   "FakeSocketAddress-server1_0"
+    //   "FakeSocketAddress-server0_0"
+    //   "FakeSocketAddress-server2_0"
+
+    // Drive the first ring entry into CONNECTING so a pick lands on the connecting branch.
+    deliverSubchannelState(getSubchannel(servers, 1), CSI_CONNECTING);
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    PickResult result1 = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result1.getDelayType()).isEqualTo("connecting");
+    // No endpoint has failed yet, so every one of them is named as being attempted.
+    assertThat(result1.getDelayReason())
+        .startsWith("ring_hash: waiting for any endpoint to connect (attempting ");
+    assertThat(result1.getDelayReason()).contains("server0");
+    assertThat(result1.getDelayReason()).contains("server1");
+    assertThat(result1.getDelayReason()).contains("server2");
+
+    // Once an endpoint fails it is no longer being attempted, so it drops out of the reason.
+    // This is the update that FixedResultPicker-based equality would have swallowed.
+    deliverSubchannelUnreachable(getSubchannel(servers, 0));
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+
+    PickResult result2 = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result2.getDelayType()).isEqualTo("connecting");
+    assertThat(result2.getDelayReason()).doesNotContain("server0");
+    assertThat(result2.getDelayReason()).contains("server1");
+    assertThat(result2.getDelayReason()).contains("server2");
+  }
+
+  @Test
   public void subchannelLazyConnectUntilPicked() {
     RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
@@ -161,7 +200,8 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
     assertThat(result.getDelayType()).isEqualTo("connecting");
-    assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
+    assertThat(result.getDelayReason())
+        .contains("ring_hash: waiting for any endpoint to connect (attempting ");
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
     int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
                             && !PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
@@ -527,7 +567,9 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull(); // buffer request
     assertThat(result.getDelayType()).isEqualTo("connecting");
-    assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
+    assertThat(result.getDelayReason()).isEqualTo(
+        "ring_hash: waiting for any endpoint to connect (attempting [FakeSocketAddress-server0], "
+            + "[FakeSocketAddress-server1], [FakeSocketAddress-server2])");
     verifyConnection(0);
   }
 
@@ -551,7 +593,10 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull(); // buffer request
     assertThat(result.getDelayType()).isEqualTo("connecting");
-    assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
+    // server0 is in TRANSIENT_FAILURE, so it is no longer one of the endpoints being attempted.
+    assertThat(result.getDelayReason()).isEqualTo(
+        "ring_hash: waiting for any endpoint to connect "
+            + "(attempting [FakeSocketAddress-server1], [FakeSocketAddress-server2])");
     verifyConnection(1);
   }
 

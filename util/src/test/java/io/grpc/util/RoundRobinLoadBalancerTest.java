@@ -85,10 +85,13 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class RoundRobinLoadBalancerTest {
   private static final Attributes.Key<String> MAJOR_KEY = Attributes.Key.create("major-key");
+  // Note that PickResult.equals deliberately ignores the delay attributes, so matching on this
+  // picker asserts the queued-with-no-result shape only. The delay reason itself is asserted
+  // explicitly by connectingDelayReasonUpdates().
   private static final SubchannelPicker EMPTY_PICKER =
       new FixedResultPicker(
           PickResult.withNoResult("connecting",
-              "round_robin connecting: TCP/TLS handshake in progress to child balancers"));
+              "round_robin: waiting for any endpoint to connect"));
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -329,6 +332,9 @@ public class RoundRobinLoadBalancerTest {
       Status error = Status.UNKNOWN.withDescription("connection broken");
       deliverSubchannelState(sc, ConnectivityStateInfo.forTransientFailure(error));
       inOrder.verify(mockHelper).refreshNameResolution();
+      // The failed endpoint drops out of the set being attempted, so the aggregate connecting
+      // delay reason changes and has to be republished even though the state is still CONNECTING.
+      inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(READY));
       inOrder.verify(mockHelper).updateBalancingState(eq(READY), isA(ReadyPicker.class));
       // Simulate receiving go-away so READY subchannels transit to IDLE.
@@ -350,8 +356,13 @@ public class RoundRobinLoadBalancerTest {
     // send LB only the first 2 addresses
     List<EquivalentAddressGroup> svs2 = Arrays.asList(servers.get(0), servers.get(1));
     acceptAddresses(svs2, affinity);
-    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any());
+    // Dropping an endpoint shrinks the set being attempted, so the connecting delay reason is
+    // republished in addition to the state update that accompanies the address change.
+    inOrder.verify(mockHelper, atLeastOnce())
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     inOrder.verify(subchannel2).shutdown();
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayReason())
+        .doesNotContain("FakeSocketAddress-server2");
   }
 
   @Test
@@ -585,7 +596,67 @@ public class RoundRobinLoadBalancerTest {
         .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     PickResult res = pickerCaptor.getValue().pickSubchannel(mockArgs);
     assertThat(res.getDelayType()).isEqualTo("connecting");
-    assertThat(res.getDelayReason()).contains("TCP/TLS handshake in progress");
+    assertThat(res.getDelayReason()).contains("waiting for any endpoint to connect");
+  }
+
+  @Test
+  public void connectingDelayReasonUpdates() {
+    List<EquivalentAddressGroup> twoServers = servers.subList(0, 2);
+    acceptAddresses(twoServers, affinity);
+    Subchannel sc0 = subchannels.get(Collections.singletonList(twoServers.get(0)));
+    Subchannel sc1 = subchannels.get(Collections.singletonList(twoServers.get(1)));
+
+    deliverSubchannelState(sc0, ConnectivityStateInfo.forNonError(CONNECTING));
+    deliverSubchannelState(sc1, ConnectivityStateInfo.forNonError(CONNECTING));
+
+    verify(mockHelper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+
+    PickResult res1 = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(res1.getDelayType()).isEqualTo("connecting");
+    assertThat(res1.getDelayReason())
+        .startsWith("round_robin: waiting for any endpoint to connect");
+    // (a) Names the endpoints
+    assertThat(res1.getDelayReason()).contains("FakeSocketAddress-server0");
+    assertThat(res1.getDelayReason()).contains("FakeSocketAddress-server1");
+
+    Mockito.clearInvocations(mockHelper);
+
+    // (d) An unchanged set of attempting endpoints does not produce redundant call
+    deliverSubchannelState(sc0, ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(mockHelper, never()).updateBalancingState(any(), any());
+
+    // (c) Set of attempting endpoints changes -> reason changes and updateBalancingState is called
+    deliverSubchannelState(sc0, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    verify(mockHelper, times(1)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult res2 = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(res2.getDelayType()).isEqualTo("connecting");
+    assertThat(res2.getDelayReason()).doesNotContain("FakeSocketAddress-server0");
+    assertThat(res2.getDelayReason()).contains("FakeSocketAddress-server1");
+
+    // (b) One endpoint becomes READY -> policy goes READY
+    deliverSubchannelState(sc1, ConnectivityStateInfo.forNonError(READY));
+    verify(mockHelper, times(1)).updateBalancingState(eq(READY), pickerCaptor.capture());
+    PickResult res3 = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(res3.getStatus().isOk()).isTrue();
+  }
+
+  @Test
+  public void connectingDelayReason_truncatesLargeEndpointSets() {
+    // More endpoints than the reason is willing to enumerate.
+    List<EquivalentAddressGroup> manyServers = new ArrayList<>();
+    for (int i = 0; i < 8; i++) {
+      manyServers.add(new EquivalentAddressGroup(new FakeSocketAddress("big" + i)));
+    }
+    acceptAddresses(manyServers, affinity);
+
+    verify(mockHelper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    String reason = pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayReason();
+
+    // The first five sort lowest and are named; the remaining three are only counted.
+    assertThat(reason).isEqualTo(
+        "round_robin: waiting for any endpoint to connect (attempting "
+            + "[FakeSocketAddress-big0], [FakeSocketAddress-big1], [FakeSocketAddress-big2], "
+            + "[FakeSocketAddress-big3], [FakeSocketAddress-big4] and 3 more)");
   }
 
   private static class FakeSocketAddress extends SocketAddress {

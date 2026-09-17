@@ -827,6 +827,89 @@ public class CachingRlsLbClientTest {
   }
 
   @Test
+  public void rls_childPolicyWithoutPicker_returnsDelayAttributes() throws Exception {
+    // Keep the child policy for target1 from reporting a picker, so the RLS picker observes a null
+    // child picker.
+    lbProvider.targetsWithoutBalancingState.add("target1");
+    setUpRlsLbClient();
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        RlsProtoData.RouteLookupRequestKey.create(
+            ImmutableMap.of(
+                "server", "bigtable.googleapis.com", "service-key", "service1",
+                "method-key", "create"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequestKey,
+            RouteLookupResponse.create(
+                ImmutableList.of("target1"), "header")));
+
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.hasData()).isFalse();
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.hasData()).isTrue();
+    assertThat(resp.getChildPolicyWrapper().getPicker()).isNull();
+
+    ArgumentCaptor<SubchannelPicker> pickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper, atLeastOnce())
+        .updateBalancingState(any(), pickerCaptor.capture());
+    PickResult pickResult = getPickResultForCreate(pickerCaptor, new Metadata());
+
+    assertThat(pickResult.hasResult()).isFalse();
+    assertThat(pickResult.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult.getDelayReason()).isEqualTo("RLS child policy connecting");
+  }
+
+  @Test
+  public void rls_fallbackChildPolicyWithoutPicker_returnsDelayAttributes() throws Exception {
+    // Keep the fallback child policy from reporting a picker, so the RLS picker observes a null
+    // fallback picker.
+    lbProvider.targetsWithoutBalancingState.add(DEFAULT_TARGET);
+    setUpRlsLbClient();
+    // Throttling makes the lookup fail immediately, which sends the pick to the fallback target.
+    fakeThrottler.nextResult = true;
+
+    ArgumentCaptor<SubchannelPicker> pickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper, atLeastOnce())
+        .updateBalancingState(any(), pickerCaptor.capture());
+    PickResult pickResult = getPickResultForCreate(pickerCaptor, new Metadata());
+
+    assertThat(pickResult.hasResult()).isFalse();
+    assertThat(pickResult.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult.getDelayReason()).isEqualTo("RLS fallback child policy connecting");
+  }
+
+  @Test
+  public void rls_fallbackChildPolicyDelayed_returnsDelayAttributes() throws Exception {
+    setUpRlsLbClient();
+    // The fallback child policy is created eagerly by the RLS client; make it queue its picks.
+    lbProvider.fallbackTargetHelper.updateBalancingState(
+        ConnectivityState.CONNECTING,
+        new SubchannelPicker() {
+          @Override
+          public PickResult pickSubchannel(LoadBalancer.PickSubchannelArgs args) {
+            return PickResult.withNoResult("connecting", "TCP handshake in progress");
+          }
+        });
+    // Throttling makes the lookup fail immediately, which sends the pick to the fallback target.
+    fakeThrottler.nextResult = true;
+
+    ArgumentCaptor<SubchannelPicker> pickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper, atLeastOnce())
+        .updateBalancingState(any(), pickerCaptor.capture());
+    PickResult pickResult = getPickResultForCreate(pickerCaptor, new Metadata());
+
+    assertThat(pickResult.hasResult()).isFalse();
+    assertThat(pickResult.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult.getDelayReason()).isEqualTo(
+        "RLS fallback (" + DEFAULT_TARGET + ") delayed: TCP handshake in progress");
+  }
+
+  @Test
   public void timeout_not_changing_picked_subchannel() throws Exception {
     setUpRlsLbClient();
     RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
@@ -1188,6 +1271,12 @@ public class CachingRlsLbClientTest {
    */
   private static final class TestLoadBalancerProvider extends LoadBalancerProvider {
     final Set<LoadBalancer> loadBalancers = new HashSet<>();
+    // Targets whose load balancer must not report any balancing state, which leaves the
+    // corresponding ChildPolicyWrapper's picker null.
+    final Set<String> targetsWithoutBalancingState = new HashSet<>();
+    // The helper of the load balancer created for the fallback (default) target. Lets tests drive
+    // the fallback child policy's picker.
+    Helper fallbackTargetHelper;
 
     @Override
     public boolean isAvailable() {
@@ -1217,6 +1306,12 @@ public class CachingRlsLbClientTest {
         @Override
         public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           Map<?, ?> config = (Map<?, ?>) resolvedAddresses.getLoadBalancingPolicyConfig();
+          if (DEFAULT_TARGET.equals(config.get("target"))) {
+            fallbackTargetHelper = helper;
+          }
+          if (targetsWithoutBalancingState.contains(config.get("target"))) {
+            return Status.OK;
+          }
           if (DEFAULT_TARGET.equals(config.get("target"))) {
             helper.updateBalancingState(
                 ConnectivityState.TRANSIENT_FAILURE,

@@ -65,6 +65,22 @@ public class LoadBalancerTest {
   }
 
   @Test
+  public void pickResult_withSubchannelTracerAndAuthorityOverride() {
+    PickResult result = PickResult.withSubchannel(subchannel, tracerFactory, "override.example");
+    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
+    assertThat(result.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
+    assertThat(result.getAuthorityOverride()).isEqualTo("override.example");
+    assertThat(result.isDrop()).isFalse();
+    // The delay attributes are not part of this overload.
+    assertThat(result.getDelayType()).isNull();
+    assertThat(result.getDelayReason()).isNull();
+
+    PickResult noOverride = PickResult.withSubchannel(subchannel, tracerFactory, null);
+    assertThat(noOverride.getAuthorityOverride()).isNull();
+  }
+
+  @Test
   public void pickResult_withSubchannelReplacement() {
     PickResult result = PickResult.withSubchannel(subchannel, tracerFactory)
         .copyWithSubchannel(subchannel2);
@@ -85,12 +101,50 @@ public class LoadBalancerTest {
   }
 
   @Test
+  public void pickResult_copyMethodsRetainDelayAttributes() {
+    // PickResult.equals() deliberately ignores the delay attributes, so nothing else in the test
+    // suite would notice if a copy method dropped them. Assert on the accessors directly.
+    PickResult delayed = PickResult.withNoResult("connecting", "waiting for a subchannel");
+
+    PickResult withTracer = delayed.copyWithStreamTracerFactory(tracerFactory);
+    assertThat(withTracer.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
+    assertThat(withTracer.getDelayType()).isEqualTo("connecting");
+    assertThat(withTracer.getDelayReason()).isEqualTo("waiting for a subchannel");
+
+    PickResult withSubchannel = delayed.copyWithSubchannel(subchannel);
+    assertThat(withSubchannel.getSubchannel()).isSameInstanceAs(subchannel);
+    assertThat(withSubchannel.getDelayType()).isEqualTo("connecting");
+    assertThat(withSubchannel.getDelayReason()).isEqualTo("waiting for a subchannel");
+
+    // Copying a result that has no delay attributes must not invent any.
+    PickResult undelayed =
+        PickResult.withSubchannel(subchannel).copyWithStreamTracerFactory(tracerFactory);
+    assertThat(undelayed.getDelayType()).isNull();
+    assertThat(undelayed.getDelayReason()).isNull();
+  }
+
+  @Test
   public void pickResult_withNoResult() {
     PickResult result = PickResult.withNoResult();
     assertThat(result.getSubchannel()).isNull();
     assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
     assertThat(result.getStreamTracerFactory()).isNull();
     assertThat(result.isDrop()).isFalse();
+    assertThat(result.getDelayType()).isNull();
+    assertThat(result.getDelayReason()).isNull();
+  }
+
+  @Test
+  public void pickResult_withNoResult_withDelay() {
+    PickResult result = PickResult.withNoResult("connecting", "trying backends");
+    assertThat(result.getSubchannel()).isNull();
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
+    assertThat(result.getStreamTracerFactory()).isNull();
+    assertThat(result.isDrop()).isFalse();
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("trying backends");
+    assertThat(result.toString()).contains("delayType=connecting");
+    assertThat(result.toString()).contains("delayReason=trying backends");
   }
 
   @Test
@@ -118,6 +172,10 @@ public class LoadBalancerTest {
     PickResult sc3 = PickResult.withSubchannel(subchannel, tracerFactory);
     PickResult sc4 = PickResult.withSubchannel(subchannel2);
     PickResult nr = PickResult.withNoResult();
+    PickResult nrDelay1 = PickResult.withNoResult("connecting", "trying 10.0.0.1");
+    PickResult nrDelay2 = PickResult.withNoResult("connecting", "trying 10.0.0.1");
+    PickResult nrDelayDiffReason = PickResult.withNoResult("connecting", "trying 10.0.0.2");
+    PickResult nrDelayDiffType = PickResult.withNoResult("rls_lookup_pending", "trying 10.0.0.1");
     PickResult error1 = PickResult.withError(status);
     PickResult error2 = PickResult.withError(status2);
     PickResult error3 = PickResult.withError(status2);
@@ -131,6 +189,12 @@ public class LoadBalancerTest {
     assertThat(sc1).isEqualTo(sc2);
     assertThat(sc1).isNotEqualTo(sc3);
     assertThat(sc1).isNotEqualTo(sc4);
+
+    assertThat(nr).isEqualTo(nrDelay1);
+    assertThat(nrDelay1).isEqualTo(nrDelay2);
+    assertThat(nrDelay1.hashCode()).isEqualTo(nrDelay2.hashCode());
+    assertThat(nrDelay1).isEqualTo(nrDelayDiffReason);
+    assertThat(nrDelay1).isEqualTo(nrDelayDiffType);
 
     assertThat(error1).isNotEqualTo(error2);
     assertThat(error2).isEqualTo(error3);
