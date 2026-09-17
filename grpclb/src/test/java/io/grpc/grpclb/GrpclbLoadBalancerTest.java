@@ -408,6 +408,62 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
+  public void roundRobinPickerWithBufferEntry_delayAttributes() {
+    RoundRobinPicker picker =
+        new RoundRobinPicker(
+            Collections.<DropEntry>emptyList(), Collections.singletonList(BUFFER_ENTRY));
+
+    PickResult result = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("grpclb: waiting for backend server list");
+    assertNull(result.getSubchannel());
+    assertTrue(result.getStatus().isOk());
+  }
+
+  /**
+   * End-to-end: while the balancer-provided backend is still connecting, the picker published to
+   * the channel buffers picks and reports the delay attributes.
+   */
+  @Test
+  public void bufferedPickWhileBackendConnecting_delayAttributes() {
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
+
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+
+    // The balancer sends a backend, but its subchannel has not connected yet.
+    List<ServerEntry> backends =
+        Collections.singletonList(new ServerEntry("127.0.0.1", 2000, "token0001"));
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(backends));
+
+    assertEquals(1, mockSubchannels.size());
+    Subchannel subchannel = mockSubchannels.poll();
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
+
+    RoundRobinPicker picker = (RoundRobinPicker) currentPicker;
+    assertThat(picker.pickList).containsExactly(BUFFER_ENTRY);
+
+    PickResult result = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("grpclb: waiting for backend server list");
+    assertNull(result.getSubchannel());
+
+    // Once the backend is connected, the pick is no longer delayed.
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    RoundRobinPicker readyPicker = (RoundRobinPicker) currentPicker;
+    // BackendEntry attaches the load balance token to the headers of the picked RPC.
+    PickSubchannelArgs readyArgs = mock(PickSubchannelArgs.class);
+    when(readyArgs.getHeaders()).thenReturn(new Metadata());
+    PickResult readyResult = readyPicker.pickSubchannel(readyArgs);
+    assertThat(readyResult.getSubchannel()).isSameInstanceAs(subchannel);
+    assertNull(readyResult.getDelayType());
+    assertNull(readyResult.getDelayReason());
+  }
+
+  @Test
   public void loadReporting() {
     Metadata headers = new Metadata();
     PickSubchannelArgs args = mock(PickSubchannelArgs.class);

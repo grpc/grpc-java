@@ -40,6 +40,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -56,6 +57,7 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -245,6 +247,65 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(lb.getDelegateProvider().getClass().getName()).isEqualTo(
         "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
     assertTrue(shutdown.get());
+  }
+
+  @Test
+  public void acceptResolvedAddresses_policySwap_publishesConnectingDelay() throws Exception {
+    List<ConnectivityState> states = new ArrayList<>();
+    List<SubchannelPicker> pickers = new ArrayList<>();
+    Helper helper = new TestHelper() {
+      @Override
+      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+        states.add(newState);
+        pickers.add(newPicker);
+      }
+    };
+    AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
+    List<EquivalentAddressGroup> servers =
+        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
+
+    // pick_first (the default) is swapped out for test_lb, so the channel is left without a picker
+    // until test_lb produces one. gRFC A121 requires that gap to be annotated.
+    assertTrue(lb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers)
+            .setLoadBalancingPolicyConfig(
+                lbf.parseLoadBalancingPolicyConfig(
+                    parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { } } ] }")).getConfig())
+            .build()).isOk());
+
+    assertThat(states).containsExactly(ConnectivityState.CONNECTING);
+    PickResult swapResult = pickers.get(0).pickSubchannel(null);
+    assertThat(swapResult.getSubchannel()).isNull();
+    assertThat(swapResult.getStatus().isOk()).isTrue();
+    assertThat(swapResult.getDelayType()).isEqualTo("connecting");
+    assertThat(swapResult.getDelayReason())
+        .isEqualTo("waiting for the load balancing policy to be applied");
+
+    // Re-accepting the same policy does not tear anything down, so no delay is reported.
+    assertTrue(lb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers)
+            .setLoadBalancingPolicyConfig(
+                lbf.parseLoadBalancingPolicyConfig(
+                    parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { } } ] }")).getConfig())
+            .build()).isOk());
+
+    assertThat(states).containsExactly(ConnectivityState.CONNECTING);
+
+    // Swapping to a different policy reports the delay again.
+    assertTrue(lb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers)
+            .setLoadBalancingPolicyConfig(
+                lbf.parseLoadBalancingPolicyConfig(parseConfig(
+                    "{\"loadBalancingConfig\": [ {\"test_lb2\": { } } ] }")).getConfig())
+            .build()).isOk());
+
+    assertThat(states)
+        .containsExactly(ConnectivityState.CONNECTING, ConnectivityState.CONNECTING);
+    assertThat(pickers.get(1).pickSubchannel(null).getDelayReason())
+        .isEqualTo("waiting for the load balancing policy to be applied");
   }
 
   @Test

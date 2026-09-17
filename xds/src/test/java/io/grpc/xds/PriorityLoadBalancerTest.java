@@ -25,6 +25,7 @@ import static io.grpc.LoadBalancerMatchers.pickerReturns;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
@@ -1150,6 +1151,82 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
+  public void delayReasonChange_propagatesToChannel() throws Exception {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
+    PriorityLbConfig priorityLbConfig = new PriorityLbConfig(
+        ImmutableMap.of("p0", priorityChildConfig0), ImmutableList.of("p0"));
+    priorityLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+
+    Helper helper0 = Iterables.getOnlyElement(fooHelpers);
+
+    helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("connecting", "first reason"));
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker1 = pickerCaptor.getValue();
+    assertThat(picker1.pickSubchannel(null).getDelayReason())
+        .isEqualTo("waiting on priority 0 (child 'p0'): first reason");
+
+    helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("connecting", "second reason"));
+    verify(helper, atLeast(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker2 = pickerCaptor.getValue();
+
+    assertThat(picker2).isNotEqualTo(picker1);
+    assertThat(picker2.pickSubchannel(null).getDelayReason())
+        .isEqualTo("waiting on priority 0 (child 'p0'): second reason");
+  }
+
+  @Test
+  public void priorityPicker_equalsAndHashCodeAndToString() throws Exception {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
+    PriorityLbConfig priorityLbConfig = new PriorityLbConfig(
+        ImmutableMap.of("p0", priorityChildConfig0), ImmutableList.of("p0"));
+    priorityLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+
+    Helper helper0 = Iterables.getOnlyElement(fooHelpers);
+
+    helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("connecting", "reason1"));
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker1 = pickerCaptor.getValue();
+
+    // updateOverallState() suppresses a picker equal to the current one, so an equal picker would
+    // never reach the helper and the capture below would just hand back picker1 itself. Publish a
+    // distinct reason first to force the next publish through as a separate instance.
+    helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("connecting", "interleaved"));
+
+    helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("connecting", "reason1"));
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker4 = pickerCaptor.getValue();
+    assertThat(picker4).isNotSameInstanceAs(picker1);
+
+    helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("connecting", "reason2"));
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker2 = pickerCaptor.getValue();
+
+    helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("idle", "reason1"));
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker3 = pickerCaptor.getValue();
+
+    assertThat(picker1).isEqualTo(picker4);
+    assertThat(picker1.hashCode()).isEqualTo(picker4.hashCode());
+
+    assertThat(picker1).isNotEqualTo(picker2);
+    assertThat(picker1).isNotEqualTo(picker3);
+
+    assertThat(picker1.toString()).contains("PriorityPicker");
+    assertThat(picker1.toString()).contains("p0");
+    assertThat(picker1.toString()).contains("priorityIndex=0");
+  }
+
+  @Test
   public void initialChildPicker_returnsAnnotatedDelayAttributes() throws Exception {
     PriorityChildConfig priorityChildConfig0 =
         new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
@@ -1171,6 +1248,51 @@ public class PriorityLoadBalancerTest {
     assertThat(result.getDelayType()).isEqualTo("0:connecting");
     assertThat(result.getDelayReason()).isEqualTo(
         "waiting on priority 0 (child 'p0'): priority child state uninitialized");
+  }
+
+  @Test
+  public void priorityPicker_equalsHandlesNonFixedDelegates() throws Exception {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
+    PriorityLbConfig priorityLbConfig = new PriorityLbConfig(
+        ImmutableMap.of("p0", priorityChildConfig0), ImmutableList.of("p0"));
+    priorityLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+
+    Helper helper0 = Iterables.getOnlyElement(fooHelpers);
+
+    // A picker that computes its result per pick, rather than a FixedResultPicker. The delay
+    // attributes cannot be compared up front for such a picker, so PriorityPicker has to fall
+    // back to delegate equality alone.
+    SubchannelPicker dynamicChildPicker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withNoResult("connecting", "computed per pick");
+      }
+    };
+
+    helper0.updateBalancingState(CONNECTING, dynamicChildPicker);
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker1 = pickerCaptor.getValue();
+
+    // Re-publishing the very same child picker yields an equal wrapper even though neither side
+    // exposes a fixed result to compare.
+    helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("connecting", "interleaved"));
+    helper0.updateBalancingState(CONNECTING, dynamicChildPicker);
+    verify(helper, atLeast(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker2 = pickerCaptor.getValue();
+
+    assertThat(picker2).isNotSameInstanceAs(picker1);
+    assertThat(picker2).isEqualTo(picker1);
+    assertThat(picker2.hashCode()).isEqualTo(picker1.hashCode());
+
+    // And the usual identity guards.
+    assertThat(picker1.equals(null)).isFalse();
+    assertThat(picker1.equals("not a picker")).isFalse();
+    assertThat(picker1.equals(picker1)).isTrue();
   }
 
   private static SubchannelPicker fixedNoResultPicker(String delayType, String delayReason) {

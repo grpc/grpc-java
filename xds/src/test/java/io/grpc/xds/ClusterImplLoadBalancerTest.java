@@ -158,6 +158,10 @@ public class ClusterImplLoadBalancerTest {
   private int xdsClientRefs;
   private ConnectivityState currentState;
   private SubchannelPicker currentPicker;
+  // Full history of the updates the load balancer published upstream, in order. currentState and
+  // currentPicker only retain the latest one.
+  private final List<ConnectivityState> allStates = new ArrayList<>();
+  private final List<SubchannelPicker> allPickers = new ArrayList<>();
   private ClusterImplLoadBalancer loadBalancer;
 
   @Before
@@ -317,6 +321,28 @@ public class ClusterImplLoadBalancerTest {
     PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isTrue();
     verify(detailsConsumer, never()).addOptionalLabel(eq("grpc.lb.backend_service"), any());
+  }
+
+  @Test
+  public void pick_beforeChildReportsPicker_queuesWithClusterImplInitializingDelay() {
+    FakeLoadBalancerProvider weightedTargetProvider =
+        new FakeLoadBalancerProvider(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);
+    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, new Object()),
+        null, Collections.emptyMap(), null);
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
+
+    // Applying the config updates the max concurrent requests, which republishes the helper's
+    // state. The child policy has not reported a picker yet, so this first update carries
+    // ClusterImplLbHelper's initial picker.
+    assertThat(allStates.get(0)).isEqualTo(ConnectivityState.IDLE);
+    PickResult result = allPickers.get(0).pickSubchannel(pickSubchannelArgs);
+    assertThat(result.hasResult()).isFalse();
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("cluster_impl: initializing");
   }
 
   @Test
@@ -1234,6 +1260,8 @@ public class ClusterImplLoadBalancerTest {
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
       currentState = newState;
       currentPicker = newPicker;
+      allStates.add(newState);
+      allPickers.add(newPicker);
     }
 
     @Override

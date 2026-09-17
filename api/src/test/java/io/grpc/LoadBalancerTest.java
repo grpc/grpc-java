@@ -65,6 +65,22 @@ public class LoadBalancerTest {
   }
 
   @Test
+  public void pickResult_withSubchannelTracerAndAuthorityOverride() {
+    PickResult result = PickResult.withSubchannel(subchannel, tracerFactory, "override.example");
+    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
+    assertThat(result.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
+    assertThat(result.getAuthorityOverride()).isEqualTo("override.example");
+    assertThat(result.isDrop()).isFalse();
+    // The delay attributes are not part of this overload.
+    assertThat(result.getDelayType()).isNull();
+    assertThat(result.getDelayReason()).isNull();
+
+    PickResult noOverride = PickResult.withSubchannel(subchannel, tracerFactory, null);
+    assertThat(noOverride.getAuthorityOverride()).isNull();
+  }
+
+  @Test
   public void pickResult_withSubchannelReplacement() {
     PickResult result = PickResult.withSubchannel(subchannel, tracerFactory)
         .copyWithSubchannel(subchannel2);
@@ -82,6 +98,29 @@ public class LoadBalancerTest {
     assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
     assertThat(result.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
     assertThat(result.isDrop()).isFalse();
+  }
+
+  @Test
+  public void pickResult_copyMethodsRetainDelayAttributes() {
+    // PickResult.equals() deliberately ignores the delay attributes, so nothing else in the test
+    // suite would notice if a copy method dropped them. Assert on the accessors directly.
+    PickResult delayed = PickResult.withNoResult("connecting", "waiting for a subchannel");
+
+    PickResult withTracer = delayed.copyWithStreamTracerFactory(tracerFactory);
+    assertThat(withTracer.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
+    assertThat(withTracer.getDelayType()).isEqualTo("connecting");
+    assertThat(withTracer.getDelayReason()).isEqualTo("waiting for a subchannel");
+
+    PickResult withSubchannel = delayed.copyWithSubchannel(subchannel);
+    assertThat(withSubchannel.getSubchannel()).isSameInstanceAs(subchannel);
+    assertThat(withSubchannel.getDelayType()).isEqualTo("connecting");
+    assertThat(withSubchannel.getDelayReason()).isEqualTo("waiting for a subchannel");
+
+    // Copying a result that has no delay attributes must not invent any.
+    PickResult undelayed =
+        PickResult.withSubchannel(subchannel).copyWithStreamTracerFactory(tracerFactory);
+    assertThat(undelayed.getDelayType()).isNull();
+    assertThat(undelayed.getDelayReason()).isNull();
   }
 
   @Test

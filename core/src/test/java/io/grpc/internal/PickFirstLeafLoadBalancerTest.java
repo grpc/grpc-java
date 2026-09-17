@@ -3097,6 +3097,112 @@ public class PickFirstLeafLoadBalancerTest {
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr4_4);
   }
 
+  /**
+   * The picker published by {@code acceptResolvedAddresses()} carries the A121 delay attributes.
+   * This is the first CONNECTING notification, so it is the one the channel observes: the
+   * CONNECTING notifications that follow while connecting are de-duped by updateBalancingState().
+   */
+  @Test
+  public void delayAttributes_addressListUpdated() {
+    List<EquivalentAddressGroup> oneServer = Lists.newArrayList(servers.get(0));
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(oneServer).setAttributes(affinity).build());
+
+    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("pick_first: address list updated");
+    assertNull(result.getSubchannel());
+  }
+
+  /**
+   * After the connection goes idle, the delay attributes of the picker that requests a new
+   * connection, and of the one published once the subchannel reports CONNECTING back.
+   */
+  @Test
+  public void delayAttributes_requestingConnectionThenAttemptingToConnect() {
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1);
+    List<EquivalentAddressGroup> oneServer = Lists.newArrayList(servers.get(0));
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(oneServer).setAttributes(affinity).build());
+
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayReason())
+        .isEqualTo("pick_first: address list updated");
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+
+    // A ready pick is not a delay.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    PickResult readyResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(readyResult.getSubchannel()).isSameInstanceAs(mockSubchannel1);
+    assertNull(readyResult.getDelayType());
+    assertNull(readyResult.getDelayReason());
+
+    // The transport goes idle: the picker requests a connection on the first pick.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    PickResult idleResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(idleResult.getDelayType()).isEqualTo("connecting");
+    assertThat(idleResult.getDelayReason()).isEqualTo("pick_first: requesting connection");
+    assertNull(idleResult.getSubchannel());
+
+    // The LB concluded IDLE above, so this CONNECTING notification is not de-duped.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult connectingResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(connectingResult.getDelayType()).isEqualTo("connecting");
+    assertThat(connectingResult.getDelayReason()).isEqualTo("pick_first: attempting to connect");
+    assertNull(connectingResult.getSubchannel());
+  }
+
+  /**
+   * Under a petiole policy, a transport that is connected but whose health check has not reported
+   * SERVING yet keeps the pick queued, with the health state as the delay reason.
+   */
+  @Test
+  public void delayAttributes_healthCheckState() {
+    when(mockSubchannel1.getAttributes()).thenReturn(
+        Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
+
+    List<EquivalentAddressGroup> oneServer = Lists.newArrayList(servers.get(0));
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(oneServer)
+        .setAttributes(Attributes.newBuilder().set(IS_PETIOLE_POLICY, true).build()).build());
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1);
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    SubchannelStateListener healthListener = createArgsCaptor.getValue()
+        .getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY);
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+
+    // The transport is connected, but the health check has not reported anything yet, so the
+    // health state is still its initial IDLE.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    PickResult idleHealthResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(idleHealthResult.getDelayType()).isEqualTo("connecting");
+    assertThat(idleHealthResult.getDelayReason()).isEqualTo("health check state: IDLE");
+    assertNull(idleHealthResult.getSubchannel());
+
+    // Health reports SERVING: the pick is no longer delayed.
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    assertNull(pickerCaptor.getValue().pickSubchannel(mockArgs).getDelayType());
+
+    // Health goes back to CONNECTING while the transport stays READY. The LB had concluded READY,
+    // so this CONNECTING notification is not de-duped.
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult connectingHealthResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(connectingHealthResult.getDelayType()).isEqualTo("connecting");
+    assertThat(connectingHealthResult.getDelayReason())
+        .isEqualTo("health check state: CONNECTING");
+    assertNull(connectingHealthResult.getSubchannel());
+  }
+
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
 

@@ -55,7 +55,7 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   private final ThreadSafeRandom random;
 
   private SubchannelPicker currentPicker = new FixedResultPicker(
-      PickResult.withNoResult("connecting", "least_request: initializing"));
+      PickResult.withNoResult("connecting", aggregateConnectingDelayReason("least_request")));
   private int choiceCount = DEFAULT_CHOICE_COUNT;
 
   LeastRequestLoadBalancer(Helper helper) {
@@ -117,7 +117,8 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
         updateBalancingState(
             CONNECTING,
             new FixedResultPicker(
-                PickResult.withNoResult("connecting", "least_request: connecting")));
+                PickResult.withNoResult(
+                    "connecting", aggregateConnectingDelayReason("least_request"))));
       } else {
         // Give it all the failing children and let it randomly pick among them
         updateBalancingState(TRANSIENT_FAILURE,
@@ -134,7 +135,11 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   }
 
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
-    if (state != currentConnectivityState || !picker.equals(currentPicker)) {
+    // We use pickerChanged() instead of picker.equals() because FixedResultPicker.equals delegates
+    // to PickResult.equals which deliberately ignores delay fields (A121). If we didn't do this,
+    // a change only in the delay reason would be silently swallowed here and the channel would keep
+    // reporting a stale reason for the whole delay.
+    if (state != currentConnectivityState || pickerChanged(currentPicker, picker)) {
       getHelper().updateBalancingState(state, picker);
       currentConnectivityState = state;
       currentPicker = picker;
@@ -251,7 +256,7 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return PickResult.withNoResult(
-          "connecting", "least_request: waiting for subchannel");
+          "connecting", "least_request: waiting for any endpoint to connect");
     }
 
     @Override

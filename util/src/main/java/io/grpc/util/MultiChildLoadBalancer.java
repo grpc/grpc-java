@@ -24,6 +24,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.UnsignedInts;
@@ -42,6 +43,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -56,6 +58,11 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   private static final Logger logger = Logger.getLogger(MultiChildLoadBalancer.class.getName());
   private static final int OFFSET_SEED = new Random().nextInt();
+  /**
+   * Upper bound on how many endpoints {@link #aggregateConnectingDelayReason} names before it
+   * summarises the rest. Keeps the delay reason bounded for large endpoint sets.
+   */
+  private static final int MAX_ENDPOINTS_IN_DELAY_REASON = 5;
   // Modify by replacing the list to release memory when no longer used.
   private List<ChildLbState> childLbStates = new ArrayList<>(0);
   private final Helper helper;
@@ -249,6 +256,85 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       }
     }
     return activeChildren;
+  }
+
+  /**
+   * Builds the {@code connecting} delay reason for a petiole policy, naming the endpoints that are
+   * currently being attempted.
+   *
+   * <p><a href="https://github.com/grpc/proposal/blob/master/A121-delay-observability.md">gRFC
+   * A121</a> requires the reason of a petiole policy's {@code connecting} delay to capture the
+   * aggregate connection state across the endpoints being attempted, rather than a fixed string,
+   * so that the reason identifies <em>which</em> endpoints the RPC is waiting on.
+   *
+   * <p>Only the endpoints in {@link ConnectivityState#CONNECTING} or {@link ConnectivityState#IDLE}
+   * are listed, because those are the ones the RPC is actually waiting for. The list is sorted so
+   * that an unchanged set of endpoints always produces an identical reason and therefore does not
+   * churn the picker. It is also truncated, since this string is attached to every delay trace
+   * event and a policy may be attempting thousands of endpoints.
+   *
+   * @param policyName the LB policy name to prefix the reason with, e.g. {@code "round_robin"}
+   */
+  protected final String aggregateConnectingDelayReason(String policyName) {
+    List<String> attempting = new ArrayList<>();
+    for (ChildLbState child : getChildLbStates()) {
+      ConnectivityState state = child.getCurrentState();
+      if (state == CONNECTING || state == IDLE) {
+        attempting.add(String.valueOf(child.getKey()));
+      }
+    }
+    if (attempting.isEmpty()) {
+      return policyName + ": waiting for any endpoint to connect";
+    }
+    Collections.sort(attempting);
+    String suffix = "";
+    if (attempting.size() > MAX_ENDPOINTS_IN_DELAY_REASON) {
+      suffix = " and " + (attempting.size() - MAX_ENDPOINTS_IN_DELAY_REASON) + " more";
+      attempting = attempting.subList(0, MAX_ENDPOINTS_IN_DELAY_REASON);
+    }
+    return policyName + ": waiting for any endpoint to connect (attempting "
+        + Joiner.on(", ").join(attempting) + suffix + ")";
+  }
+
+  /**
+   * Returns whether a newly computed picker differs from the one currently published, taking the
+   * gRFC A121 delay attributes into account.
+   *
+   * <p>{@link PickResult#equals} deliberately ignores {@code delayType} and {@code delayReason}
+   * because they are diagnostics rather than part of the pick decision. That means
+   * {@link FixedResultPicker#equals}, which delegates to it, reports two queued results as equal
+   * even when their delay reason changed. A petiole policy that skips
+   * {@link Helper#updateBalancingState} on picker equality would then never publish the new
+   * reason, and the channel would keep reporting a stale one for the whole delay. Comparing the
+   * delay attributes here keeps those updates flowing while still suppressing genuinely
+   * no-op updates.
+   */
+  protected static boolean pickerChanged(
+      @Nullable SubchannelPicker currentPicker, SubchannelPicker newPicker) {
+    if (!newPicker.equals(currentPicker)) {
+      return true;
+    }
+    PickResult current = fixedPickResult(currentPicker);
+    PickResult updated = fixedPickResult(newPicker);
+    if (current == null || updated == null) {
+      return false;
+    }
+    return !Objects.equals(current.getDelayType(), updated.getDelayType())
+        || !Objects.equals(current.getDelayReason(), updated.getDelayReason());
+  }
+
+  /**
+   * Returns the fixed {@link PickResult} a {@link FixedResultPicker} always returns, or {@code
+   * null} for any other picker. A non-fixed picker computes its result per pick, so its delay
+   * attributes cannot be compared up front.
+   */
+  @Nullable
+  private static PickResult fixedPickResult(@Nullable SubchannelPicker picker) {
+    if (!(picker instanceof FixedResultPicker)) {
+      return null;
+    }
+    // FixedResultPicker ignores its argument and always returns the result it was built with.
+    return picker.pickSubchannel(null);
   }
 
   /**

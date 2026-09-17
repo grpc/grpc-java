@@ -327,6 +327,41 @@ public class PickFirstLoadBalancerTest {
   }
 
   @Test
+  public void requestConnectionPicker_delayAttributes() throws Exception {
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel);
+    inOrder.verify(mockSubchannel).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+
+    // Going idle: the picker requests a connection on the first pick and queues it.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    PickResult idleResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(idleResult.getDelayType()).isEqualTo("connecting");
+    assertThat(idleResult.getDelayReason()).isEqualTo("pick_first: requesting connection");
+    assertNull(idleResult.getSubchannel());
+
+    // The subchannel reports the connection attempt back.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult connectingResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(connectingResult.getDelayType()).isEqualTo("connecting");
+    assertThat(connectingResult.getDelayReason()).isEqualTo("pick_first: attempting to connect");
+    assertNull(connectingResult.getSubchannel());
+
+    // A ready pick is not a delay.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    PickResult readyResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(readyResult.getSubchannel()).isSameInstanceAs(mockSubchannel);
+    assertNull(readyResult.getDelayType());
+    assertNull(readyResult.getDelayReason());
+  }
+
+  @Test
   public void refreshNameResolutionAfterSubchannelConnectionBroken() {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());

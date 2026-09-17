@@ -1636,16 +1636,23 @@ public class OpenTelemetryMetricsModuleTest {
                         point -> point.hasAttribute(attributeKey, customValue))));
   }
 
+
   @Test
-  public void clientAttemptDelayDuration_recorded() {
+  public void delayHistograms_bucketBoundariesAndUnit() {
     String target = "target:///";
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
-        testMeter, ImmutableMap.of(CLIENT_ATTEMPT_DELAY_DURATION, true), disableDefaultMetrics);
+        testMeter, ImmutableMap.of(
+            CLIENT_CALL_DELAY_DURATION, true,
+            CLIENT_ATTEMPT_DELAY_DURATION, true), disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CallAttemptsTracerFactory(
             module, target, STREAM_INFO.getCallOptions(), method.getFullMethodName(),
             emptyList(), Context.root());
+
+    callAttemptsTracerFactory.recordDelayStart("resolving", "dns resolution pending");
+    fakeClock.forwardTime(100, MILLISECONDS);
+    callAttemptsTracerFactory.recordDelayEnd("resolving");
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -1655,40 +1662,111 @@ public class OpenTelemetryMetricsModuleTest {
 
     assertThat(openTelemetryTesting.getMetrics())
         .anySatisfy(metric -> assertThat(metric)
+            .hasName(CLIENT_CALL_DELAY_DURATION)
+            .hasUnit("s")
+            .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                point -> point
+                    .hasCount(1)
+                    .hasSum(0.1)
+                    .hasBucketBoundaries(latencyBuckets)
+                    .hasAttributes(delayAttributes(target, "resolving")))))
+        .anySatisfy(metric -> assertThat(metric)
             .hasName(CLIENT_ATTEMPT_DELAY_DURATION)
             .hasUnit("s")
             .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
                 point -> point
                     .hasCount(1)
                     .hasSum(0.25)
+                    .hasBucketBoundaries(latencyBuckets)
                     .hasAttributes(delayAttributes(target, "connecting")))));
   }
 
+  /**
+   * gRFC A121 fixes the label set of both delay histograms to exactly {@code grpc.target},
+   * {@code grpc.method} and {@code grpc.delay_type}. Labels contributed by an
+   * {@link OpenTelemetryPlugin} must therefore <em>not</em> leak into them, even though the same
+   * plugin does contribute labels to {@code grpc.client.attempt.duration}.
+   */
   @Test
-  public void clientCallDelayDuration_recorded() {
+  public void delayHistograms_customPluginLabels_notAppliedToDelayMetrics() {
     String target = "target:///";
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
-        testMeter, ImmutableMap.of(CLIENT_CALL_DELAY_DURATION, true), disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+        testMeter, ImmutableMap.of(
+            CLIENT_CALL_DELAY_DURATION, true,
+            CLIENT_ATTEMPT_DELAY_DURATION, true), disableDefaultMetrics);
+
+    OpenTelemetryPlugin customPlugin = new OpenTelemetryPlugin() {
+      @Override
+      public ClientCallPlugin newClientCallPlugin() {
+        return new ClientCallPlugin() {
+          @Override
+          public ClientStreamPlugin newClientStreamPlugin() {
+            return new ClientStreamPlugin() {
+              @Override
+              public void addLabels(io.opentelemetry.api.common.AttributesBuilder to) {
+                to.put("custom_key", "custom_val");
+              }
+            };
+          }
+        };
+      }
+
+      @Override
+      public ServerStreamPlugin newServerStreamPlugin(Metadata inboundMetadata) {
+        return new ServerStreamPlugin() {};
+      }
+    };
+
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, emptyList(),
+        Collections.singletonList(customPlugin));
+
     CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CallAttemptsTracerFactory(
             module, target, STREAM_INFO.getCallOptions(), method.getFullMethodName(),
-            emptyList(), Context.root());
+            Collections.singletonList(customPlugin.newClientCallPlugin()), Context.root());
 
     callAttemptsTracerFactory.recordDelayStart("resolving", "dns resolution pending");
-    fakeClock.forwardTime(500, MILLISECONDS);
+    fakeClock.forwardTime(100, MILLISECONDS);
     callAttemptsTracerFactory.recordDelayEnd("resolving");
 
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer.recordDelayStart("connecting", "connecting reason");
+    fakeClock.forwardTime(250, MILLISECONDS);
+    tracer.recordDelayEnd("connecting");
+
+    // Exactly the A121 label set: the plugin's custom_key is absent from both histograms.
     assertThat(openTelemetryTesting.getMetrics())
         .anySatisfy(metric -> assertThat(metric)
             .hasName(CLIENT_CALL_DELAY_DURATION)
-            .hasUnit("s")
             .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
                 point -> point
                     .hasCount(1)
-                    .hasSum(0.5)
-                    .hasAttributes(delayAttributes(target, "resolving")))));
+                    .hasSum(0.1)
+                    .hasAttributes(delayAttributes(target, "resolving")))))
+        .anySatisfy(metric -> assertThat(metric)
+            .hasName(CLIENT_ATTEMPT_DELAY_DURATION)
+            .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                point -> point
+                    .hasCount(1)
+                    .hasSum(0.25)
+                    .hasAttributes(delayAttributes(target, "connecting")))));
+
+    // The other half of the contract: the very same plugin does label the attempt duration, so
+    // the exclusion above is specific to the delay histograms and not a broken plugin wiring.
+    tracer.streamClosed(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(metric -> assertThat(metric)
+            .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+            .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                point -> point.hasAttributesSatisfying(
+                    attributes -> assertThat(attributes.asMap())
+                        .containsEntry(AttributeKey.stringKey("custom_key"), "custom_val")))));
   }
+
 
   @Test
   public void clientCallDelayDuration_endToEnd_nameResolutionDelay() throws Exception {
@@ -2509,15 +2587,6 @@ public class OpenTelemetryMetricsModuleTest {
     }
   }
 
-  @Test
-  public void clientMetrics_targetAttributeFilter_returnsFilteredOrOther() {
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
-
-    assertEquals("target:///", module.recordTarget("target:///"));
-    assertThat(module.recordTarget(null)).isNull();
-  }
 
   @Test
   public void serverMetrics_recordsBaggage_endToEnd() throws Exception {

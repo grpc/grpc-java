@@ -22,10 +22,12 @@ import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
+import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
@@ -64,6 +66,40 @@ public final class LazyLoadBalancerTest {
     lb.shutdown();
 
     picker.pickSubchannel(args);
+  }
+
+  @Test
+  public void picker_queuesPickWithConnectingDelay() {
+    LazyLoadBalancer lb = new LazyLoadBalancer(helper, new LoadBalancer.Factory() {
+      @Override
+      public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+        return new LoadBalancer() {
+          @Override
+          public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+            return Status.OK;
+          }
+
+          @Override
+          public void handleNameResolutionError(Status error) {}
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    });
+    lb.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Arrays.asList())
+        .build());
+
+    assertThat(helper.state).isEqualTo(ConnectivityState.IDLE);
+    // Picking activates the real policy, but this pick itself is queued: LazyPicker reports the
+    // gRFC A121 delay attributes for it.
+    PickResult result = helper.picker.pickSubchannel(args);
+    assertThat(result.hasResult()).isFalse();
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("lazy: waiting for connection");
+
+    lb.shutdown();
   }
 
   class FakeHelper extends LoadBalancer.Helper {

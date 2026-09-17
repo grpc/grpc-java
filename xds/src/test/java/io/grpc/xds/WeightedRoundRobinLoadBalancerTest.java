@@ -583,10 +583,42 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs))
-        .isEqualTo(PickResult.withNoResult());
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(pickResult.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult.getDelayReason())
+        .contains("weighted_round_robin: waiting for any endpoint to connect");
     int expectedCount = isEnabledHappyEyeballs() ? servers.size() + 1 : 1;
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo( expectedCount);
+  }
+
+  @Test
+  public void connectingDelayReasonUpdates() {
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+            .setAttributes(affinity).build()));
+
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult pickResult1 = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(pickResult1.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult1.getDelayReason())
+        .contains("weighted_round_robin: waiting for any endpoint to connect (attempting ");
+    assertThat(pickResult1.getDelayReason()).contains("server0");
+    assertThat(pickResult1.getDelayReason()).contains("server1");
+    assertThat(pickResult1.getDelayReason()).contains("server2");
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel sc0 = it.next();
+    getSubchannelStateListener(sc0).onSubchannelState(
+        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+
+    verify(helper, atLeast(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult pickResult2 = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(pickResult2.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult2.getDelayReason())
+        .contains("weighted_round_robin: waiting for any endpoint to connect (attempting ");
+    assertThat(pickResult2.getDelayReason()).doesNotContain("server0");
+    assertThat(pickResult2.getDelayReason()).contains("server1");
+    assertThat(pickResult2.getDelayReason()).contains("server2");
   }
 
   @Test

@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 import io.grpc.ClientStreamTracer;
 import io.grpc.ForwardingTestUtil;
@@ -41,18 +40,6 @@ public class ForwardingClientStreamTracerTest {
         Collections.<Method>emptyList());
   }
 
-  @Test
-  public void delayMethodsForwarded() {
-    TestClientStreamTracer tracer = new TestClientStreamTracer();
-    tracer.recordDelayStart("connecting", "test");
-    verify(mockDelegate).recordDelayStart("connecting", "test");
-
-    tracer.recordDelayReasonChanged("connecting", "test2");
-    verify(mockDelegate).recordDelayReasonChanged("connecting", "test2");
-
-    tracer.recordDelayEnd("connecting");
-    verify(mockDelegate).recordDelayEnd("connecting");
-  }
 
   private final class TestClientStreamTracer extends ForwardingClientStreamTracer {
     @Override

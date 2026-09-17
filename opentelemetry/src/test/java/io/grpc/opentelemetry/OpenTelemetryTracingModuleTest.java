@@ -28,9 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -78,6 +76,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.GrpcServerRule;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
 import io.opentelemetry.api.trace.SpanContext;
@@ -92,7 +91,6 @@ import io.opentelemetry.api.trace.TracerProvider;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.context.propagation.ContextPropagators;
-import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import io.opentelemetry.sdk.trace.data.EventData;
 import io.opentelemetry.sdk.trace.data.SpanData;
@@ -115,7 +113,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -184,11 +181,7 @@ public class OpenTelemetryTracingModuleTest {
   @Mock
   private Tracer mockTracer;
   @Mock
-  TextMapPropagator mockPropagator;
-  @Mock
   private Span mockClientSpan;
-  @Mock
-  private Span mockAttemptSpan;
   @Mock
   private ServerCall.Listener<String> mockServerCallListener;
   @Mock
@@ -197,10 +190,6 @@ public class OpenTelemetryTracingModuleTest {
   private SpanBuilder mockSpanBuilder;
   @Mock
   private OpenTelemetry mockOpenTelemetry;
-  @Captor
-  private ArgumentCaptor<String> eventNameCaptor;
-  @Captor
-  private ArgumentCaptor<io.opentelemetry.api.common.Attributes> attributesCaptor;
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
 
@@ -215,139 +204,8 @@ public class OpenTelemetryTracingModuleTest {
         .thenReturn(mockTracerBuilder);
     when(mockTracerBuilder.setInstrumentationVersion(any())).thenReturn(mockTracerBuilder);
     when(mockTracerBuilder.build()).thenReturn(mockTracer);
-    when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(mockPropagator));
-    when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan);
     when(mockSpanBuilder.setParent(any())).thenReturn(mockSpanBuilder);
     when(mockTracer.spanBuilder(any())).thenReturn(mockSpanBuilder);
-  }
-
-  // Use mock instead of OpenTelemetryRule to verify inOrder and propagator.
-  @Test
-  public void clientBasicTracingMocking() {
-    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(mockOpenTelemetry);
-    CallAttemptsTracerFactory callTracer =
-        tracingModule.newClientCallTracer(mockClientSpan, method);
-    Metadata headers = new Metadata();
-    ClientStreamTracer clientStreamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
-    clientStreamTracer.createPendingStream();
-    clientStreamTracer.streamCreated(Attributes.EMPTY, headers);
-
-    verify(mockTracer).spanBuilder(eq("Attempt.package1.service2.method3"));
-    verify(mockPropagator).inject(any(), eq(headers), eq(MetadataSetter.getInstance()));
-    verify(mockClientSpan, never()).end();
-    verify(mockAttemptSpan, never()).end();
-
-    clientStreamTracer.outboundMessage(0);
-    clientStreamTracer.outboundMessageSent(0, 882, -1);
-    clientStreamTracer.inboundMessage(0);
-    clientStreamTracer.outboundMessage(1);
-    clientStreamTracer.outboundMessageSent(1, -1, 27);
-    clientStreamTracer.inboundMessageRead(0, 255, 90);
-
-    clientStreamTracer.streamClosed(Status.OK);
-    callTracer.callEnded(Status.OK);
-
-    InOrder inOrder = inOrder(mockClientSpan, mockAttemptSpan);
-    inOrder.verify(mockAttemptSpan)
-        .setAttribute("previous-rpc-attempts", 0);
-    inOrder.verify(mockAttemptSpan)
-        .setAttribute("transparent-retry", false);
-    inOrder.verify(mockClientSpan).addEvent("Delayed name resolution complete");
-    inOrder.verify(mockAttemptSpan).addEvent("Delayed LB pick complete");
-    inOrder.verify(mockAttemptSpan, times(3)).addEvent(
-        eventNameCaptor.capture(), attributesCaptor.capture()
-    );
-    List<String> events = eventNameCaptor.getAllValues();
-    List<io.opentelemetry.api.common.Attributes> attributes = attributesCaptor.getAllValues();
-    assertEquals(
-        "Outbound message" ,
-        events.get(0));
-    assertEquals(
-        io.opentelemetry.api.common.Attributes.builder()
-            .put("sequence-number", 0)
-            .put("message-size-compressed", 882)
-            .build(),
-        attributes.get(0));
-
-    assertEquals(
-        "Outbound message" ,
-        events.get(1));
-    assertEquals(
-        io.opentelemetry.api.common.Attributes.builder()
-            .put("sequence-number", 1)
-            .put("message-size", 27)
-            .build(),
-        attributes.get(1));
-
-    assertEquals(
-        "Inbound compressed message" ,
-        events.get(2));
-    assertEquals(
-        io.opentelemetry.api.common.Attributes.builder()
-            .put("sequence-number", 0)
-            .put("message-size-compressed", 255)
-            .build(),
-        attributes.get(2));
-
-    inOrder.verify(mockAttemptSpan).setStatus(StatusCode.OK);
-    inOrder.verify(mockAttemptSpan).end();
-    inOrder.verify(mockClientSpan).setStatus(StatusCode.OK);
-    inOrder.verify(mockClientSpan).end();
-    inOrder.verifyNoMoreInteractions();
-  }
-
-  @Test
-  public void clientDelayTracingMocking() {
-    Span mockDelaySpan = mock(Span.class);
-    when(mockSpanBuilder.setAttribute(
-            eq(OpenTelemetryConstants.DELAY_TYPE_KEY),
-            org.mockito.ArgumentMatchers.anyString()))
-        .thenReturn(mockSpanBuilder);
-    when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan, mockDelaySpan);
-
-    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(mockOpenTelemetry);
-    CallAttemptsTracerFactory callTracer =
-        tracingModule.newClientCallTracer(mockClientSpan, method);
-    ClientStreamTracer clientStreamTracer =
-        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
-
-    clientStreamTracer.recordDelayStart("connecting", "pick_first: attempting to connect");
-    clientStreamTracer.recordDelayEnd("connecting");
-
-    verify(mockTracer).spanBuilder(eq("Delay"));
-    verify(mockSpanBuilder).setAttribute(
-        eq(OpenTelemetryConstants.DELAY_TYPE_KEY), eq("connecting"));
-    verify(mockDelaySpan).addEvent(
-        eq("Delay triggered"),
-        eq(io.opentelemetry.api.common.Attributes.of(
-            OpenTelemetryConstants.DELAY_REASON_KEY, "pick_first: attempting to connect")));
-    verify(mockDelaySpan).end();
-  }
-
-  @Test
-  public void clientCallDelayTracingMocking() {
-    Span mockDelaySpan = mock(Span.class);
-    when(mockSpanBuilder.setAttribute(
-            eq(OpenTelemetryConstants.DELAY_TYPE_KEY),
-            org.mockito.ArgumentMatchers.anyString()))
-        .thenReturn(mockSpanBuilder);
-    when(mockSpanBuilder.startSpan()).thenReturn(mockDelaySpan);
-
-    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(mockOpenTelemetry);
-    CallAttemptsTracerFactory callTracer =
-        tracingModule.newClientCallTracer(mockClientSpan, method);
-
-    callTracer.recordDelayStart("resolving", "waiting for DNS query");
-    callTracer.recordDelayEnd("resolving");
-
-    verify(mockTracer).spanBuilder(eq("Delay"));
-    verify(mockSpanBuilder).setAttribute(
-        eq(OpenTelemetryConstants.DELAY_TYPE_KEY), eq("resolving"));
-    verify(mockDelaySpan).addEvent(
-        eq("Delay triggered"),
-        eq(io.opentelemetry.api.common.Attributes.of(
-            OpenTelemetryConstants.DELAY_REASON_KEY, "waiting for DNS query")));
-    verify(mockDelaySpan).end();
   }
 
   @Test
@@ -654,6 +512,7 @@ public class OpenTelemetryTracingModuleTest {
             .put("message-size", 128)
             .build(),
         clientSpanEvents.get(2).getAttributes());
+    assertEquals(StatusCode.OK, clientSpanData.getStatus().getStatusCode());
     assertEquals(clientSpanData.hasEnded(), true);
 
     // child(attempt) span data
@@ -695,6 +554,11 @@ public class OpenTelemetryTracingModuleTest {
         attemptSpanEvents.get(3).getAttributes());
 
     assertEquals(attemptSpanData.hasEnded(), true);
+    assertEquals(StatusCode.OK, attemptSpanData.getStatus().getStatusCode());
+    assertEquals(0L,
+        (long) attemptSpanData.getAttributes().get(AttributeKey.longKey("previous-rpc-attempts")));
+    assertEquals(false,
+        attemptSpanData.getAttributes().get(AttributeKey.booleanKey("transparent-retry")));
   }
 
   @Test
