@@ -89,11 +89,21 @@ public class ServerStreamListenerBase implements ServerStreamListener {
     halfClosedLatch.countDown();
   }
 
+  public final BlockingQueue<Object> eventQueue = new LinkedBlockingQueue<>();
+
   @Override
   public void closed(Status status) {
     if (this.status.isDone()) {
       fail("closed invoked more than once");
     }
     this.status.set(status);
+  }
+
+  @Override
+  public void triggerEvent(Object event) {
+    if (this.status.isDone()) {
+      fail("triggerEvent invoked after closed");
+    }
+    eventQueue.add(event);
   }
 }

@@ -1690,6 +1690,52 @@ public class ServerImplTest {
   }
 
   @Test
+  public void triggerEvent_delegatesToListener() {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+
+    Object event = new Object();
+    listener.triggerEvent(event);
+
+    verify(mockListener, never()).triggerEvent(any());
+
+    executor.runDueTasks();
+    verify(mockListener).triggerEvent(event);
+  }
+
+  @Test
+  public void triggerEvent_errorCancelsCall() {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+
+    TestError expectedT = new TestError();
+    doThrow(expectedT).when(mockListener).triggerEvent(any());
+
+    listener.triggerEvent(new Object());
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (TestError t) {
+      assertSame(expectedT, t);
+      ensureServerStateNotLeaked();
+    }
+  }
+
+  @Test
   public void binaryLogInstalled() throws Exception {
     final SettableFuture<Boolean> intercepted = SettableFuture.create();
     final ServerInterceptor interceptor = new ServerInterceptor() {

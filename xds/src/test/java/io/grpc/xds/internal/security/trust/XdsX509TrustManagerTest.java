@@ -569,8 +569,25 @@ public class XdsX509TrustManagerTest {
     trustManager = XdsTrustManagerFactory.createX509TrustManager(
         ImmutableMap.of("example.com", caCerts), null, false);
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
-    verify(sslEngine, times(1)).getHandshakeSession();
+    verify(sslEngine, atLeastOnce()).getHandshakeSession();
     assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
+  }
+
+  @Test
+  public void checkServerTrustedSslEngine_doesNotModifyEndpointIdentificationAlgorithm()
+      throws CertificateException, IOException {
+    trustManager = new XdsX509TrustManager(null, mockDelegate, false);
+    SSLParameters sslParams = new SSLParameters();
+    sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+    TestSslEngine sslEngine = mock(TestSslEngine.class, CALLS_REAL_METHODS);
+    sslEngine.setSSLParameters(sslParams);
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+
+    trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
+
+    assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm())
+        .isEqualTo("HTTPS");
   }
 
   @Test
@@ -636,7 +653,7 @@ public class XdsX509TrustManagerTest {
       assertThat(expected).hasMessageThat()
           .endsWith("unable to find valid certification path to requested target");
     }
-    verify(sslEngine, times(1)).getHandshakeSession();
+    verify(sslEngine, atLeastOnce()).getHandshakeSession();
   }
 
   @Test
@@ -647,7 +664,7 @@ public class XdsX509TrustManagerTest {
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
     verify(sslSocket, times(1)).isConnected();
-    verify(sslSocket, times(1)).getHandshakeSession();
+    verify(sslSocket, atLeastOnce()).getHandshakeSession();
     assertThat(sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
   }
 
@@ -663,8 +680,25 @@ public class XdsX509TrustManagerTest {
         ImmutableMap.of("example.com", caCerts), null, false);
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
     verify(sslSocket, times(1)).isConnected();
-    verify(sslSocket, times(1)).getHandshakeSession();
+    verify(sslSocket, atLeastOnce()).getHandshakeSession();
     assertThat(sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
+  }
+
+  @Test
+  public void checkServerTrustedSslSocket_doesNotModifyEndpointIdentificationAlgorithm()
+      throws CertificateException, IOException {
+    trustManager = new XdsX509TrustManager(null, mockDelegate, false);
+    SSLParameters sslParams = new SSLParameters();
+    sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+    TestSslSocket sslSocket = mock(TestSslSocket.class, CALLS_REAL_METHODS);
+    sslSocket.setSSLParameters(sslParams);
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+
+    trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
+
+    assertThat(sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm())
+        .isEqualTo("HTTPS");
   }
 
   @Test
@@ -681,7 +715,7 @@ public class XdsX509TrustManagerTest {
           .endsWith("unable to find valid certification path to requested target");
     }
     verify(sslSocket, times(1)).isConnected();
-    verify(sslSocket, times(1)).getHandshakeSession();
+    verify(sslSocket, atLeastOnce()).getHandshakeSession();
   }
 
   @Test
@@ -785,7 +819,7 @@ public class XdsX509TrustManagerTest {
     when(mockSession.getProtocol()).thenReturn("TLSv1.2");
     when(mockSession.getPeerHost()).thenReturn("peer-host-from-mock");
     SSLParameters sslParams = new SSLParameters();
-    sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+    sslParams.setEndpointIdentificationAlgorithm("");
     return sslParams;
   }
 

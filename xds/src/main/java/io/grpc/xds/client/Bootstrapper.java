@@ -128,11 +128,28 @@ public abstract class Bootstrapper {
      */
     public abstract ImmutableList<ServerInfo> xdsServers();
 
+    /**
+     * Whether to fallback to the next xDS server based solely on the reachability of the primary
+     * server, as described in gRFC A95.
+     *
+     * <p>If {@code false} (the default), fallback happens only if the primary server is unreachable
+     * <i>and</i> there are uncached resources, as described in gRFC A71. If {@code true}, fallback
+     * happens whenever the primary server is unreachable, even if all resources are cached.
+     */
+    public abstract boolean fallbackOnReachabilityOnly();
+
     public static AuthorityInfo create(
         String clientListenerResourceNameTemplate, List<ServerInfo> xdsServers) {
+      return create(clientListenerResourceNameTemplate, xdsServers, false);
+    }
+
+    public static AuthorityInfo create(
+        String clientListenerResourceNameTemplate, List<ServerInfo> xdsServers,
+        boolean fallbackOnReachabilityOnly) {
       checkArgument(!xdsServers.isEmpty(), "xdsServers must not be empty");
       return new AutoValue_Bootstrapper_AuthorityInfo(
-          clientListenerResourceNameTemplate, ImmutableList.copyOf(xdsServers));
+          clientListenerResourceNameTemplate, ImmutableList.copyOf(xdsServers),
+          fallbackOnReachabilityOnly);
     }
   }
 

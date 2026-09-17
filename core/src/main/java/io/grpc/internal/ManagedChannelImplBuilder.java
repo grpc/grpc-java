@@ -762,8 +762,12 @@ public final class ManagedChannelImplBuilder
   @Override
   public ManagedChannelImplBuilder childChannelConfigurator(
       ChannelConfigurator channelConfigurator) {
-    this.channelConfigurator = checkNotNull(channelConfigurator,
-        "childChannelConfigurator");
+    checkNotNull(channelConfigurator, "childChannelConfigurator");
+    ChannelConfigurator oldConfigurator = this.channelConfigurator;
+    this.channelConfigurator = builder -> {
+      oldConfigurator.configureChannelBuilder(builder);
+      channelConfigurator.configureChannelBuilder(builder);
+    };
     return this;
   }
 

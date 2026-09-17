@@ -178,7 +178,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final NameResolverProvider nameResolverProvider;
   private final NameResolver.Args nameResolverArgs;
   private final LoadBalancerProvider loadBalancerFactory;
-  private final ClientTransportFactory originalTransportFactory;
+  private final RefCountedClientTransportFactory originalTransportFactory;
   @Nullable
   private final ChannelCredentials originalChannelCreds;
   private final ClientTransportFactory transportFactory;
@@ -438,6 +438,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // which are bugs.
     shutdownNameResolverAndLoadBalancer(true);
     delayedTransport.reprocess(null);
+    realChannel.updateConfigSelector(INITIAL_PENDING_SELECTOR);
     channelLogger.log(ChannelLogLevel.INFO, "Entering IDLE state");
     channelStateManager.gotoState(IDLE);
     // If the inUseStateAggregator still considers pending calls to be queued up or the delayed
@@ -567,11 +568,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.originalChannelCreds = builder.channelCredentials;
-    this.originalTransportFactory = clientTransportFactory;
+    if (clientTransportFactory instanceof RefCountedClientTransportFactory) {
+      this.originalTransportFactory = (RefCountedClientTransportFactory) clientTransportFactory;
+    } else {
+      this.originalTransportFactory = new RefCountedClientTransportFactory(clientTransportFactory);
+    }
     this.offloadExecutorHolder =
         new ExecutorHolder(checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
-        clientTransportFactory, builder.callCredentials, this.offloadExecutorHolder);
+        originalTransportFactory, builder.callCredentials, this.offloadExecutorHolder);
     this.scheduledExecutor =
         new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
     maxTraceEvents = builder.maxTraceEvents;
@@ -951,6 +956,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     // Must run in SynchronizationContext.
     void updateConfigSelector(@Nullable InternalConfigSelector config) {
+      if (config == INITIAL_PENDING_SELECTOR) {
+        // The channel is entering IDLE and discarding the config it had resolved, rather than
+        // reporting a new one. Nothing may be released here: the next RPC exits IDLE and starts a
+        // fresh name resolution, so the channel goes back to the state it was in before its first
+        // resolution completed and a call queued from now on waits for that new resolution.
+        configSelector.set(config);
+        initialConfigResolved = false;
+        lastResolutionError = null;
+        return;
+      }
       initialConfigResolved = true;
       configSelector.set(config);
       lastResolutionError = null;
@@ -1654,7 +1669,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
           final ClientTransportFactory transportFactory;
           CallCredentials callCredentials;
           if (channelCreds instanceof DefaultChannelCreds) {
-            transportFactory = originalTransportFactory;
+            // TODO(kannanjgithub) We should eventually refactor ManagedChannelImplBuilder so
+            // callCredentials can be resolved lazily at build() time, allowing transport factory
+            // retention to happen strictly inside buildClientTransportFactory().
+            transportFactory = originalTransportFactory.retain();
             callCredentials = null;
           } else {
             SwapChannelCredentialsResult swapResult =

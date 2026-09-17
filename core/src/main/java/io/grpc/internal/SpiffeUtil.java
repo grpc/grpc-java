@@ -231,14 +231,8 @@ public final class SpiffeUtil {
     for (Map<String, ?> keyNode : keysNode) {
       checkJwkEntry(keyNode, trustDomainName);
       List<String> rawCerts = JsonUtil.getListOfStrings(keyNode, "x5c");
-      if (rawCerts == null) {
-        throw new IllegalArgumentException(String.format("'x5c' parameter is required. Certificate "
-            + "loading for trust domain '%s' failed.", trustDomainName));
-      }
-      if (rawCerts.size() != 1) {
-        throw new IllegalArgumentException(String.format("Exactly 1 certificate is expected, but "
-            + "%s found. Certificate loading for trust domain '%s' failed.", rawCerts.size(),
-            trustDomainName));
+      if (rawCerts == null || rawCerts.isEmpty()) {
+        continue;
       }
       InputStream stream = new ByteArrayInputStream((CERTIFICATE_PREFIX + rawCerts.get(0) + "\n"
           + CERTIFICATE_SUFFIX)

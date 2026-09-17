@@ -128,6 +128,11 @@ public final class BinderServerTransport extends BinderTransport implements Serv
   }
 
   @Override
+  void notifyTerminatedUnlocked() {
+    BinderTransportSecurity.notifyTerminatedUnlocked(getAttributes());
+  }
+
+  @Override
   @GuardedBy("this")
   void notifyTerminated() {
     listenerPromise.runWhenSet(ServerTransportListener::transportTerminated);

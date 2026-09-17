@@ -111,6 +111,7 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.proxy.ProxyConnectException;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import java.io.File;
@@ -934,6 +935,47 @@ public class ProtocolNegotiatorsTest {
 
     ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
     assertNotNull(grpcHandlerCtx);
+  }
+
+  @Test
+  public void grpcSslContextsConfigure_enablesEndpointIdentification() throws Exception {
+    SslContext clientSslContext = GrpcSslContexts.configure(
+        SslContextBuilder.forClient().endpointIdentificationAlgorithm(null)).build();
+
+    SSLEngine sslEngine = clientSslContext.newEngine(channel.alloc(), "localhost", 443);
+
+    assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm())
+        .isEqualTo("HTTPS");
+  }
+
+  @Test
+  public void clientTlsHandler_nullEndpointIdentificationUsesHttps() throws Exception {
+    SslContext clientSslContext = GrpcSslContexts.forClient()
+        .endpointIdentificationAlgorithm(null)
+        .build();
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, clientSslContext,
+        "authority", null, noopLogger, Optional.absent(),
+        getClientTlsProtocolNegotiator(), null);
+
+    pipeline.addLast(handler);
+
+    assertThat(pipeline.get(SslHandler.class).engine().getSSLParameters()
+        .getEndpointIdentificationAlgorithm()).isEqualTo("HTTPS");
+  }
+
+  @Test
+  public void clientTlsHandler_emptyEndpointIdentificationRemainsDisabled() throws Exception {
+    SslContext clientSslContext = GrpcSslContexts.forClient()
+        .endpointIdentificationAlgorithm("")
+        .build();
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, clientSslContext,
+        "authority", null, noopLogger, Optional.absent(),
+        getClientTlsProtocolNegotiator(), null);
+
+    pipeline.addLast(handler);
+
+    assertThat(pipeline.get(SslHandler.class).engine().getSSLParameters()
+        .getEndpointIdentificationAlgorithm()).isEmpty();
   }
 
   @Test

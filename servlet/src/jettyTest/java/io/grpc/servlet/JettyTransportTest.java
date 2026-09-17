@@ -56,6 +56,9 @@ public class JettyTransportTest extends AbstractTransportTest {
 
 
   @Override
+  // RateControl is deprecated in Jetty 12 (used in grpc-servlet-jakarta) but still needed for
+  // compatibility with Jetty 10 (used in grpc-servlet).
+  @SuppressWarnings("removal")
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
     return new InternalServer() {
       final InternalServer delegate =

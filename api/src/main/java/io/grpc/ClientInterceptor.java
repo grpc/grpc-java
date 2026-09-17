@@ -32,6 +32,11 @@ package io.grpc;
  * CallCredentials}. But a {@code ClientInterceptor} could set the {@code
  * CallCredentials} within the {@link CallOptions}.
  *
+ * <p>From gRPC's perspective, interceptors don't generally exist and are more of a convenience.
+ * Convenience APIs will use {@link ClientInterceptors} to convert the interceptor into a {@code
+ * Channel}. Thus interceptors are an extension of the application and run on the same
+ * threads and receive callbacks using the same executor.
+ *
  * <p>The interceptor may be called for multiple {@link ClientCall calls} by one or more threads
  * without completing the previous ones first. Refer to the
  * {@link io.grpc.ClientCall.Listener ClientCall.Listener} docs for more details regarding thread

@@ -42,4 +42,9 @@ public interface ServerStreamListener extends StreamListener {
    * @param status details about the remote closure
    */
   void closed(Status status);
+
+  /**
+   * Propagates a custom event to the listener. Must be called on the transport thread.
+   */
+  void triggerEvent(Object event);
 }

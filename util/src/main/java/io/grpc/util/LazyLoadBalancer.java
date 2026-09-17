@@ -14,19 +14,20 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.util;
 
 import com.google.common.base.Preconditions;
 import io.grpc.ConnectivityState;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
-import io.grpc.util.ForwardingLoadBalancer;
 
 /**
  * A load balancer that starts in IDLE instead of CONNECTING. Once it starts connecting, it
  * instantiates its delegate.
  */
-final class LazyLoadBalancer extends ForwardingLoadBalancer {
+@Internal
+public final class LazyLoadBalancer extends ForwardingLoadBalancer {
   private LoadBalancer delegate;
 
   public LazyLoadBalancer(Helper helper, LoadBalancer.Factory delegateFactory) {

@@ -65,18 +65,22 @@ final class RlsProtoConverters {
     protected RlsProtoData.RouteLookupRequest doForward(RouteLookupRequest routeLookupRequest) {
       return RlsProtoData.RouteLookupRequest.create(
           ImmutableMap.copyOf(routeLookupRequest.getKeyMapMap()),
-          RlsProtoData.RouteLookupRequest.Reason.valueOf(routeLookupRequest.getReason().name())
+          RlsProtoData.RouteLookupRequest.Reason.valueOf(routeLookupRequest.getReason().name()),
+          Strings.emptyToNull(routeLookupRequest.getStaleHeaderData())
       );
     }
 
     @Override
     protected RouteLookupRequest doBackward(RlsProtoData.RouteLookupRequest routeLookupRequest) {
-      return
+      RouteLookupRequest.Builder builder =
           RouteLookupRequest.newBuilder()
               .setTargetType("grpc")
               .setReason(RouteLookupRequest.Reason.valueOf(routeLookupRequest.reason().name()))
-              .putAllKeyMap(routeLookupRequest.keyMap())
-              .build();
+              .putAllKeyMap(routeLookupRequest.keyMap());
+      if (routeLookupRequest.staleHeaderData() != null) {
+        builder.setStaleHeaderData(routeLookupRequest.staleHeaderData());
+      }
+      return builder.build();
     }
   }
 

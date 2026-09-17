@@ -1430,6 +1430,11 @@ public class OpenTelemetryTracingModuleTest {
       public void onComplete() {
         callbackSpan.set(Span.fromContext(Context.current()));
       }
+
+      @Override
+      public void onEvent(Object event) {
+        callbackSpan.set(Span.fromContext(Context.current()));
+      }
     };
     ServerInterceptor interceptor = tracingModule.getServerSpanPropagationInterceptor();
     @SuppressWarnings("unchecked")
@@ -1448,6 +1453,8 @@ public class OpenTelemetryTracingModuleTest {
     listener.onHalfClose();
     assertEquals(callbackSpan.get(), Span.getInvalid());
     listener.onComplete();
+    assertEquals(callbackSpan.get(), Span.getInvalid());
+    listener.onEvent(new Object());
     assertEquals(callbackSpan.get(), Span.getInvalid());
 
     Span parentSpan = tracerRule.spanBuilder("parent-span").startSpan();
@@ -1470,6 +1477,9 @@ public class OpenTelemetryTracingModuleTest {
       assertEquals(callbackSpan.get().getSpanContext().getTraceId(),
           parentSpan.getSpanContext().getTraceId());
       listener.onComplete();
+      assertEquals(callbackSpan.get().getSpanContext().getTraceId(),
+          parentSpan.getSpanContext().getTraceId());
+      listener.onEvent(new Object());
       assertEquals(callbackSpan.get().getSpanContext().getTraceId(),
           parentSpan.getSpanContext().getTraceId());
     } finally {

@@ -246,6 +246,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
     private final boolean usingSharedScheduler;
     private final boolean useGetForSafeMethods;
     private final boolean usePutForIdempotentMethods;
+    private boolean closed;
 
     private CronetTransportFactory(
         StreamBuilderFactory streamFactory,
@@ -271,6 +272,9 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
     @Override
     public ConnectionClientTransport newClientTransport(
         SocketAddress addr, ClientTransportOptions options, ChannelLogger channelLogger) {
+      if (closed) {
+        throw new IllegalStateException("The transport factory is closed.");
+      }
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       return new CronetClientTransport(streamFactory, inetSocketAddr, options.getAuthority(),
           options.getUserAgent(), options.getEagAttributes(), executor, maxMessageSize,
@@ -289,6 +293,10 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
 
     @Override
     public void close() {
+      if (closed) {
+        return;
+      }
+      closed = true;
       if (usingSharedScheduler) {
         SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeoutService);
       }

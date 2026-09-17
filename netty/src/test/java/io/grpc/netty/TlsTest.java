@@ -238,6 +238,43 @@ public class TlsTest {
   }
 
   /**
+   * Test that a client can explicitly disable hostname verification when it authenticates the
+   * server using a non-DNS identity.
+   */
+  @Test
+  public void clientCanDisableHostnameVerification() throws Exception {
+    // Create & start a server.
+    File serverCertFile = TestUtils.loadCert("server1.pem");
+    File serverPrivateKeyFile = TestUtils.loadCert("server1.key");
+    X509Certificate[] serverTrustedCaCerts = {
+        TestUtils.loadX509Cert("ca.pem")
+    };
+    server = serverBuilder(0, serverCertFile, serverPrivateKeyFile, serverTrustedCaCerts)
+        .addService(new SimpleServiceImpl())
+        .build()
+        .start();
+
+    // Use a mismatched authority, but explicitly disable DNS hostname verification.
+    File clientCertChainFile = TestUtils.loadCert("client.pem");
+    File clientPrivateKeyFile = TestUtils.loadCert("client.key");
+    X509Certificate[] clientTrustedCaCerts = {
+        TestUtils.loadX509Cert("ca.pem")
+    };
+    channel = NettyChannelBuilder.forAddress("localhost", server.getPort())
+        .overrideAuthority("i.am.a.bad.hostname")
+        .negotiationType(NegotiationType.TLS)
+        .sslContext(clientContextBuilder
+            .endpointIdentificationAlgorithm("")
+            .keyManager(clientCertChainFile, clientPrivateKeyFile)
+            .trustManager(clientTrustedCaCerts)
+            .build())
+        .build();
+    SimpleServiceGrpc.SimpleServiceBlockingStub client = SimpleServiceGrpc.newBlockingStub(channel);
+
+    client.unaryRpc(SimpleRequest.getDefaultInstance());
+  }
+
+  /**
    * Tests that a server configured to require client authentication refuses to accept connections
    * from a client that has an untrusted certificate.
    */

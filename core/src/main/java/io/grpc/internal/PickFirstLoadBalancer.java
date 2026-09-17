@@ -107,6 +107,9 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   }
 
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+    if (subchannel != this.subchannel) {
+      return;
+    }
     ConnectivityState newState = stateInfo.getState();
     if (newState == SHUTDOWN) {
       return;
@@ -161,6 +164,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   public void shutdown() {
     if (subchannel != null) {
       subchannel.shutdown();
+      subchannel = null;
     }
   }
 

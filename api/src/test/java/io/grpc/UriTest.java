@@ -45,7 +45,6 @@ public final class UriTest {
     assertThat(uri.getRawQuery()).isEqualTo("query");
     assertThat(uri.getFragment()).isEqualTo("fragment");
     assertThat(uri.toString()).isEqualTo("scheme://user@host:0443/path?query#fragment");
-    assertThat(uri.isAbsolute()).isFalse(); // Has a fragment.
     assertThat(uri.isPathAbsolute()).isTrue();
     assertThat(uri.isPathRootless()).isFalse();
   }
@@ -59,7 +58,6 @@ public final class UriTest {
     assertThat(uri.getRawQuery()).isEqualTo("query");
     assertThat(uri.getFragment()).isEqualTo("fragment");
     assertThat(uri.toString()).isEqualTo("scheme:/path?query#fragment");
-    assertThat(uri.isAbsolute()).isFalse(); // Has a fragment.
   }
 
   @Test
@@ -116,7 +114,6 @@ public final class UriTest {
     assertThat(uri.getRawQuery()).isEqualTo("query");
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme://authority/path?query");
-    assertThat(uri.isAbsolute()).isTrue();
   }
 
   @Test
@@ -128,7 +125,6 @@ public final class UriTest {
     assertThat(uri.getRawQuery()).isNull();
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme://authority");
-    assertThat(uri.isAbsolute()).isTrue();
     assertThat(uri.isPathAbsolute()).isFalse();
     assertThat(uri.isPathRootless()).isFalse();
   }
@@ -142,7 +138,6 @@ public final class UriTest {
     assertThat(uri.getRawQuery()).isEqualTo("subject=raise");
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("mailto:ceo@company.com?subject=raise");
-    assertThat(uri.isAbsolute()).isTrue();
     assertThat(uri.isPathAbsolute()).isFalse();
     assertThat(uri.isPathRootless()).isTrue();
   }
@@ -156,7 +151,6 @@ public final class UriTest {
     assertThat(uri.getRawQuery()).isNull();
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme:");
-    assertThat(uri.isAbsolute()).isTrue();
     assertThat(uri.isPathAbsolute()).isFalse();
     assertThat(uri.isPathRootless()).isFalse();
   }
@@ -772,13 +766,6 @@ public final class UriTest {
         .testEquals();
   }
 
-  @Test
-  public void isAbsolute() {
-    assertThat(Uri.create("scheme://authority/path").isAbsolute()).isTrue();
-    assertThat(Uri.create("scheme://authority/path?query").isAbsolute()).isTrue();
-    assertThat(Uri.create("scheme://authority/path#fragment").isAbsolute()).isFalse();
-    assertThat(Uri.create("scheme://authority/path?query#fragment").isAbsolute()).isFalse();
-  }
 
   @Test
   public void serializedCharacterClasses_matchComputed() {

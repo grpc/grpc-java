@@ -1067,6 +1067,9 @@ public class OkHttpServerTransportTest {
     writeDataDirectly(clientWriterSink, FLAG_PADDED | FLAG_END_STREAM, 1, message, 100);
     clientFrameWriter.flush();
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    // Receive window update for the padded data size before stream reset
+    verify(clientFramesRead).windowUpdate(0, expectedConsumed + 100);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).rstStream(eq(1), eq(ErrorCode.FLOW_CONTROL_ERROR));
     clientFrameWriter.rstStream(3, ErrorCode.CANCEL);
     pingPong();
@@ -1517,6 +1520,10 @@ public class OkHttpServerTransportTest {
 
     @Override
     public void onReady() {
+    }
+
+    @Override
+    public void triggerEvent(Object event) {
     }
 
     static String getContent(InputStream message) throws IOException {

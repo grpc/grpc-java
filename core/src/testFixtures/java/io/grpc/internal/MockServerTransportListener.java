@@ -45,8 +45,8 @@ public class MockServerTransportListener implements ServerTransportListener {
   @Override
   public void streamCreated(ServerStream stream, String method, Metadata headers) {
     ServerStreamListenerBase listener = new ServerStreamListenerBase();
-    streams.add(new StreamCreation(stream, method, headers, listener));
     stream.setListener(listener);
+    streams.add(new StreamCreation(stream, method, headers, listener));
   }
 
   @Override

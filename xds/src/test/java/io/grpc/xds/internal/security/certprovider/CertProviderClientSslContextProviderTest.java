@@ -38,6 +38,7 @@ import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil.TestCallback;
+import io.netty.buffer.UnpooledByteBufAllocator;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
@@ -393,6 +394,10 @@ public class CertProviderClientSslContextProviderTest {
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
 
     doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
+    assertThat(testCallback.updatedSslContext.getKey()
+        .newEngine(UnpooledByteBufAllocator.DEFAULT)
+        .getSSLParameters()
+        .getEndpointIdentificationAlgorithm()).isEmpty();
   }
 
   @Test
