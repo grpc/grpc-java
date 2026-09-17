@@ -61,6 +61,7 @@ import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.core.v3.TransportSocket;
 import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LedsClusterLocalityConfig;
 import io.envoyproxy.envoy.config.listener.v3.Filter;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
@@ -141,6 +142,7 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.LoadStatsManager2;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
@@ -177,12 +179,14 @@ public class GrpcXdsClientImplDataTest {
   private boolean originalEnableRouteLookup;
   private boolean originalEnableLeastRequest;
   private boolean originalEnableUseSystemRootCerts;
+  private boolean originalEnableEndpointFallback;
 
   @Before
   public void setUp() {
     originalEnableRouteLookup = XdsRouteConfigureResource.enableRouteLookup;
     originalEnableLeastRequest = XdsClusterResource.enableLeastRequest;
     originalEnableUseSystemRootCerts = XdsClusterResource.enableSystemRootCerts;
+    originalEnableEndpointFallback = BootstrapperImpl.enableEndpointFallback;
   }
 
   @After
@@ -190,6 +194,7 @@ public class GrpcXdsClientImplDataTest {
     XdsRouteConfigureResource.enableRouteLookup = originalEnableRouteLookup;
     XdsClusterResource.enableLeastRequest = originalEnableLeastRequest;
     XdsClusterResource.enableSystemRootCerts = originalEnableUseSystemRootCerts;
+    BootstrapperImpl.enableEndpointFallback = originalEnableEndpointFallback;
   }
 
   @Test
@@ -1247,6 +1252,116 @@ public class GrpcXdsClientImplDataTest {
             .build();
     StructOrError<LocalityLbEndpoints> struct = XdsEndpointResource.parseLocalityLbEndpoints(proto);
     assertThat(struct.getErrorDetail()).isEqualTo("negative priority");
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_endpointWithoutAddress() throws ResourceInvalidException {
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
+            .setPriority(0)
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.getDefaultInstance())
+            .build();
+    StructOrError<LocalityLbEndpoints> struct = XdsEndpointResource.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail()).isEqualTo("LbEndpoint with no endpoint/address");
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_ledsClusterLocalityConfig()
+      throws ResourceInvalidException {
+    BootstrapperImpl.enableEndpointFallback = true;
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        localityLbEndpointsWithLeds("collection-foo").build();
+    StructOrError<LocalityLbEndpoints> struct = XdsEndpointResource.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(
+        LocalityLbEndpoints.createForCollectionName(
+            "collection-foo", 100, 1, ImmutableMap.of()));
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_ledsClusterLocalityConfig_ignoresLbEndpoints()
+      throws ResourceInvalidException {
+    BootstrapperImpl.enableEndpointFallback = true;
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        localityLbEndpointsWithLeds("collection-foo")
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(
+                            SocketAddress.newBuilder()
+                                .setAddress("172.14.14.5").setPortValue(8888)))))
+            .build();
+    StructOrError<LocalityLbEndpoints> struct = XdsEndpointResource.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct().endpointCollection()).isNull();
+    assertThat(struct.getStruct().lbEndpointCollectionName()).isEqualTo("collection-foo");
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_ledsConfigNotSelf() throws ResourceInvalidException {
+    BootstrapperImpl.enableEndpointFallback = true;
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))
+            .setPriority(1)
+            .setLedsClusterLocalityConfig(LedsClusterLocalityConfig.newBuilder()
+                .setLedsConfig(ConfigSource.getDefaultInstance())
+                .setLedsCollectionName("collection-foo"))
+            .build();
+    StructOrError<LocalityLbEndpoints> struct = XdsEndpointResource.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail())
+        .isEqualTo("LedsClusterLocalityConfig with leds_config not set to self");
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_ledsGlobCollectionUnsupported()
+      throws ResourceInvalidException {
+    BootstrapperImpl.enableEndpointFallback = true;
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        localityLbEndpointsWithLeds("xdstp://server/collection/*").build();
+    StructOrError<LocalityLbEndpoints> struct = XdsEndpointResource.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail())
+        .isEqualTo("LEDS glob collections are not supported: xdstp://server/collection/*");
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_ledsIgnoredWhenEnvVarDisabled()
+      throws ResourceInvalidException {
+    BootstrapperImpl.enableEndpointFallback = false;
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        localityLbEndpointsWithLeds("collection-foo")
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(
+                            SocketAddress.newBuilder()
+                                .setAddress("172.14.14.5").setPortValue(8888))))
+                .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))
+            .build();
+    StructOrError<LocalityLbEndpoints> struct = XdsEndpointResource.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(
+        LocalityLbEndpoints.create(
+            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888,
+                20, true, "", ImmutableMap.of())),
+            100, 1, ImmutableMap.of()));
+  }
+
+  private static io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.Builder
+      localityLbEndpointsWithLeds(String collectionName) {
+    return io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+        .setLocality(Locality.newBuilder()
+            .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+        .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))
+        .setPriority(1)
+        .setLedsClusterLocalityConfig(LedsClusterLocalityConfig.newBuilder()
+            .setLedsConfig(ConfigSource.newBuilder().setSelf(SelfConfigSource.getDefaultInstance()))
+            .setLedsCollectionName(collectionName));
   }
 
   @Test

@@ -37,6 +37,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.AggregateConfig;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
+import io.grpc.xds.XdsLbEndpointCollectionResource.LbEndpointCollectionUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
@@ -65,7 +66,7 @@ import javax.annotation.Nullable;
  */
 final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegistry {
   private enum TrackedWatcherTypeEnum {
-    LDS, RDS, CDS, EDS, DNS
+    LDS, RDS, CDS, EDS, LEDS, DNS
   }
 
   private static final TrackedWatcherType<XdsListenerResource.LdsUpdate> LDS_TYPE =
@@ -76,6 +77,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       new TrackedWatcherType<>(TrackedWatcherTypeEnum.CDS);
   private static final TrackedWatcherType<XdsEndpointResource.EdsUpdate> EDS_TYPE =
       new TrackedWatcherType<>(TrackedWatcherTypeEnum.EDS);
+  private static final TrackedWatcherType<LbEndpointCollectionUpdate> LEDS_TYPE =
+      new TrackedWatcherType<>(TrackedWatcherTypeEnum.LEDS);
   private static final TrackedWatcherType<List<EquivalentAddressGroup>> DNS_TYPE =
       new TrackedWatcherType<>(TrackedWatcherTypeEnum.DNS);
 
@@ -361,7 +364,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         TrackedWatcher<XdsEndpointResource.EdsUpdate> edsWatcher =
             tracer.getWatcher(EDS_TYPE, cdsWatcher.getEdsServiceName());
         if (edsWatcher != null) {
-          child = new EndpointConfig(edsWatcher.getData());
+          StatusOr<XdsEndpointResource.EdsUpdate> edsUpdateOr = edsWatcher.getData();
+          child = new EndpointConfig(edsUpdateOr, getLbEndpointCollections(edsUpdateOr, tracer));
         } else {
           child = new EndpointConfig(StatusOr.fromStatus(Status.INTERNAL.withDescription(
               "EDS resource not found for cluster " + clusterName)));
@@ -388,6 +392,36 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
     clusters.put(clusterName, StatusOr.fromValue(
         new XdsConfig.XdsClusterConfig(clusterName, cdsUpdate, child)));
+  }
+
+  /**
+   * Collects the {@code LbEndpointCollection} resources referenced by the localities of an EDS
+   * resource (gRFC A95). Fetching them via the tracer also marks the watchers as used, so they are
+   * not garbage collected.
+   */
+  private static ImmutableMap<String, StatusOr<LbEndpointCollectionUpdate>>
+      getLbEndpointCollections(
+          StatusOr<XdsEndpointResource.EdsUpdate> edsUpdateOr, WatcherTracer tracer) {
+    if (!edsUpdateOr.hasValue()) {
+      return ImmutableMap.of();
+    }
+    Map<String, StatusOr<LbEndpointCollectionUpdate>> collections = new HashMap<>();
+    for (LocalityLbEndpoints locality
+        : edsUpdateOr.getValue().localityLbEndpointsMap.values()) {
+      String collectionName = locality.lbEndpointCollectionName();
+      if (collectionName == null || collections.containsKey(collectionName)) {
+        continue;
+      }
+      TrackedWatcher<LbEndpointCollectionUpdate> watcher =
+          tracer.getWatcher(LEDS_TYPE, collectionName);
+      if (watcher == null) {
+        collections.put(collectionName, StatusOr.fromStatus(Status.INTERNAL.withDescription(
+            "LbEndpointCollection resource not found: " + collectionName)));
+      } else {
+        collections.put(collectionName, watcher.getData());
+      }
+    }
+    return ImmutableMap.copyOf(collections);
   }
 
   private static StatusOr<XdsEndpointResource.EdsUpdate> dnsToEdsUpdate(
@@ -425,6 +459,14 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     addWatcher(EDS_TYPE, new EdsWatcher(edsServiceName));
+  }
+
+  private void addLedsWatcher(String collectionName) {
+    if (getWatchers(LEDS_TYPE).containsKey(collectionName)) {
+      return;
+    }
+
+    addWatcher(LEDS_TYPE, new LedsWatcher(collectionName));
   }
 
   private void addClusterWatcher(String clusterName) {
@@ -845,7 +887,24 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void subscribeToChildren(XdsEndpointResource.EdsUpdate update) {}
+    public void subscribeToChildren(XdsEndpointResource.EdsUpdate update) {
+      for (LocalityLbEndpoints localityLbEndpoints : update.localityLbEndpointsMap.values()) {
+        String collectionName = localityLbEndpoints.lbEndpointCollectionName();
+        if (collectionName != null) {
+          addLedsWatcher(collectionName);
+        }
+      }
+    }
+  }
+
+  private class LedsWatcher extends XdsWatcherBase<LbEndpointCollectionUpdate> {
+    private LedsWatcher(String resourceName) {
+      super(XdsLbEndpointCollectionResource.getInstance(),
+          checkNotNull(resourceName, "resourceName"));
+    }
+
+    @Override
+    public void subscribeToChildren(LbEndpointCollectionUpdate update) {}
   }
 
   private final class DnsWatcher implements TrackedWatcher<List<EquivalentAddressGroup>> {
