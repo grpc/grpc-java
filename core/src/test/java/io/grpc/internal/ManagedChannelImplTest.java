@@ -5271,15 +5271,81 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, new Metadata());
     assertThat(tracerFactory.events()).containsExactly(START_RESOLVING);
 
-    // Cancellation puts the delay in its terminal state. Per A121 the tracer ends the delay
-    // itself, so the channel records nothing more...
-    call.cancel("Cancelled while queued", null);
+    // Queue the resolver failure first and cancel only afterwards, both from inside the
+    // SynchronizationContext. Cancelling marks the delay terminated synchronously but merely
+    // schedules the call's removal from the pending queue, so the failure is delivered while the
+    // cancelled call is still queued, which is the case this test is about. Cancelling from the
+    // test thread instead would drain the removal first and leave the failure sweeping an empty
+    // queue without ever reaching the call.
+    channel.syncContext.execute(() -> {
+      nsFactory.allResolved();
+      call.cancel("Cancelled while queued", null);
+    });
+
+    // Per A121 the tracer ends the delay itself when the call is cancelled, so the channel must
+    // not report the resolution failure as a reason change on a delay that is already over.
+    assertThat(tracerFactory.events()).containsExactly(START_RESOLVING);
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertEquals(Status.Code.CANCELLED, statusCaptor.getValue().getCode());
+  }
+
+  @Test
+  public void callDelay_cancelledWhileQueued_laterResolutionSuccessDoesNotEndDelayTwice() {
+    FakeNameResolverFactory nsFactory = new FakeNameResolverFactory.Builder(expectedUri)
+        .setResolvedAtStart(false).build();
+    channelBuilder.nameResolverFactory(nsFactory);
+    createChannel();
+
+    RecordingCallTracerFactory tracerFactory = new RecordingCallTracerFactory();
+    CallOptions callOptions = CallOptions.DEFAULT.withStreamTracerFactory(tracerFactory);
+    ClientCall<String, Integer> call = channel.newCall(method, callOptions);
+    call.start(mockCallListener, new Metadata());
     assertThat(tracerFactory.events()).containsExactly(START_RESOLVING);
 
-    // ...including for a resolution failure that arrives afterwards while the cancelled call is
-    // still sitting in the pending queue.
-    nsFactory.allResolved();
+    // A successful resolution reaches the pending calls one SynchronizationContext hop later than
+    // a failure does, because the resolver's result is forwarded through onResult() before
+    // onResult2() applies it. Cancelling from the nested runnable therefore lands between those
+    // two hops, which leaves the cancelled call in the queue for the release pass that follows.
+    channel.syncContext.execute(() -> {
+      nsFactory.allResolved();
+      channel.syncContext.execute(() -> call.cancel("Cancelled while queued", null));
+    });
+
+    // The release pass reprocesses the cancelled call and tries to end its delay, but the tracer
+    // already terminated that delay when the call was cancelled, so the channel must not emit a
+    // second end event for it.
     assertThat(tracerFactory.events()).containsExactly(START_RESOLVING);
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertEquals(Status.Code.CANCELLED, statusCaptor.getValue().getCode());
+  }
+
+  @Test
+  public void callDelay_queuedAfterResolutionCompletes_neverOpensDelay() {
+    FakeNameResolverFactory nsFactory = new FakeNameResolverFactory.Builder(expectedUri)
+        .setResolvedAtStart(false).build();
+    channelBuilder.nameResolverFactory(nsFactory);
+    createChannel();
+
+    RecordingCallTracerFactory tracerFactory = new RecordingCallTracerFactory();
+    CallOptions callOptions = CallOptions.DEFAULT.withStreamTracerFactory(tracerFactory);
+
+    // Start the call from a runnable that is already queued behind the resolver's result but
+    // ahead of the hop that applies it. newCall() still observes the initial config selector and
+    // so builds a pending call, but by the time that call's own queuing runnable drains,
+    // resolution has completed and the call is handed straight to a real call instead of being
+    // added to the pending queue.
+    channel.syncContext.execute(() -> {
+      nsFactory.allResolved();
+      channel.syncContext.execute(() -> {
+        ClientCall<String, Integer> call = channel.newCall(method, callOptions);
+        call.start(mockCallListener, new Metadata());
+      });
+    });
+
+    // The call never waited on name resolution, so per A121 no delay may be reported for it.
+    assertThat(tracerFactory.events()).isEmpty();
     executor.runDueTasks();
   }
 
