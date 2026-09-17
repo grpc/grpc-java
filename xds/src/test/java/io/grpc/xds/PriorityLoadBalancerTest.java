@@ -1167,7 +1167,7 @@ public class PriorityLoadBalancerTest {
     helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("connecting", "first reason"));
     verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker1 = pickerCaptor.getValue();
-    assertThat(picker1.pickSubchannel(null).getDelayReason())
+    assertThat(picker1.pickSubchannel(mock(PickSubchannelArgs.class)).getDelayReason())
         .isEqualTo("waiting on priority 0 (child 'p0'): first reason");
 
     helper0.updateBalancingState(CONNECTING, fixedNoResultPicker("connecting", "second reason"));
@@ -1175,7 +1175,7 @@ public class PriorityLoadBalancerTest {
     SubchannelPicker picker2 = pickerCaptor.getValue();
 
     assertThat(picker2).isNotEqualTo(picker1);
-    assertThat(picker2.pickSubchannel(null).getDelayReason())
+    assertThat(picker2.pickSubchannel(mock(PickSubchannelArgs.class)).getDelayReason())
         .isEqualTo("waiting on priority 0 (child 'p0'): second reason");
   }
 

@@ -464,7 +464,7 @@ public class WeightedTargetLoadBalancerTest {
 
     verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     // The wrapper delegates to the child FixedResultPicker, which ignores the pick args.
-    PickResult result = pickerCaptor.getValue().pickSubchannel(null);
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getDelayType()).isEqualTo("cds_dynamic_discovery");
     assertThat(result.getDelayReason()).isEqualTo("weighted_target: child_reason");
   }
@@ -486,7 +486,7 @@ public class WeightedTargetLoadBalancerTest {
 
     verify(helper, atLeastOnce()).updateBalancingState(eq(IDLE), pickerCaptor.capture());
     // The wrapper delegates to the child FixedResultPicker, which ignores the pick args.
-    PickResult result = pickerCaptor.getValue().pickSubchannel(null);
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getDelayType()).isEqualTo("some_idle_type");
     assertThat(result.getDelayReason()).isEqualTo("weighted_target: child_reason");
   }
@@ -509,7 +509,7 @@ public class WeightedTargetLoadBalancerTest {
         SHUTDOWN, new FixedResultPicker(PickResult.withNoResult("some_type", "some_reason")));
 
     verify(helper, atLeastOnce()).updateBalancingState(eq(SHUTDOWN), pickerCaptor.capture());
-    PickResult result = pickerCaptor.getValue().pickSubchannel(null);
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.hasResult()).isFalse();
     assertThat(result.getDelayType()).isEqualTo("connecting");
     assertThat(result.getDelayReason()).isEqualTo("weighted_target: connecting");

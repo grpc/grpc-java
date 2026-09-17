@@ -41,6 +41,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -275,7 +276,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             .build()).isOk());
 
     assertThat(states).containsExactly(ConnectivityState.CONNECTING);
-    PickResult swapResult = pickers.get(0).pickSubchannel(null);
+    PickResult swapResult = pickers.get(0).pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(swapResult.getSubchannel()).isNull();
     assertThat(swapResult.getStatus().isOk()).isTrue();
     assertThat(swapResult.getDelayType()).isEqualTo("connecting");
@@ -304,7 +305,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     assertThat(states)
         .containsExactly(ConnectivityState.CONNECTING, ConnectivityState.CONNECTING);
-    assertThat(pickers.get(1).pickSubchannel(null).getDelayReason())
+    assertThat(pickers.get(1).pickSubchannel(mock(PickSubchannelArgs.class)).getDelayReason())
         .isEqualTo("waiting for the load balancing policy to be applied");
   }
 

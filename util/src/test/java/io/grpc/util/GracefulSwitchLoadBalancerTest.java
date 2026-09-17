@@ -207,7 +207,7 @@ public class GracefulSwitchLoadBalancerTest {
         .build()));
 
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    PickResult result = pickerCaptor.getValue().pickSubchannel(null);
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getSubchannel()).isNull();
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getDelayType()).isEqualTo("connecting");
@@ -229,7 +229,8 @@ public class GracefulSwitchLoadBalancerTest {
     // ... until lb0 drops out of READY, which forces the swap and publishes the placeholder.
     helper0.updateBalancingState(CONNECTING, readyPicker);
     verify(mockHelper, times(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertThat(pickerCaptor.getValue().pickSubchannel(null).getDelayReason())
+    PickResult swapped = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(swapped.getDelayReason())
         .isEqualTo("waiting for the new load balancing policy to report a picker");
   }
 

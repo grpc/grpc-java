@@ -1596,14 +1596,7 @@ public class OpenTelemetryTracingModuleTest {
             true, "io.grpc/Bar"));
   }
 
-  /**
-   * Counts span starts and ends through a real SDK {@link SpanProcessor}. A121 delay spans are
-   * built <em>outside</em> the tracer's monitor, so a concurrent call end or delay-type rollover
-   * can race the publication of a freshly created span. The production code detects that case
-   * ("stale") and ends the orphan itself. If it did not, the span would be started and never
-   * ended. Start/end balance therefore holds for every possible interleaving, which makes this a
-   * deterministic assertion over non-deterministic execution.
-   */
+  /** Counts span starts and ends so a test can assert that the two balance. */
   private static final class SpanBalanceProcessor implements SpanProcessor {
     final AtomicInteger started = new AtomicInteger();
     final AtomicInteger ended = new AtomicInteger();
@@ -1656,6 +1649,14 @@ public class OpenTelemetryTracingModuleTest {
     assertTrue("racer-b did not finish; likely deadlock", !tb.isAlive());
   }
 
+  /**
+   * A121 delay spans are built <em>outside</em> the tracer's monitor, so a concurrent call end or
+   * delay-type rollover can race the publication of a freshly created span. The production code
+   * detects that window ("stale") and ends the orphan on the creating thread, since no other
+   * thread can observe it. Were that missing, the span would be started and never ended, so
+   * requiring starts and ends to balance is exactly the property under test, and it holds for
+   * every possible interleaving.
+   */
   @Test
   public void clientCallDelay_startRacesCallEnd_neverLeaksASpan() throws Exception {
     SpanBalanceProcessor balance = new SpanBalanceProcessor();
