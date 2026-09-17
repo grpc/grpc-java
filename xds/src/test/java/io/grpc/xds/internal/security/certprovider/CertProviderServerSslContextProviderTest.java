@@ -142,7 +142,10 @@ public class CertProviderServerSslContextProviderTest {
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    // Trust roots are not cleared: the root provider is independent of the identity provider and
+    // may not push another update for a long time (or ever), so the last known-good value must
+    // be retained to allow future identity-only rotations to still trigger a rebuild.
+    assertThat(provider.savedTrustedRoots).isNotNull();
 
     TestCallback testCallback =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
@@ -167,7 +170,7 @@ public class CertProviderServerSslContextProviderTest {
         ImmutableList.of(getCertFromResourceName(SERVER_1_PEM_FILE)));
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isNotSameInstanceAs(testCallback.updatedSslContext);
@@ -211,7 +214,10 @@ public class CertProviderServerSslContextProviderTest {
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    // Trust roots are not cleared: the root provider is independent of the identity provider and
+    // may not push another update for a long time (or ever), so the last known-good value must
+    // be retained to allow future identity-only rotations to still trigger a rebuild.
+    assertThat(provider.savedTrustedRoots).isNotNull();
 
     TestCallback testCallback =
             CommonTlsContextTestsUtil.getValueThruCallback(provider);
@@ -236,7 +242,7 @@ public class CertProviderServerSslContextProviderTest {
             ImmutableList.of(getCertFromResourceName(SERVER_1_PEM_FILE)));
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isNotSameInstanceAs(testCallback.updatedSslContext);

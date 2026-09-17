@@ -30,6 +30,7 @@ import static org.junit.Assert.fail;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
@@ -156,7 +157,10 @@ public class CertProviderClientSslContextProviderTest {
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    // Trust roots are not cleared: the root provider is independent of the identity provider and
+    // may not push another update for a long time (or ever), so the last known-good value must
+    // be retained to allow future identity-only rotations to still trigger a rebuild.
+    assertThat(provider.savedTrustedRoots).isNotNull();
 
     TestCallback testCallback =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
@@ -181,10 +185,68 @@ public class CertProviderClientSslContextProviderTest {
         ImmutableList.of(getCertFromResourceName(SERVER_1_PEM_FILE)));
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isNotSameInstanceAs(testCallback.updatedSslContext);
+  }
+
+  /**
+   * Regression test for https://github.com/grpc/grpc-java/issues/13058: the identity cert and
+   * the CA trust bundle are served by two *separate* certificate provider instances (as happens
+   * with two file_watcher instances on independent refresh schedules). Once the root/CA
+   * instance stops sending updates (e.g. its backing file never changes again), a later
+   * identity-cert-only rotation on the other, independent instance must still trigger a rebuild,
+   * reusing the last known-good trust roots rather than getting stuck forever.
+   */
+  @Test
+  public void testProviderForClient_mtls_separateRootInstance_identityRotationRebuildsContext()
+      throws Exception {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+        new CertificateProvider.DistributorWatcher[2];
+    TestCertificateProvider.createAndRegisterProviderProvider(
+        certificateProviderRegistry, watcherCaptor, "testca_identity", 0);
+    TestCertificateProvider.createAndRegisterProviderProvider(
+        certificateProviderRegistry, watcherCaptor, "testca_root", 1);
+
+    Bootstrapper.BootstrapInfo bootstrapInfo =
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(ImmutableList.<Bootstrapper.ServerInfo>of())
+            .node(CommonBootstrapperTestUtils.getTestBootstrapInfo().node())
+            .certProviders(ImmutableMap.of(
+                "identity_instance",
+                Bootstrapper.CertificateProviderInfo.create("testca_identity", ImmutableMap.of()),
+                "ca_instance",
+                Bootstrapper.CertificateProviderInfo.create("testca_root", ImmutableMap.of())))
+            .build();
+
+    CertProviderClientSslContextProvider provider =
+        getSslContextProvider(
+            "identity_instance",
+            "ca_instance",
+            bootstrapInfo,
+            /* alpnProtocols= */ null,
+            /* staticCertValidationContext= */ null, false);
+
+    // Initial mTLS build: the identity provider and the independent root provider each fire once.
+    watcherCaptor[0].updateCertificate(
+        CommonCertProviderTestUtils.getPrivateKey(CLIENT_KEY_FILE),
+        ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
+    watcherCaptor[1].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
+    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
+
+    TestCallback initialCallback = CommonTlsContextTestsUtil.getValueThruCallback(provider);
+    assertThat(initialCallback.updatedSslContext).isNotNull();
+
+    // The CA/root provider never fires again (its file never changes), but the identity cert
+    // rotates on its own, independent schedule.
+    watcherCaptor[0].updateCertificate(
+        CommonCertProviderTestUtils.getPrivateKey(SERVER_1_KEY_FILE),
+        ImmutableList.of(getCertFromResourceName(SERVER_1_PEM_FILE)));
+
+    TestCallback afterRotationCallback = CommonTlsContextTestsUtil.getValueThruCallback(provider);
+    assertThat(afterRotationCallback.updatedSslContext)
+        .isNotSameInstanceAs(initialCallback.updatedSslContext);
   }
 
   @Test
@@ -300,7 +362,10 @@ public class CertProviderClientSslContextProviderTest {
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    // Trust roots are not cleared: the root provider is independent of the identity provider and
+    // may not push another update for a long time (or ever), so the last known-good value must
+    // be retained to allow future identity-only rotations to still trigger a rebuild.
+    assertThat(provider.savedTrustedRoots).isNotNull();
 
     TestCallback testCallback =
             CommonTlsContextTestsUtil.getValueThruCallback(provider);
@@ -325,7 +390,7 @@ public class CertProviderClientSslContextProviderTest {
             ImmutableList.of(getCertFromResourceName(SERVER_1_PEM_FILE)));
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isNotSameInstanceAs(testCallback.updatedSslContext);
@@ -388,7 +453,7 @@ public class CertProviderClientSslContextProviderTest {
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
 
     TestCallback testCallback =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
@@ -519,7 +584,7 @@ public class CertProviderClientSslContextProviderTest {
     assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
 
     TestCallback testCallback =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
