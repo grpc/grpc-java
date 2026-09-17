@@ -147,6 +147,17 @@ public abstract class AbstractClientStream extends AbstractStream
     transportState().setDecompressorRegistry(decompressorRegistry);
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Delegates to the transport state so that subclasses (e.g., NettyClientStream,
+   * InProcessClientStream) inherit the new implementation via their TransportState.
+   */
+  @Override
+  public void setMessageCompression(boolean enabled, String compressorName) {
+    transportState().setMessageCompression(enabled, compressorName);
+  }
+
   /** {@inheritDoc} */
   @Override
   protected abstract TransportState transportState();
@@ -259,6 +270,18 @@ public abstract class AbstractClientStream extends AbstractStream
       checkState(this.listener == null, "Already called start");
       this.decompressorRegistry =
           checkNotNull(decompressorRegistry, "decompressorRegistry");
+    }
+
+    /**
+     * Sets whether the client is sending a gzip-compressed request. This is called by
+     * {@link ClientCallImpl#setMessageCompression(boolean)} when the compressor is gzip.
+     * This information is used to validate the server's {@code grpc-accept-encoding} response header.
+     *
+     * @param enabled whether message compression is enabled
+     * @param compressorName the name of the compressor being used (e.g., "gzip")
+     */
+    public void setMessageCompression(boolean enabled, String compressorName) {
+      // Default implementation does nothing. Override in Http2ClientStreamTransportState.
     }
 
     @VisibleForTesting

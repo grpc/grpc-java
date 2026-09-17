@@ -690,6 +690,18 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
+  public final void setMessageCompression(boolean enabled, String compressorName) {
+    class MessageCompressionEntry implements BufferEntry {
+      @Override
+      public void runWith(Substream substream) {
+        substream.stream.setMessageCompression(enabled, compressorName);
+      }
+    }
+
+    delayOrExecute(new MessageCompressionEntry());
+  }
+
+  @Override
   public final void halfClose() {
     class HalfCloseEntry implements BufferEntry {
       @Override
