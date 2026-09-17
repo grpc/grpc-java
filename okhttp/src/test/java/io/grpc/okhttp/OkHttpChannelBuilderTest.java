@@ -201,19 +201,19 @@ public class OkHttpChannelBuilderTest {
 
   @Test
   public void sslSocketFactoryFrom_tls_mtls() throws Exception {
-    KeyManager[] keyManagers;
+    KeyManager[] serverKeyManagers;
     try (InputStream server1Chain = TlsTesting.loadCert("server1.pem");
          InputStream server1Key = TlsTesting.loadCert("server1.key")) {
-      keyManagers = OkHttpChannelBuilder.createKeyManager(server1Chain, server1Key);
+      serverKeyManagers = OkHttpChannelBuilder.createKeyManager(server1Chain, server1Key);
     }
 
-    TrustManager[] trustManagers;
+    TrustManager[] serverTrustManagers;
     try (InputStream ca = TlsTesting.loadCert("ca.pem")) {
-      trustManagers = CertificateUtils.createTrustManager(ca);
+      serverTrustManagers = CertificateUtils.createTrustManager(ca);
     }
 
     SSLContext serverContext = SSLContext.getInstance("TLS");
-    serverContext.init(keyManagers, trustManagers, null);
+    serverContext.init(serverKeyManagers, serverTrustManagers, null);
     final SSLServerSocket serverListenSocket =
         (SSLServerSocket) serverContext.getServerSocketFactory().createServerSocket(0);
     serverListenSocket.setNeedClientAuth(true);
@@ -231,9 +231,20 @@ public class OkHttpChannelBuilderTest {
       }
     }).start();
 
+    KeyManager[] clientKeyManagers;
+    try (InputStream server1Chain = TlsTesting.loadCert("server1.pem");
+         InputStream server1Key = TlsTesting.loadCert("server1.key")) {
+      clientKeyManagers = OkHttpChannelBuilder.createKeyManager(server1Chain, server1Key);
+    }
+
+    TrustManager[] clientTrustManagers;
+    try (InputStream ca = TlsTesting.loadCert("ca.pem")) {
+      clientTrustManagers = CertificateUtils.createTrustManager(ca);
+    }
+
     ChannelCredentials creds = TlsChannelCredentials.newBuilder()
-        .keyManager(keyManagers)
-        .trustManager(trustManagers)
+        .keyManager(clientKeyManagers)
+        .trustManager(clientTrustManagers)
         .build();
     OkHttpChannelBuilder.SslSocketFactoryResult result =
         OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
