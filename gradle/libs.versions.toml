@@ -122,6 +122,7 @@ opencensus-impl = { module = "io.opencensus:opencensus-impl", version.ref = "ope
 opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.64.0"
 opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.64.0-alpha"
 opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.59.0-alpha"
+opentelemetry-exporter-otlp = "io.opentelemetry:opentelemetry-exporter-otlp:1.64.0"
 opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.64.0"
 opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.64.0"
 perfmark-api = "io.perfmark:perfmark-api:0.27.0"
