@@ -268,6 +268,9 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
 
   @GuardedBy("this")
   final void closeOnCancel(Status status) {
+    if (!isClosed() && statsTraceContext != null) {
+      statsTraceContext.clientCancelled(status);
+    }
     closeAbnormal(Status.CANCELLED, status, false);
   }
 
