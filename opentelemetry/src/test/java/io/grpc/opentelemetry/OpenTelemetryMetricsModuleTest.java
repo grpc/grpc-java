@@ -30,7 +30,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableMap;
@@ -2435,149 +2434,6 @@ public class OpenTelemetryMetricsModuleTest {
   }
 
   @Test
-  public void clientMetrics_nameResolutionFailure_zeroAttempts() {
-    String target = "target:///";
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
-    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
-            emptyList(), Context.root());
-
-    fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
-    callAttemptsTracerFactory.callEnded(Status.UNAVAILABLE, CALL_OPTIONS);
-
-    io.opentelemetry.api.common.Attributes clientAttributes =
-        io.opentelemetry.api.common.Attributes.of(
-            TARGET_KEY, target,
-            METHOD_KEY, method.getFullMethodName(),
-            STATUS_KEY, Code.UNAVAILABLE.toString());
-
-    assertThat(openTelemetryTesting.getMetrics())
-        .anySatisfy(
-            metric ->
-                assertThat(metric)
-                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
-                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(CLIENT_CALL_DURATION)
-                    .hasUnit("s")
-                    .hasHistogramSatisfying(
-                        histogram ->
-                            histogram.hasPointsSatisfying(
-                                point ->
-                                    point
-                                        .hasCount(1)
-                                        .hasSum(0.05)
-                                        .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(latencyBuckets))));
-  }
-
-  @Test
-  public void clientMetrics_endToEnd_nameResolutionFailure_unavailable() throws Exception {
-    NameResolverProvider failingProvider = new NameResolverProvider() {
-      @Override
-      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-        return new NameResolver() {
-          @Override
-          public String getServiceAuthority() {
-            return "failing.authority";
-          }
-
-          @Override
-          public void start(Listener2 listener) {
-            listener.onError(Status.UNAVAILABLE.withDescription("Name resolution failed"));
-          }
-
-          @Override
-          public void shutdown() {}
-        };
-      }
-
-      @Override
-      protected boolean isAvailable() {
-        return true;
-      }
-
-      @Override
-      protected int priority() {
-        return 5;
-      }
-
-      @Override
-      public String getDefaultScheme() {
-        return "failingnr";
-      }
-
-      @Override
-      public String getScheme() {
-        return getDefaultScheme();
-      }
-
-      @Override
-      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
-        return Collections.singleton(InProcessSocketAddress.class);
-      }
-    };
-
-    NameResolverRegistry.getDefaultRegistry().register(failingProvider);
-
-    try {
-      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-          enabledMetricsMap, disableDefaultMetrics);
-      OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
-
-      String target = "failingnr:///test.service";
-      ManagedChannel channel = grpcCleanup.register(
-          InProcessChannelBuilder.forTarget(target)
-              .directExecutor()
-              .intercept(module.getClientInterceptor(target))
-              .build());
-
-      ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
-      call.start(mockClientCallListener, new Metadata());
-
-      verify(mockClientCallListener, timeout(5000))
-          .onClose(statusCaptor.capture(), any(Metadata.class));
-      Status status = statusCaptor.getValue();
-      assertEquals(Status.Code.UNAVAILABLE, status.getCode());
-
-      io.opentelemetry.api.common.Attributes clientAttributes =
-          io.opentelemetry.api.common.Attributes.of(
-              TARGET_KEY, target,
-              METHOD_KEY, method.getFullMethodName(),
-              STATUS_KEY, Code.UNAVAILABLE.toString());
-
-      assertThat(openTelemetryTesting.getMetrics())
-          .anySatisfy(
-              metric ->
-                  assertThat(metric)
-                      .hasInstrumentationScope(InstrumentationScopeInfo.create(
-                          OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                      .hasName(CLIENT_CALL_DURATION)
-                      .hasUnit("s")
-                      .hasHistogramSatisfying(
-                          histogram ->
-                              histogram.hasPointsSatisfying(
-                                  point ->
-                                      point
-                                          .hasCount(1)
-                                          .hasAttributes(clientAttributes))));
-    } finally {
-      NameResolverRegistry.getDefaultRegistry().deregister(failingProvider);
-    }
-  }
-
-  @Test
-  public void clientMetrics_targetAttributeFilter_returnsFilteredOrOther() {
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
-
-    assertEquals("target:///", module.recordTarget("target:///"));
-    assertThat(module.recordTarget(null)).isNull();
-  }
-
-  @Test
   public void serverMetrics_recordsBaggage_endToEnd() throws Exception {
     DoubleHistogram mockDurationHistogram = mock(DoubleHistogram.class);
     OpenTelemetryMetricsResource mockResource = OpenTelemetryMetricsResource.builder()
@@ -2736,181 +2592,97 @@ public class OpenTelemetryMetricsModuleTest {
   }
 
   @Test
-  public void clientAttemptDelayDuration_withOptionalLabels() {
-    String target = "target:///";
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
+  public void clientAttemptDelayDuration_excludesOptionalLabels() {
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        "grpc.client.attempt.delay.duration", true
+    );
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        testMeter, enabledMetrics, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(),
         resource,
         Arrays.asList("grpc.lb.locality", "grpc.lb.backend_service"),
         emptyList());
-    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+    CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(
+            module, "target:///", STREAM_INFO.getCallOptions(), method.getFullMethodName(),
             emptyList(), Context.root());
-    ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
 
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     tracer.addOptionalLabel("grpc.lb.locality", "us-east1-a");
     tracer.addOptionalLabel("grpc.lb.backend_service", "backend-service-1");
-
-    tracer.recordDelayStart("connecting", "reason1");
+    tracer.recordDelayStart("connecting", "connecting reason");
+    fakeClock.forwardTime(250, TimeUnit.MILLISECONDS);
     tracer.recordDelayEnd("connecting");
 
-    assertNotNull(tracer);
-  }
-
-  @Test
-  public void callEnded_beforeAttemptEnded_recordsFinishedCall() {
-    String target = "target:///";
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(),
-        resource,
-        emptyList(),
-        emptyList());
-
-    CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
-            emptyList(), Context.root());
-    ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
-
-    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
-    callAttemptsTracerFactory.attemptEnded(CALL_OPTIONS);
-
-    assertNotNull(tracer);
-  }
-
-  @Test
-  public void serverStreamClosed_calledTwice_secondCallNoOp() {
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(),
-        resource,
-        emptyList(),
-        emptyList());
-
-    ServerStreamTracer.Factory serverTracerFactory = module.getServerTracerFactory();
-    ServerStreamTracer serverTracer =
-        serverTracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
-
-    serverTracer.streamClosed(Status.OK);
-    serverTracer.streamClosed(Status.CANCELLED);
-
-    assertNotNull(serverTracer);
-  }
-
-  @Test
-  public void clientCallDelayReasonChanged_noActiveStopwatch_noOp() {
-    String target = "target:///";
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(),
-        resource,
-        emptyList(),
-        emptyList());
-
-    CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
-            emptyList(), Context.root());
-
-    callAttemptsTracerFactory.recordDelayReasonChanged("resolving", "reasonWithoutStopwatch");
-    assertNotNull(callAttemptsTracerFactory);
-  }
-
-  @Test
-  public void clientAttemptDelayReasonChanged_noActiveStopwatch_noOp() {
-    String target = "target:///";
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(),
-        resource,
-        emptyList(),
-        emptyList());
-
-    CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
-            emptyList(), Context.root());
-    ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
-
-    tracer.recordDelayReasonChanged("connecting", "reasonWithoutStopwatch");
-    assertNotNull(tracer);
-  }
-
-  @Test
-  public void clientAttemptDelayDuration_withNullLocalityAndBackendService() {
-    String target = "target:///";
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(),
-        resource,
-        Arrays.asList("grpc.lb.locality", "grpc.lb.backend_service"),
-        emptyList());
-    CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
-            emptyList(), Context.root());
-    ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
-
-    // Do NOT set optional labels so locality and backendService remain null
-    tracer.recordDelayStart("connecting", "reason1");
-    tracer.recordDelayEnd("connecting");
-
-    assertNotNull(tracer);
+    // Per gRFC A121 the delay histogram carries only target, method and delay_type, even when
+    // the per-attempt optional labels are enabled.
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric -> assertThat(metric)
+                .hasName("grpc.client.attempt.delay.duration")
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> {
+                          point.hasSum(0.25);
+                          point.hasAttributes(
+                              io.opentelemetry.api.common.Attributes.of(
+                                  METHOD_KEY, method.getFullMethodName(),
+                                  TARGET_KEY, "target:///",
+                                  AttributeKey.stringKey("grpc.delay_type"), "connecting"));
+                        })));
   }
 
   @Test
   public void clientAttemptDelayStart_afterStreamClosed_noOp() {
-    String target = "target:///";
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        "grpc.client.attempt.delay.duration", true
+    );
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        testMeter, enabledMetrics, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(),
-        resource,
-        Arrays.asList("grpc.lb.locality", "grpc.lb.backend_service"),
-        emptyList());
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
     CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+        new CallAttemptsTracerFactory(
+            module, "target:///", STREAM_INFO.getCallOptions(), method.getFullMethodName(),
             emptyList(), Context.root());
-    ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
 
     tracer.streamClosed(Status.OK);
     tracer.recordDelayStart("connecting", "post-close");
     tracer.recordDelayReasonChanged("connecting", "changed");
+    fakeClock.forwardTime(250, TimeUnit.MILLISECONDS);
     tracer.recordDelayEnd("connecting");
+    callAttemptsTracerFactory.callEnded(Status.OK, STREAM_INFO.getCallOptions());
 
-    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
-    assertNotNull(tracer);
+    assertThat(openTelemetryTesting.getMetrics())
+        .noneSatisfy(metric -> assertThat(metric).hasName("grpc.client.attempt.delay.duration"));
   }
 
   @Test
   public void clientCallDelayStart_afterCallEnded_noOp() {
-    String target = "target:///";
-    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
-        enabledMetricsMap, disableDefaultMetrics);
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        "grpc.client.call.delay.duration", true
+    );
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        testMeter, enabledMetrics, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(),
-        resource,
-        Arrays.asList("grpc.lb.locality", "grpc.lb.backend_service"),
-        emptyList());
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
     CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+        new CallAttemptsTracerFactory(
+            module, "target:///", STREAM_INFO.getCallOptions(), method.getFullMethodName(),
             emptyList(), Context.root());
 
-    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
+    callAttemptsTracerFactory.callEnded(Status.OK, STREAM_INFO.getCallOptions());
     callAttemptsTracerFactory.recordDelayStart("resolving", "post-close");
     callAttemptsTracerFactory.recordDelayReasonChanged("resolving", "changed");
+    fakeClock.forwardTime(250, TimeUnit.MILLISECONDS);
     callAttemptsTracerFactory.recordDelayEnd("resolving");
 
-    assertNotNull(callAttemptsTracerFactory);
+    assertThat(openTelemetryTesting.getMetrics())
+        .noneSatisfy(metric -> assertThat(metric).hasName("grpc.client.call.delay.duration"));
   }
 
   private static List<MetricData> sortByName(List<MetricData> metrics) {

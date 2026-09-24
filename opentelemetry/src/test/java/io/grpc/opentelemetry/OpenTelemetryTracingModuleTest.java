@@ -849,57 +849,6 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
-  public void clientCallEnded_calledTwice_secondCallNoOp() {
-    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
-        openTelemetryRule.getOpenTelemetry());
-    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
-    CallAttemptsTracerFactory callTracer =
-        tracingModule.newClientCallTracer(clientSpan, method);
-
-    callTracer.callEnded(Status.OK);
-    callTracer.callEnded(Status.CANCELLED);
-    clientSpan.end();
-
-    List<SpanData> spans = openTelemetryRule.getSpans();
-    assertNotNull(spans);
-  }
-
-  @Test
-  public void clientStreamClosed_calledTwice_secondCallNoOp() {
-    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
-        openTelemetryRule.getOpenTelemetry());
-    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
-    CallAttemptsTracerFactory callTracer =
-        tracingModule.newClientCallTracer(clientSpan, method);
-    ClientStreamTracer clientStreamTracer =
-        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
-
-    clientStreamTracer.streamClosed(Status.OK);
-    clientStreamTracer.streamClosed(Status.CANCELLED);
-    callTracer.callEnded(Status.OK);
-    clientSpan.end();
-
-    List<SpanData> spans = openTelemetryRule.getSpans();
-    assertNotNull(spans);
-  }
-
-  @Test
-  public void serverStreamClosed_calledTwice_secondCallNoOp() {
-    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
-        openTelemetryRule.getOpenTelemetry());
-    ServerStreamTracer.Factory serverTracerFactory =
-        tracingModule.getServerTracerFactory();
-    ServerStreamTracer serverTracer =
-        serverTracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
-
-    serverTracer.streamClosed(Status.OK);
-    serverTracer.streamClosed(Status.CANCELLED);
-
-    List<SpanData> spans = openTelemetryRule.getSpans();
-    assertNotNull(spans);
-  }
-
-  @Test
   public void clientCallDelayReasonChanged_noActiveSpan_noOp() {
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
         openTelemetryRule.getOpenTelemetry());
@@ -908,11 +857,12 @@ public class OpenTelemetryTracingModuleTest {
         tracingModule.newClientCallTracer(clientSpan, method);
 
     callTracer.recordDelayReasonChanged("resolving", "reasonWithoutSpan");
+    callTracer.recordDelayEnd("resolving");
     callTracer.callEnded(Status.OK);
     clientSpan.end();
 
     List<SpanData> spans = openTelemetryRule.getSpans();
-    assertNotNull(spans);
+    assertEquals(0L, spans.stream().filter(s -> "Delay".equals(s.getName())).count());
   }
 
   @Test
@@ -926,12 +876,13 @@ public class OpenTelemetryTracingModuleTest {
         callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
 
     clientStreamTracer.recordDelayReasonChanged("connecting", "reasonWithoutSpan");
+    clientStreamTracer.recordDelayEnd("connecting");
     clientStreamTracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
     clientSpan.end();
 
     List<SpanData> spans = openTelemetryRule.getSpans();
-    assertNotNull(spans);
+    assertEquals(0L, spans.stream().filter(s -> "Delay".equals(s.getName())).count());
   }
 
   @Test
