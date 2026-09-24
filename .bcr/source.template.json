@@ -1,0 +1,5 @@
+{
+  "integrity": "",
+  "strip_prefix": "grpc-java-{VERSION}",
+  "url": "https://github.com/grpc/grpc-java/archive/refs/tags/v{VERSION}.tar.gz"
+}
