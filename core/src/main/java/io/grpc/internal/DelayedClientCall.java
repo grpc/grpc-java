@@ -262,6 +262,8 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         return;
       }
     }
+    // Before the listener is closed, so that subclasses observe the cancellation first.
+    callCancelled();
     if (delegateToRealCall) {
       delayOrExecute(new Runnable() {
         @Override
@@ -276,7 +278,6 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       internalStart(listenerToClose); // listener instance doesn't matter
       drainPendingCalls();
     }
-    callCancelled();
   }
 
   protected void callCancelled() {

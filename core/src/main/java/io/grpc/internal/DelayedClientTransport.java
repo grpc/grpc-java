@@ -387,7 +387,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
       return "subchannel returned by LB picker has no connected subchannel";
     }
     if (!pickResult.getStatus().isOk()) {
-      return "wait_for_ready RPC failed with status: " + pickResult.getStatus();
+      Status status = pickResult.getStatus();
+      // Status.toString() would append the cause's stack trace.
+      return "wait_for_ready RPC failed with status: " + status.getCode()
+          + (status.getDescription() == null ? "" : ": " + status.getDescription());
     }
     if (pickResult.getDelayReason() != null) {
       return pickResult.getDelayReason();
@@ -430,9 +433,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       }
       if (!newType.equals(activeDelayType)) {
         // Delay type changed (e.g., from RLS lookup to connecting). End the previous delay.
-        for (ClientStreamTracer tracer : tracers) {
-          tracer.recordDelayEnd(activeDelayType);
-        }
+        endDelay();
         activeDelayType = newType;
         activeDelayReason = newReason;
         for (ClientStreamTracer tracer : tracers) {
@@ -451,12 +452,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
      * Ends active attempt delay segment telemetry upon stream creation or stream cancellation.
      */
     synchronized void endDelay() {
-      if (activeDelayType != null) {
-        for (ClientStreamTracer tracer : tracers) {
-          tracer.recordDelayEnd(activeDelayType);
-        }
+      String delayType = activeDelayType;
+      if (delayType != null) {
         activeDelayType = null;
         activeDelayReason = null;
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.recordDelayEnd(delayType);
+        }
       }
     }
 

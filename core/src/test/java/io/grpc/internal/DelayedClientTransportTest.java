@@ -897,14 +897,15 @@ public class DelayedClientTransportTest {
     FakeStreamTracer fakeTracer = new FakeStreamTracer();
     ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
 
-    delayedTransport.reprocess(fakePicker(PickResult.withError(Status.UNAVAILABLE)));
+    delayedTransport.reprocess(fakePicker(PickResult.withError(
+        Status.UNAVAILABLE.withDescription("io exception").withCause(new Exception("boom")))));
     CallOptions wfrOptions = callOptions.withWaitForReady();
     delayedTransport.newStream(method, headers, wfrOptions, customTracers);
 
     assertEquals(Collections.singletonList("picker_failing_with_wait_for_ready"),
         fakeTracer.startedDelayTypes);
     assertEquals(Collections.singletonList(
-        "wait_for_ready RPC failed with status: " + Status.UNAVAILABLE),
+        "wait_for_ready RPC failed with status: UNAVAILABLE: io exception"),
         fakeTracer.startedDelayReasons);
   }
 
