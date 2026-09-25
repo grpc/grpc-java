@@ -342,7 +342,7 @@ class NettyClientStream extends AbstractClientStream {
 
     void transportHeadersReceived(Http2Headers headers, boolean endOfStream) {
       if (endOfStream) {
-        if (!isOutboundClosed()) {
+        if (!isOutboundClosed() || (http2Stream != null && http2Stream.state().localSideOpen())) {
           handler.getWriteQueue().enqueue(new CancelClientStreamCommand(this, null), true);
         }
         transportTrailersReceived(Utils.convertTrailers(headers));
