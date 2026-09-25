@@ -176,7 +176,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
     Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
-        sensitivityDetector(neverIndexedMetadataKeys), false, 16, Integer.MAX_VALUE);
+        sensitivityDetector(neverIndexedMetadataKeys), false, 64, Integer.MAX_VALUE);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter(encoder);
     Http2Connection connection = new DefaultHttp2Connection(false);
     UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
