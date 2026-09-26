@@ -26,6 +26,7 @@ import io.grpc.okhttp.internal.Protocol;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.Arrays;
+import java.util.Collections;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -58,7 +59,7 @@ final class TlsServerHandshakerSocketFactory implements HandshakerSocketFactory 
     String negotiatedProtocol = OkHttpProtocolNegotiator.get().negotiate(
         sslSocket,
         null,
-        connectionSpec.supportsTlsExtensions() ? Arrays.asList(expectedProtocol) : null);
+        connectionSpec.supportsTlsExtensions() ? Collections.singletonList(expectedProtocol) : null);
     if (!expectedProtocol.toString().equals(negotiatedProtocol)) {
       throw new IOException("Expected NPN/ALPN " + expectedProtocol + ": " + negotiatedProtocol);
     }
