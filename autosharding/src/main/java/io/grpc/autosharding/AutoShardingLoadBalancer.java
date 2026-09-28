@@ -108,7 +108,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   @Nullable private AutoShardingLoadBalancerConfig config;
   @Nullable private Metadata.Key<byte[]> keyHeader;
 
-  /** The factory last seen in the resolver attributes. */
+  /** The factory that created {@link #shardingChannel}, through which it is released. */
   @Nullable private ChannelFactory channelFactory;
 
   /** Channel borrowed from {@link #channelFactory}; must be given back when we are done. */
@@ -198,7 +198,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     AutoShardingLoadBalancerConfig newConfig = (AutoShardingLoadBalancerConfig) rawConfig;
 
     // May be null, which updateShardingServiceChannel() treats as a failure to create the
-    // channel.
+    // channel if it needs one.
     ChannelFactory factory =
         resolvedAddresses.getAttributes().get(AutoShardingAttributes.ATTR_CHANNEL_FACTORY);
 
@@ -225,19 +225,21 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       locality = sharedLocality(endpoints);
     }
 
-    if (channelStatus.isOk()) {
+    if (!channelStatus.isOk()) {
+      // Handled like an error from the client: RPCs go to fallback or fail with this status.
+      shutdownClient();
+      assignment = null;
+      clientError = channelStatus;
+    } else if (shardingChannel != null) {
       // The locality comes from the endpoints, so the target can change even when the config did
       // not.
       maybeRecreateClient(
           shardingChannel != previousChannel,
           resolveTarget(newConfig.autoshardingTarget, locality),
           newConfig.initialAssignmentTimeoutNanos);
-    } else {
-      // Handled like an error from the client: RPCs go to fallback or fail with this status.
-      shutdownClient();
-      assignment = null;
-      clientError = channelStatus;
     }
+    // Otherwise creating the channel failed under this key earlier, and that error stays in
+    // place until the key changes.
 
     // Only now that the old stream has been cancelled. Release through the factory that produced
     // it, which is not necessarily the new one.
@@ -252,9 +254,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     }
 
     rebuildSliceMapAndPublish();
-    // A failed channel is reported back too, so that the resolver refreshes and the next update
-    // retries creating it.
-    return channelStatus;
+    return Status.OK;
   }
 
   @Override
@@ -310,18 +310,17 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Creates a channel to the sharding service if this is the first configuration update, if the
-   * {@code channel_factory_key} or the factory itself changed, or if the previous attempt failed.
-   * Leaves {@link #shardingChannel} untouched when nothing changed, which is how the caller
-   * detects that no new channel was needed. On failure, including a missing factory, it is set to
-   * null and the error returned. The previous channel is not released here: the caller does that
-   * once the stream on it has been cancelled.
+   * Creates a channel to the sharding service if this is the first configuration update or the
+   * {@code channel_factory_key} changed. The factory is not consulted otherwise: the key
+   * identifies the channel, so a different or missing factory under the same key changes nothing,
+   * and a failure under it would only recur. Leaves {@link #shardingChannel} untouched when
+   * nothing changed, which is how the caller detects that no new channel was needed. On failure,
+   * including a missing factory, it is set to null and the error returned. The previous channel is
+   * not released here: the caller does that once the stream on it has been cancelled.
    */
   private Status updateShardingServiceChannel(
       @Nullable ChannelFactory factory, AutoShardingLoadBalancerConfig newConfig) {
-    boolean keyChanged =
-        config == null || !config.channelFactoryKey.equals(newConfig.channelFactoryKey);
-    if (shardingChannel != null && factory == channelFactory && !keyChanged) {
+    if (config != null && config.channelFactoryKey.equals(newConfig.channelFactoryKey)) {
       return Status.OK;
     }
 

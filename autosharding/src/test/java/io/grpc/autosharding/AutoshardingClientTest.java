@@ -398,7 +398,7 @@ public class AutoshardingClientTest {
     takeRequest();
     assertThat(backoffPolicyProvider.timesCalled).isEqualTo(1);
 
-    // A good assignment resets the sequence when the stream later fails.
+    // A good assignment drops the sequence, so the failure after it starts a new one.
     StreamObserver<WatchShardingAssignmentResponse> serverStream = takeServerStream();
     serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
     serverStream.onNext(metadataResponse(1));
@@ -407,7 +407,51 @@ public class AutoshardingClientTest {
     serverStream.onError(Status.UNAVAILABLE.asRuntimeException());
     fireRetryTimer();
     takeRequest();
+    takeServerStream().onError(Status.UNAVAILABLE.asRuntimeException());
+    fireRetryTimer();
+    takeRequest();
     assertThat(backoffPolicyProvider.timesCalled).isEqualTo(2);
+  }
+
+  @Test
+  public void streamFailureAfterGoodAssignment_reconnectsWithoutBackoff() throws Exception {
+    start(client);
+    takeRequest();
+    StreamObserver<WatchShardingAssignmentResponse> serverStream = takeServerStream();
+    serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
+    serverStream.onNext(metadataResponse(1));
+    takeAssignment();
+    takeRequest(); // ACK
+
+    serverStream.onError(Status.UNAVAILABLE.asRuntimeException());
+    fakeClock.runDueTasks();
+
+    assertThat(numPendingRetries()).isEqualTo(0);
+    takeRequest();
+    assertThat(service.streamCount.get()).isEqualTo(2);
+  }
+
+  @Test
+  public void streamFailureAfterStaleAssignmentOnly_backsOff() throws Exception {
+    start(client);
+    takeRequest();
+    StreamObserver<WatchShardingAssignmentResponse> serverStream = takeServerStream();
+    serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
+    serverStream.onNext(metadataResponse(5));
+    takeAssignment();
+    takeRequest(); // ACK
+    serverStream.onError(Status.UNAVAILABLE.asRuntimeException());
+    fireRetryTimer();
+    takeRequest();
+
+    // Only an older generation on this stream: nothing the balancer can use, so no reset.
+    serverStream = takeServerStream();
+    serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
+    serverStream.onNext(metadataResponse(3));
+    serverStream.onError(Status.UNAVAILABLE.asRuntimeException());
+    fakeClock.runDueTasks();
+
+    assertThat(numPendingRetries()).isEqualTo(1);
   }
 
   /**

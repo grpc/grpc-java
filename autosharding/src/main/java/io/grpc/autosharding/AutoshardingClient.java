@@ -242,25 +242,33 @@ final class AutoshardingClient {
   }
 
   /**
-   * Schedules the next stream attempt. Per gRFC A119, backoff only applies to streams that closed
-   * without delivering a good logical assignment; the backoff sequence is reset as soon as one is
-   * received.
+   * Schedules the next stream attempt. Backoff only applies to streams that closed without
+   * delivering a good logical assignment; one that did reconnects right away and the sequence
+   * starts over on the next failure.
    */
   private void scheduleRetry(boolean receivedGoodAssignment) {
     if (shutdown) {
       return;
     }
-    if (receivedGoodAssignment || retryBackoffPolicy == null) {
-      retryBackoffPolicy = backoffPolicyProvider.get();
+    long delayNanos;
+    if (receivedGoodAssignment) {
+      retryBackoffPolicy = null;
+      delayNanos = 0;
+    } else {
+      if (retryBackoffPolicy == null) {
+        retryBackoffPolicy = backoffPolicyProvider.get();
+      }
+      // The backoff sequence bounds the interval between consecutive stream starts, so the actual
+      // delay is reduced by however long the previous attempt lasted.
+      delayNanos =
+          Math.max(
+              0,
+              retryBackoffPolicy.nextBackoffNanos()
+                  - retryStopwatch.elapsed(TimeUnit.NANOSECONDS));
     }
-    // The backoff sequence bounds the interval between consecutive stream starts, so the actual
-    // delay is reduced by however long the previous attempt lasted. The retry always goes through
-    // the timer service, even when no delay remains, so that a channel failing calls synchronously
-    // cannot drive unbounded recursion between startStream() and handleStreamClosed().
-    long delayNanos =
-        Math.max(
-            0,
-            retryBackoffPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS));
+    // The retry always goes through the timer service, even when no delay remains, so that a
+    // channel failing calls synchronously cannot drive unbounded recursion between startStream()
+    // and handleStreamClosed().
     retryTimer =
         syncContext.schedule(this::startStream, delayNanos, TimeUnit.NANOSECONDS, timerService);
   }

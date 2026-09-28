@@ -211,9 +211,8 @@ public class AutoShardingLoadBalancerTest {
     Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, true), "a");
     reportReady("a");
 
-    // Handled like a failure to create the channel, and still returned so the resolver retries.
-    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(status.getDescription()).contains("no channel factory");
+    // Handled like an error from the client, not as a problem with the resolution.
+    assertThat(status.isOk()).isTrue();
     assertThat(currentState).isEqualTo(READY);
     assertThat(pickedHost(pick("k"))).isEqualTo("a");
   }
@@ -227,13 +226,13 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void missingChannelFactory_afterAWorkingOne_closesTheClientAndStaysFailed()
+  public void missingChannelFactory_onKeyChange_closesTheClientAndStaysFailed()
       throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
     deliverAssignment(1, slice("", "a"));
     reportReady("a");
 
-    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "a");
+    deliverWithoutChannelFactory(config(OTHER_CHANNEL_FACTORY_KEY, false), "a");
     syncContext.execute(() -> childForHost("a").reportReady());
 
     assertThat(channelFactory.isReleased(0)).isTrue();
@@ -243,12 +242,55 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
+  public void missingChannelFactory_sameKey_keepsTheChannelAndClient() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+
+    // The factory is only needed to create a channel, and the unchanged key needs none.
+    Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "a");
+
+    assertThat(status.isOk()).isTrue();
+    assertThat(channelFactory.released).isEmpty();
+    assertThat(service.streamCount.get()).isEqualTo(1);
+    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+  }
+
+  @Test
+  public void newChannelFactoryInstance_sameKey_keepsTheChannelAndClient() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+
+    // The key identifies the channel, so another factory for the same key changes nothing.
+    FakeChannelFactory otherFactory = new FakeChannelFactory();
+    deliverWithChannelFactory(otherFactory, config(CHANNEL_FACTORY_KEY, false), "a");
+
+    assertThat(otherFactory.keys).isEmpty();
+    assertThat(channelFactory.released).isEmpty();
+    assertThat(service.streamCount.get()).isEqualTo(1);
+    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+  }
+
+  @Test
+  public void newChannelFactoryInstance_thenKeyChange_releasesThroughTheCreatingFactory() {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    FakeChannelFactory otherFactory = new FakeChannelFactory();
+    deliverWithChannelFactory(otherFactory, config(CHANNEL_FACTORY_KEY, true), "a");
+
+    deliverWithChannelFactory(otherFactory, config(OTHER_CHANNEL_FACTORY_KEY, true), "a");
+
+    assertThat(otherFactory.keys).containsExactly(OTHER_CHANNEL_FACTORY_KEY);
+    assertThat(channelFactory.isReleased(0)).isTrue();
+    assertThat(otherFactory.released).isEmpty();
+  }
+
+  @Test
   public void unknownChannelFactoryKey_fallbackEnabled_entersFallback() {
     Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, true), "a");
     reportReady("a");
 
-    // Still returned, so that the resolver refreshes and the next update retries the factory.
-    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(status.isOk()).isTrue();
     assertThat(currentState).isEqualTo(READY);
     assertThat(pickedHost(pick("k"))).isEqualTo("a");
   }
@@ -257,10 +299,38 @@ public class AutoShardingLoadBalancerTest {
   public void unknownChannelFactoryKey_fallbackDisabled_failsRpcsWithTheFactoryError() {
     Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
 
-    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(status.isOk()).isTrue();
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
     assertThat(pick("k").getStatus().getDescription())
         .contains("channel factory rejected key '" + UNKNOWN_CHANNEL_FACTORY_KEY + "'");
+  }
+
+  @Test
+  public void channelFactoryFailure_sameKey_isNotRetried() {
+    deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
+    assertThat(channelFactory.attempts).isEqualTo(1);
+
+    Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a", "b");
+
+    // Only a new key is worth another attempt; the failure stays in place until then.
+    assertThat(status.isOk()).isTrue();
+    assertThat(channelFactory.attempts).isEqualTo(1);
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription())
+        .contains("channel factory rejected key '" + UNKNOWN_CHANNEL_FACTORY_KEY + "'");
+  }
+
+  @Test
+  public void missingChannelFactory_thenSuppliedUnderTheSameKey_isNotRetried() {
+    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, true), "a");
+
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    reportReady("a");
+
+    assertThat(channelFactory.attempts).isEqualTo(0);
+    assertThat(service.streamCount.get()).isEqualTo(0);
+    assertThat(currentState).isEqualTo(READY);
+    assertThat(pickedHost(pick("k"))).isEqualTo("a");
   }
 
   @Test
@@ -1100,6 +1170,19 @@ public class AutoShardingLoadBalancerTest {
             .build());
   }
 
+  private Status deliverWithChannelFactory(
+      ChannelFactory factory, AutoShardingLoadBalancerConfig config, String... hostnames) {
+    return acceptAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(endpoints(hostnames))
+            .setAttributes(
+                Attributes.newBuilder()
+                    .set(AutoShardingAttributes.ATTR_CHANNEL_FACTORY, factory)
+                    .build())
+            .setLoadBalancingPolicyConfig(config)
+            .build());
+  }
+
   private Status acceptAddresses(ResolvedAddresses resolvedAddresses) {
     AtomicReference<Status> status = new AtomicReference<>();
     syncContext.execute(() -> status.set(loadBalancer.acceptResolvedAddresses(resolvedAddresses)));
@@ -1328,9 +1411,12 @@ public class AutoShardingLoadBalancerTest {
     final List<String> keys = new ArrayList<>();
     final List<Channel> created = new ArrayList<>();
     final List<Channel> released = new ArrayList<>();
+    // Every createChannel() call, including the ones that throw.
+    int attempts;
 
     @Override
     public Channel createChannel(String channelFactoryKey) {
+      attempts++;
       if (UNKNOWN_CHANNEL_FACTORY_KEY.equals(channelFactoryKey)) {
         throw new IllegalArgumentException("unknown channel factory key");
       }
