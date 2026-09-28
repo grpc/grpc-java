@@ -189,15 +189,18 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     }
     Object rawConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     if (!(rawConfig instanceof AutoShardingLoadBalancerConfig)) {
+      // Without a config, publishPicker() publishes nothing, so a later child update cannot put
+      // back a picker built from the previous one. The next valid config starts over as if it
+      // were the first.
+      config = null;
       return failPermanently("autosharding: missing or malformed load balancing configuration");
     }
     AutoShardingLoadBalancerConfig newConfig = (AutoShardingLoadBalancerConfig) rawConfig;
 
+    // May be null, which updateShardingServiceChannel() treats as a failure to create the
+    // channel.
     ChannelFactory factory =
         resolvedAddresses.getAttributes().get(AutoShardingAttributes.ATTR_CHANNEL_FACTORY);
-    if (factory == null) {
-      return failPermanently("autosharding: no channel factory supplied to the LB policy");
-    }
 
     // gRFC A119 gives the configuration and the endpoints separate handling rules, and an empty
     // endpoint set only speaks to the latter. Everything below that is driven by comparing the
@@ -263,12 +266,17 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     // only reported when we are not already serving with them. Reporting it in that case is what
     // makes a broken resolver visible; otherwise RPCs would fail with whatever the stale
     // endpoints happen to be failing with, which names the wrong cause.
+    // IDLE counts as serving: it is where a lazy policy rests before traffic, and IDLE endpoints
+    // report nothing until picked, so a failing picker published then would never be replaced.
+    // CONNECTING and TRANSIENT_FAILURE endpoints do report, which restores the picker.
     // The one addition is the wait for the sharding service: RPCs queue until a client reports
     // an assignment or an error, so a failed refresh must not turn that queue into failures.
     boolean queueingForAssignment = assignment == null && clientError == null;
+    ConnectivityState state = endpointMap.aggregateConnectivityState();
     if (endpointMap.size() > 0
         && (queueingForAssignment
-            || endpointMap.aggregateConnectivityState() == ConnectivityState.READY)) {
+            || state == ConnectivityState.READY
+            || state == ConnectivityState.IDLE)) {
       logger.log(Level.FINE, "Ignoring name resolution error, still serving: {0}", error);
       return;
     }
@@ -305,18 +313,24 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    * Creates a channel to the sharding service if this is the first configuration update, if the
    * {@code channel_factory_key} or the factory itself changed, or if the previous attempt failed.
    * Leaves {@link #shardingChannel} untouched when nothing changed, which is how the caller
-   * detects that no new channel was needed. On failure it is set to null and the error returned.
-   * The previous channel is not released here: the caller does that once the stream on it has
-   * been cancelled.
+   * detects that no new channel was needed. On failure, including a missing factory, it is set to
+   * null and the error returned. The previous channel is not released here: the caller does that
+   * once the stream on it has been cancelled.
    */
   private Status updateShardingServiceChannel(
-      ChannelFactory factory, AutoShardingLoadBalancerConfig newConfig) {
+      @Nullable ChannelFactory factory, AutoShardingLoadBalancerConfig newConfig) {
     boolean keyChanged =
         config == null || !config.channelFactoryKey.equals(newConfig.channelFactoryKey);
     if (shardingChannel != null && factory == channelFactory && !keyChanged) {
       return Status.OK;
     }
 
+    if (factory == null) {
+      shardingChannel = null;
+      channelFactory = null;
+      return Status.UNAVAILABLE.withDescription(
+          "autosharding: no channel factory supplied to the LB policy");
+    }
     Channel newChannel;
     try {
       newChannel = factory.createChannel(newConfig.channelFactoryKey);

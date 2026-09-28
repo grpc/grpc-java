@@ -178,9 +178,27 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
+  public void missingConfig_afterAWorkingOne_failureIsNotUndoneByAChildUpdate()
+      throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+
+    acceptAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(endpoints("a"))
+            .setAttributes(attributesWithChannelFactory())
+            .build());
+    syncContext.execute(() -> childForHost("a").reportReady());
+
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("malformed");
+  }
+
+  @Test
   public void emptyKeyHeaderName_isRejected() {
-    // Not a supported mode: with no key header every RPC would carry the empty key and the whole
-    // channel would end up on whichever slice covers it. C++ rejects this at config-parse time.
+    // There would be no header to read the routing key from. C++ rejects this at config-parse
+    // time.
     assertThrows(
         IllegalArgumentException.class,
         () ->
@@ -189,18 +207,39 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void missingChannelFactory_reportsTransientFailure() {
-    Status status =
-        acceptAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(endpoints("a"))
-                .setAttributes(Attributes.EMPTY)
-                .setLoadBalancingPolicyConfig(config(CHANNEL_FACTORY_KEY, true))
-                .build());
+  public void missingChannelFactory_fallbackEnabled_entersFallback() {
+    Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, true), "a");
+    reportReady("a");
 
+    // Handled like a failure to create the channel, and still returned so the resolver retries.
     assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(status.getDescription()).contains("channel factory");
+    assertThat(status.getDescription()).contains("no channel factory");
+    assertThat(currentState).isEqualTo(READY);
+    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+  }
+
+  @Test
+  public void missingChannelFactory_fallbackDisabled_failsRpcs() {
+    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "a");
+
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
+  }
+
+  @Test
+  public void missingChannelFactory_afterAWorkingOne_closesTheClientAndStaysFailed()
+      throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+
+    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "a");
+    syncContext.execute(() -> childForHost("a").reportReady());
+
+    assertThat(channelFactory.isReleased(0)).isTrue();
+    assertThat(channelFactory.liveCallsAtRelease).containsExactly(0);
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
   }
 
   @Test
@@ -312,8 +351,22 @@ public class AutoShardingLoadBalancerTest {
     reportReady("b");
 
     // Read under the new header, "z" is past "m" and belongs to "b". Were the policy still
-    // reading the old header, it would find nothing, and the empty key would send this to "a".
+    // reading the old header, it would find nothing and fail the pick.
     assertThat(pickedHost(pick(OTHER_KEY_HEADER, "z"))).isEqualTo("b");
+  }
+
+  @Test
+  public void missingKeyHeader_failsPickEvenWithFallback() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b");
+    deliverAssignment(1, slice("", "a"), slice("m", "b"));
+    reportReady("a");
+    reportReady("b");
+
+    PickResult result = pick(OTHER_KEY_HEADER, "z");
+
+    assertThat(result.isDrop()).isTrue();
+    assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription()).contains(KEY_HEADER);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -888,6 +941,37 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
+  public void nameResolutionError_whileIdleWithAnAssignment_keepsServing() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    deliverAssignment(1, slice("", "a"));
+    assertThat(currentState).isEqualTo(IDLE);
+
+    syncContext.execute(
+        () -> loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("boom")));
+
+    // IDLE endpoints report nothing until picked, so a failing picker published here would never
+    // be replaced; the lazy policy must keep its picker so that picks connect.
+    assertThat(currentState).isEqualTo(IDLE);
+    PickResult result = pick("k");
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(childProvider.children).hasSize(1);
+  }
+
+  @Test
+  public void nameResolutionError_whileIdleInFallback_keepsServing() {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    fakeClock.forwardNanos(ASSIGNMENT_TIMEOUT_NANOS);
+    assertThat(currentState).isEqualTo(IDLE);
+
+    syncContext.execute(
+        () -> loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("boom")));
+
+    assertThat(currentState).isEqualTo(IDLE);
+    assertThat(pick("k").getStatus().isOk()).isTrue();
+    assertThat(childProvider.children).hasSize(1);
+  }
+
+  @Test
   public void nameResolutionError_withNoEndpoints_reportsTransientFailure() {
     syncContext.execute(
         () -> loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("boom")));
@@ -993,6 +1077,16 @@ public class AutoShardingLoadBalancerTest {
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.copyOf(endpoints))
             .setAttributes(attributesWithChannelFactory())
+            .setLoadBalancingPolicyConfig(config)
+            .build());
+  }
+
+  private Status deliverWithoutChannelFactory(
+      AutoShardingLoadBalancerConfig config, String... hostnames) {
+    return acceptAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(endpoints(hostnames))
+            .setAttributes(Attributes.EMPTY)
             .setLoadBalancingPolicyConfig(config)
             .build());
   }

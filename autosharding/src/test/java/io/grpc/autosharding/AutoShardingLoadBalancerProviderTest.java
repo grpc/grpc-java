@@ -121,7 +121,7 @@ public class AutoShardingLoadBalancerProviderTest {
 
   @Test
   public void parse_emptyKeyHeaderName_isRejected() throws IOException {
-    // An empty name would leave every RPC with the empty key, pinning the channel to one shard.
+    // There would be no header to read the routing key from.
     assertThat(parseError("{\"keyHeaderName\": \"\"}")).contains("'keyHeaderName' is required");
   }
 
