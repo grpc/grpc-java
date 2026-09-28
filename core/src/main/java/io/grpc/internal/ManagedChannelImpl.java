@@ -1812,17 +1812,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private void handleErrorInSyncContext(Status error) {
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
-      realChannel.onConfigError();
       if (lastResolutionState != ResolutionState.ERROR) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
         lastResolutionState = ResolutionState.ERROR;
       }
       // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-      if (NameResolverListener.this.helper != ManagedChannelImpl.this.lbHelper) {
-        return;
+      if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
+        helper.lb.handleNameResolutionError(error);
       }
-
-      helper.lb.handleNameResolutionError(error);
+      // After the LB has had the chance to install a failing picker, so that the calls queued for
+      // name resolution see the resolver error directly instead of a transient "waiting for
+      // picker" delay.
+      realChannel.onConfigError();
     }
   }
 

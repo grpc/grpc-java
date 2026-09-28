@@ -4900,6 +4900,17 @@ public class ManagedChannelImplTest {
 
     verify(mockTracerFactory).recordDelayEnd("resolving");
     executor.runDueTasks();
+
+    // A second call initiated after resolution has completed should not experience any
+    // resolving delay.
+    ClientStreamTracer.Factory mockTracerFactory2 = mock(ClientStreamTracer.Factory.class);
+    when(mockTracerFactory2.newClientStreamTracer(any(StreamInfo.class), any(Metadata.class)))
+        .thenReturn(new ClientStreamTracer() {});
+    ClientCall<String, Integer> call2 = channel.newCall(
+        method, CallOptions.DEFAULT.withStreamTracerFactory(mockTracerFactory2));
+    call2.start(mockCallListener2, new Metadata());
+    verify(mockTracerFactory2, never()).recordDelayStart(anyString(), anyString());
+    verify(mockTracerFactory2, never()).recordDelayEnd(anyString());
   }
 
   @Test
@@ -4985,20 +4996,51 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverFactory(nsFactory);
     createChannel();
 
+    // Like pick_first: a resolver error puts the LB in TRANSIENT_FAILURE with a failing picker.
+    doAnswer(invocation -> {
+      helper.updateBalancingState(TRANSIENT_FAILURE, new LoadBalancer.FixedResultPicker(
+          PickResult.withError((Status) invocation.getArgument(0))));
+      return null;
+    }).when(mockLoadBalancer).handleNameResolutionError(any(Status.class));
     ClientStreamTracer.Factory mockTracerFactory = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer mockAttemptTracer = mock(ClientStreamTracer.class);
     when(mockTracerFactory.newClientStreamTracer(any(StreamInfo.class), any(Metadata.class)))
-        .thenReturn(new ClientStreamTracer() {});
+        .thenReturn(mockAttemptTracer);
     CallOptions callOptions = CallOptions.DEFAULT.withStreamTracerFactory(mockTracerFactory);
     ClientCall<String, Integer> call = channel.newCall(method, callOptions);
     call.start(mockCallListener, new Metadata());
 
+    ClientStreamTracer.Factory wfrTracerFactory = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer wfrAttemptTracer = mock(ClientStreamTracer.class);
+    when(wfrTracerFactory.newClientStreamTracer(any(StreamInfo.class), any(Metadata.class)))
+        .thenReturn(wfrAttemptTracer);
+    ClientCall<String, Integer> wfrCall = channel.newCall(
+        method, CallOptions.DEFAULT.withWaitForReady().withStreamTracerFactory(wfrTracerFactory));
+    wfrCall.start(mockCallListener2, new Metadata());
+
     verify(mockTracerFactory).recordDelayStart(
         eq("resolving"), eq("waiting for name resolution or service config"));
     verify(mockTracerFactory, never()).recordDelayEnd(anyString());
+    verify(wfrTracerFactory).recordDelayStart(
+        eq("resolving"), eq("waiting for name resolution or service config"));
+    verify(wfrTracerFactory, never()).recordDelayEnd(anyString());
 
     nsFactory.allResolved();
 
     verify(mockTracerFactory).recordDelayEnd("resolving");
+    verify(wfrTracerFactory).recordDelayEnd("resolving");
+    executor.runDueTasks();
+    // The released fail-fast call sees the failing picker directly: no attempt-level delay.
+    verify(mockAttemptTracer, never()).recordDelayStart(anyString(), anyString());
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
+    // The released wait-for-ready call transitions directly to picker_failing_with_wait_for_ready
+    // without a transient "connecting" delay.
+    verify(wfrAttemptTracer).recordDelayStart(
+        eq("picker_failing_with_wait_for_ready"),
+        eq("wait_for_ready RPC failed with status: UNAVAILABLE: Simulated resolver failure"));
+    verify(wfrAttemptTracer, never()).recordDelayStart(eq("connecting"), anyString());
+    wfrCall.cancel("cleanup", null);
     executor.runDueTasks();
   }
 
