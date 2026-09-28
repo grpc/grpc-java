@@ -166,6 +166,26 @@ public class LoadBalancerTest {
   }
 
   @Test
+  public void fixedResultPicker_equalsAndHashCode() {
+    LoadBalancer.FixedResultPicker picker1 = new LoadBalancer.FixedResultPicker(
+        PickResult.withNoResult("connecting", "trying 10.0.0.1"));
+    LoadBalancer.FixedResultPicker picker2 = new LoadBalancer.FixedResultPicker(
+        PickResult.withNoResult("connecting", "trying 10.0.0.1"));
+    LoadBalancer.FixedResultPicker pickerDiffReason = new LoadBalancer.FixedResultPicker(
+        PickResult.withNoResult("connecting", "trying 10.0.0.2"));
+    LoadBalancer.FixedResultPicker pickerDiffType = new LoadBalancer.FixedResultPicker(
+        PickResult.withNoResult("rls_lookup_pending", "trying 10.0.0.1"));
+    LoadBalancer.FixedResultPicker pickerNoDelay = new LoadBalancer.FixedResultPicker(
+        PickResult.withNoResult());
+
+    assertThat(picker1).isEqualTo(picker2);
+    assertThat(picker1.hashCode()).isEqualTo(picker2.hashCode());
+    assertThat(picker1).isNotEqualTo(pickerDiffReason);
+    assertThat(picker1).isNotEqualTo(pickerDiffType);
+    assertThat(picker1).isNotEqualTo(pickerNoDelay);
+  }
+
+  @Test
   public void helper_createSubchannelList_throws() {
     try {
       new NoopHelper().createSubchannel(CreateSubchannelArgs.newBuilder()
