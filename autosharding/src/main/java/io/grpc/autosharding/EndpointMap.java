@@ -55,18 +55,12 @@ import javax.annotation.concurrent.NotThreadSafe;
  * <h3>Endpoint indices</h3>
  *
  * <p>Endpoints are identified throughout the LB policy by a dense index in {@code [0, size)}.
- * The index of an endpoint is simply its position in the list most recently passed to
- * {@link #updateEndpoints}, after duplicate hostnames have been dropped. Indices are not stored
- * anywhere; they are a property of the map's iteration order. This makes it impossible for
- * indices handed out by {@link #indexOf} to disagree with the positions in the list returned by
- * {@link #toPickerEndpoints}, as long as both are obtained without an intervening
- * {@link #updateEndpoints} call. The LB policy relies on that pairing when it builds a
- * {@link SliceMap} and an {@link AutoShardingPicker} from the same snapshot.
- *
- * <p>Note that gRFC A119 derives the index from the position in the resolver's endpoint list
- * <em>before</em> de-duplication, which can leave gaps when two endpoints share a hostname. We
- * index after de-duplication instead, so the index is always a valid offset into
- * {@link #toPickerEndpoints}.
+ * The index of an endpoint is its position in the list most recently passed to
+ * {@link #updateEndpoints}, after duplicate hostnames have been dropped. Indices handed out by
+ * {@link #indexOf} agree with the positions in the list returned by {@link #toPickerEndpoints},
+ * as long as both are obtained without an intervening {@link #updateEndpoints} call. The LB
+ * policy relies on that pairing when it builds a {@link SliceMap} and an
+ * {@link AutoShardingPicker} from the same snapshot.
  *
  * <h3>Lifecycle</h3>
  *

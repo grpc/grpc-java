@@ -85,8 +85,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       Logger.getLogger(AutoShardingLoadBalancer.class.getName());
 
   /**
-   * Published while waiting for the first assignment. The delay type is consumed by the
-   * name-resolution delay tracking in gRFC A121.
+   * Published while waiting for the first assignment. The delay type is consumed by gRFC A121,
+   * RPC Delay Observability.
    */
   private static final SubchannelPicker ASSIGNMENT_PENDING_PICKER =
       new FixedResultPicker(
@@ -117,7 +117,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   /**
    * The {@code autosharding_target} the current {@link #client} was created with, after {@code %s}
    * substitution. Tracked separately from the config because the substitution depends on the
-   * resolved endpoints, so the target can change while the config does not.
+   * locality attribute of the resolved endpoints, so the target can change while the config does
+   * not.
    */
   @Nullable private String shardingTarget;
 
@@ -355,11 +356,9 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    * Replaces the {@link AutoshardingClient} when there is none yet, or when the channel to the
    * sharding service or the resolved target changed.
    *
-   * <p>What gRFC A119 requires is a new channel and a new stream on it; whether the existing
-   * client is handed the new channel or a new client is built around it is left open. We replace
-   * the client because its accepted-generation watermark is only meaningful against the server
-   * and the resource it was learned from; carrying it over could make a different server withhold
-   * assignments indefinitely.
+   * <p>A new client, rather than the old one pointed elsewhere, because its accepted-generation
+   * watermark is only meaningful against the server and the resource it was learned from;
+   * carrying it over could make a different server withhold assignments indefinitely.
    *
    * <p>Each new client starts its own initial assignment timer. Whatever the previous client
    * reported keeps being served until the new one reports.

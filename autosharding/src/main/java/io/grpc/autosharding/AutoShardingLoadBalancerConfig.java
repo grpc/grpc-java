@@ -56,7 +56,7 @@ final class AutoShardingLoadBalancerConfig {
   final boolean enableFallback;
 
   /**
-   * How long to wait for the first assignment after creating a channel to the service.
+   * How long each new client waits for its first assignment before reporting an error.
    */
   final long initialAssignmentTimeoutNanos;
 

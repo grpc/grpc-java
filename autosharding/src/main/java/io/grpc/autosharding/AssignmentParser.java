@@ -218,10 +218,6 @@ final class AssignmentParser {
    * things about the same key and there is no basis for preferring either, so the keys they cover
    * become a gap.
    *
-   * <p>Overlap is transitive here in the sense that matters: a slice is dropped when it overlaps
-   * any other slice, even one it only reaches through a third. {@code ["a", "z")}, {@code ["b",
-   * "c")} and {@code ["d", "e")} all go, because the first overlaps the other two.
-   *
    * @param sorted slices in ascending {@code startKey} order
    * @param dropped collects a description of each slice that was dropped
    */
