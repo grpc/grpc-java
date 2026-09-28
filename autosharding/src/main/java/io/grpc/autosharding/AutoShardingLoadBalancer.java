@@ -24,7 +24,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
-import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -121,6 +120,14 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    */
   @Nullable private String shardingTarget;
 
+  /**
+   * Locality last derived from the endpoints, substituted for {@code %s} in the target. Kept
+   * through an empty endpoint update, which carries no locality, so that retracting the endpoints
+   * does not move the client to another target and back. Null when the endpoints did not share
+   * one.
+   */
+  @Nullable private String locality;
+
   @Nullable private AutoshardingClient client;
 
   /**
@@ -210,13 +217,16 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     // When the set is empty this tears the children down, so that in-flight picks stop resolving
     // to endpoints the resolver has retracted.
     endpointMap.updateEndpoints(endpoints, resolvedAddresses.getAttributes());
+    if (!endpoints.isEmpty()) {
+      locality = sharedLocality(endpoints);
+    }
 
     if (channelStatus.isOk()) {
-      // The locality arrives in the resolver attributes, so the target can change even when the
-      // config did not.
+      // The locality comes from the endpoints, so the target can change even when the config did
+      // not.
       maybeRecreateClient(
           shardingChannel != previousChannel,
-          resolveTarget(newConfig, resolvedAddresses.getAttributes()),
+          resolveTarget(newConfig.autoshardingTarget, locality),
           newConfig.initialAssignmentTimeoutNanos);
     } else {
       // Handled like an error from the client: RPCs go to fallback or fail with this status.
@@ -363,23 +373,35 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Substitutes the optional {@code %s} token in the configured target with the locality this
-   * policy instance is balancing within, or with the empty string when no locality is available.
+   * Returns the locality every endpoint is in, or null if any endpoint has none or they differ.
    *
-   * <p>The locality is a property of the policy instance, so it is read from the resolver
-   * attributes rather than from any endpoint. Reading it from an endpoint would be wrong in the
-   * mode where this policy does its own locality picking: it is then handed endpoints from every
-   * locality, and picking one of them would make the target depend on resolver ordering. gRFC
-   * A119 says the token is not meant to be used in that mode, and leaving
-   * {@link AutoShardingAttributes#ATTR_LOCALITY} unset there resolves it to the empty string.
+   * <p>Under a locality picker such as {@code weighted_target_experimental}, this policy only
+   * receives the endpoints of its own locality, so they all agree; under xDS this yields the same
+   * value that {@code weighted_target_experimental} publishes as its child name. When the policy
+   * does its own locality picking, it is handed endpoints from every locality, which disagree and
+   * yield null, so the result never depends on resolver ordering.
    */
-  private static String resolveTarget(
-      AutoShardingLoadBalancerConfig config, Attributes resolverAttributes) {
-    if (!config.autoshardingTarget.contains("%s")) {
-      return config.autoshardingTarget;
+  @Nullable
+  private static String sharedLocality(List<EquivalentAddressGroup> endpoints) {
+    String shared = null;
+    for (EquivalentAddressGroup endpoint : endpoints) {
+      String endpointLocality =
+          endpoint.getAttributes().get(EquivalentAddressGroup.ATTR_LOCALITY_NAME);
+      if (endpointLocality == null || (shared != null && !shared.equals(endpointLocality))) {
+        return null;
+      }
+      shared = endpointLocality;
     }
-    String locality = resolverAttributes.get(AutoShardingAttributes.ATTR_LOCALITY);
-    return config.autoshardingTarget.replace("%s", locality == null ? "" : locality);
+    return shared;
+  }
+
+  /**
+   * Substitutes the optional {@code %s} token in the configured target with the locality, or with
+   * the empty string when there is none. gRFC A119 says the token is not meant to be used when
+   * this policy does its own locality picking, which is the case that has no locality.
+   */
+  private static String resolveTarget(String configuredTarget, @Nullable String locality) {
+    return configuredTarget.replace("%s", locality == null ? "" : locality);
   }
 
   private void shutdownClient() {

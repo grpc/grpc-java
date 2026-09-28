@@ -380,13 +380,13 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void targetWithLocalityToken_isSubstituted() throws Exception {
-    acceptAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(endpoints("a"))
-            .setAttributes(attributesWithLocality("us-central1-a"))
-            .setLoadBalancingPolicyConfig(retargetedConfig("target/%s"))
-            .build());
+  public void targetWithLocalityToken_allEndpointsInOneLocality_isSubstituted()
+      throws Exception {
+    // What a child of weighted_target sees under xDS: only its own locality's endpoints.
+    deliverEndpoints(
+        retargetedConfig("target/%s"),
+        endpointInLocality("a", "us-central1-a"),
+        endpointInLocality("b", "us-central1-a"));
 
     assertThat(takeRequest().getInitialClientConfig().getTarget())
         .isEqualTo("target/us-central1-a");
@@ -395,25 +395,51 @@ public class AutoShardingLoadBalancerTest {
   @Test
   public void changedLocality_createsANewClientEvenThoughTheConfigIsUnchanged() throws Exception {
     AutoShardingLoadBalancerConfig localityConfig = retargetedConfig("target/%s");
-    acceptAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(endpoints("a"))
-            .setAttributes(attributesWithLocality("us-central1-a"))
-            .setLoadBalancingPolicyConfig(localityConfig)
-            .build());
+    deliverEndpoints(localityConfig, endpointInLocality("a", "us-central1-a"));
     takeRequest();
 
-    acceptAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(endpoints("a"))
-            .setAttributes(attributesWithLocality("us-central1-b"))
-            .setLoadBalancingPolicyConfig(localityConfig)
-            .build());
+    deliverEndpoints(localityConfig, endpointInLocality("a", "us-central1-b"));
 
     assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
     assertThat(service.streamCount.get()).isEqualTo(2);
     assertThat(takeRequest().getInitialClientConfig().getTarget())
         .isEqualTo("target/us-central1-b");
+  }
+
+  @Test
+  public void targetWithLocalityToken_someEndpointsWithoutLocality_substitutesEmptyString()
+      throws Exception {
+    deliverEndpoints(
+        retargetedConfig("target/%s"),
+        endpointInLocality("a", "us-central1-a"),
+        endpoints("b").get(0));
+
+    assertThat(takeRequest().getInitialClientConfig().getTarget()).isEqualTo("target/");
+  }
+
+  @Test
+  public void targetWithLocalityToken_endpointsRetracted_keepsTheLocality() throws Exception {
+    AutoShardingLoadBalancerConfig localityConfig = retargetedConfig("target/%s");
+    deliverEndpoints(localityConfig, endpointInLocality("a", "us-central1-a"));
+    takeRequest();
+
+    // An empty update carries no locality. Treating that as "no locality" would move the client
+    // to "target/" and then back again once the endpoints return.
+    deliverEndpoints(localityConfig);
+    deliverEndpoints(localityConfig, endpointInLocality("a", "us-central1-a"));
+
+    assertThat(service.streamCount.get()).isEqualTo(1);
+  }
+
+  @Test
+  public void targetChangedWhileEndpointsRetracted_keepsTheLocality() throws Exception {
+    deliverEndpoints(retargetedConfig("target/%s"), endpointInLocality("a", "us-central1-a"));
+    takeRequest();
+
+    deliverEndpoints(retargetedConfig("other/%s"));
+
+    assertThat(takeRequest().getInitialClientConfig().getTarget())
+        .isEqualTo("other/us-central1-a");
   }
 
   @Test
@@ -426,18 +452,13 @@ public class AutoShardingLoadBalancerTest {
   @Test
   public void targetWithLocalityToken_endpointsSpanLocalities_substitutesEmptyString()
       throws Exception {
-    // The policy is doing its own locality picking, so it sees endpoints from every locality and
-    // no locality attribute. gRFC A119 says the token is not meant to be used here; the target
-    // must not end up depending on which endpoint the resolver happened to list first.
-    acceptAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(
-                ImmutableList.of(
-                    endpointInLocality("a", "us-central1-a"),
-                    endpointInLocality("b", "us-central1-b")))
-            .setAttributes(attributesWithChannelFactory())
-            .setLoadBalancingPolicyConfig(retargetedConfig("target/%s"))
-            .build());
+    // The policy is doing its own locality picking, so it sees endpoints from every locality.
+    // gRFC A119 says the token is not meant to be used here; the target must not end up depending
+    // on which endpoint the resolver happened to list first.
+    deliverEndpoints(
+        retargetedConfig("target/%s"),
+        endpointInLocality("a", "us-central1-a"),
+        endpointInLocality("b", "us-central1-b"));
 
     assertThat(takeRequest().getInitialClientConfig().getTarget()).isEqualTo("target/");
   }
@@ -446,28 +467,18 @@ public class AutoShardingLoadBalancerTest {
   public void targetWithLocalityToken_endpointReordering_doesNotRecreateTheClient()
       throws Exception {
     AutoShardingLoadBalancerConfig localityConfig = retargetedConfig("target/%s");
-    acceptAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(
-                ImmutableList.of(
-                    endpointInLocality("a", "us-central1-a"),
-                    endpointInLocality("b", "us-central1-b")))
-            .setAttributes(attributesWithChannelFactory())
-            .setLoadBalancingPolicyConfig(localityConfig)
-            .build());
+    deliverEndpoints(
+        localityConfig,
+        endpointInLocality("a", "us-central1-a"),
+        endpointInLocality("b", "us-central1-b"));
     takeRequest();
 
     // Same endpoints, other order. Sourcing the locality from the first endpoint would change the
     // target here and reconnect the client to a different sharding resource.
-    acceptAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(
-                ImmutableList.of(
-                    endpointInLocality("b", "us-central1-b"),
-                    endpointInLocality("a", "us-central1-a")))
-            .setAttributes(attributesWithChannelFactory())
-            .setLoadBalancingPolicyConfig(localityConfig)
-            .build());
+    deliverEndpoints(
+        localityConfig,
+        endpointInLocality("b", "us-central1-b"),
+        endpointInLocality("a", "us-central1-a"));
 
     assertThat(service.streamCount.get()).isEqualTo(1);
   }
@@ -962,11 +973,14 @@ public class AutoShardingLoadBalancerTest {
         .build();
   }
 
-  /** Resolver attributes as they look under a locality picker, which supplies the locality. */
-  private Attributes attributesWithLocality(String locality) {
-    return attributesWithChannelFactory().toBuilder()
-        .set(AutoShardingAttributes.ATTR_LOCALITY, locality)
-        .build();
+  private Status deliverEndpoints(
+      AutoShardingLoadBalancerConfig config, EquivalentAddressGroup... endpoints) {
+    return acceptAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.copyOf(endpoints))
+            .setAttributes(attributesWithChannelFactory())
+            .setLoadBalancingPolicyConfig(config)
+            .build());
   }
 
   private Status deliverAddresses(AutoShardingLoadBalancerConfig config, String... hostnames) {
