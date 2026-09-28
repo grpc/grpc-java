@@ -69,7 +69,8 @@ import javax.annotation.Nullable;
  *
  * <p>Each {@link AutoshardingClient} reports either valid assignments or, until it has reported
  * one, errors (including its initial assignment timer firing). Until the first report RPCs are
- * queued. After an error, RPCs either spread across every resolved endpoint or fail with that
+ * queued, while the reported connectivity state still follows the endpoints, starting at IDLE.
+ * After an error, RPCs either spread across every resolved endpoint or fail with that
  * error, depending on {@code enable_fallback}. A new client is created whenever the channel
  * factory key or the sharding target changes; whatever the previous client last reported keeps
  * being used until the new one reports, so a change of sharding service does not interrupt
@@ -506,11 +507,12 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       // acceptResolvedAddresses already reported TRANSIENT_FAILURE for this case.
       return;
     }
-    // The nudge below is keyed on the endpoints' aggregate, not on what is reported to the
-    // channel, so it is computed even while RPCs are queued for the initial assignment.
     ConnectivityState state = endpointMap.aggregateConnectivityState();
     if (assignment == null && clientError == null) {
-      helper.updateBalancingState(CONNECTING, ASSIGNMENT_PENDING_PICKER);
+      // RPCs are queued, but the state still follows the endpoints, so the policy starts IDLE
+      // like any lazily-connecting one. Reporting CONNECTING instead would keep a parent
+      // priority policy's failover timer running while the sharding service answers.
+      helper.updateBalancingState(state, ASSIGNMENT_PENDING_PICKER);
     } else if (assignment == null && !config.enableFallback) {
       // No endpoint can be picked, so there is nothing to connect for either.
       helper.updateBalancingState(

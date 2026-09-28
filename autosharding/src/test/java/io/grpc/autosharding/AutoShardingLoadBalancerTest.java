@@ -491,7 +491,9 @@ public class AutoShardingLoadBalancerTest {
   public void beforeFirstAssignment_queuesRpcs() {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b");
 
-    assertThat(currentState).isEqualTo(CONNECTING);
+    // The policy connects lazily, so it starts IDLE rather than CONNECTING. That also keeps a
+    // parent priority policy from failing over while the sharding service is still answering.
+    assertThat(currentState).isEqualTo(IDLE);
     PickResult result = pick("anything");
     assertThat(result.getSubchannel()).isNull();
     assertThat(result.getStatus().isOk()).isTrue();
@@ -503,10 +505,22 @@ public class AutoShardingLoadBalancerTest {
     activate("a");
     reportReady("a");
 
-    // Still waiting on the sharding service, so RPCs stay queued rather than being routed
-    // anywhere arbitrary.
-    assertThat(currentState).isEqualTo(CONNECTING);
+    // The reported state follows the endpoints, but RPCs stay queued rather than being routed
+    // anywhere arbitrary while the sharding service has not answered.
+    assertThat(currentState).isEqualTo(READY);
     assertThat(pick("k").getSubchannel()).isNull();
+  }
+
+  @Test
+  public void beforeFirstAssignment_endpointsFailing_reportsTransientFailureButKeepsQueuing() {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b");
+
+    reportTransientFailure("a");
+    reportTransientFailure("b");
+
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getSubchannel()).isNull();
+    assertThat(pick("k").getStatus().isOk()).isTrue();
   }
 
   @Test
@@ -900,7 +914,7 @@ public class AutoShardingLoadBalancerTest {
 
   @Test
   public void nameResolutionError_whileAwaitingInitialAssignment_keepsQueueing() {
-    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b");
     // Not READY, so only the initial assignment wait can be holding these RPCs.
     reportTransientFailure("a");
     assertThat(currentState).isEqualTo(CONNECTING);
