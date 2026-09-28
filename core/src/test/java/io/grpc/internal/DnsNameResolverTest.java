@@ -221,6 +221,23 @@ public class DnsNameResolverTest {
   }
 
   @Test
+  public void validDnsName_lastLabelStartsWithDigit() {
+    DnsNameResolver resolverWithoutPort =
+        (DnsNameResolver) newResolver("otlp.1234-k8s-namespace", DEFAULT_PORT)
+            .getRetriedNameResolver();
+    assertEquals("otlp.1234-k8s-namespace", resolverWithoutPort.getServiceAuthority());
+    assertEquals("otlp.1234-k8s-namespace", resolverWithoutPort.getHost());
+    assertEquals(DEFAULT_PORT, resolverWithoutPort.getPort());
+
+    DnsNameResolver resolverWithPort =
+        (DnsNameResolver) newResolver("otlp.1234-k8s-namespace:4317", DEFAULT_PORT)
+            .getRetriedNameResolver();
+    assertEquals("otlp.1234-k8s-namespace:4317", resolverWithPort.getServiceAuthority());
+    assertEquals("otlp.1234-k8s-namespace", resolverWithPort.getHost());
+    assertEquals(4317, resolverWithPort.getPort());
+  }
+
+  @Test
   public void resolve_neverCache() throws Exception {
     flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "0");
     final List<InetAddress> answer1 = createAddressList(2);
