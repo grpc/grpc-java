@@ -764,6 +764,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
           return;
         } catch (Exception e) {
+          GrpcUtil.closeQuietly(sock);
           onException(e);
           return;
         } finally {
