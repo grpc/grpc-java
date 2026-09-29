@@ -2073,7 +2073,8 @@ public class OkHttpClientTransportTest {
         .transportShutdown(statusCaptor.capture(), any(DisconnectError.class));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(statusCaptor.getValue().getCause()).isInstanceOf(SocketTimeoutException.class);
+    assertThat(Throwables.getRootCause(statusCaptor.getValue().getCause()))
+        .isInstanceOf(SocketTimeoutException.class);
     sock.close();
   }
 
