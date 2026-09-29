@@ -739,9 +739,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             }
           }
           if (sslSocketFactory != null) {
+            sock.setSoTimeout(proxySocketTimeout);
             SSLSocket sslSocket = OkHttpTlsUpgrader.upgrade(
                 sslSocketFactory, hostnameVerifier, sock, getOverridenHost(), getOverridenPort(),
                 connectionSpec);
+            // As the socket will be used for RPCs from here on, we want the socket timeout back to zero.
+            sock.setSoTimeout(0);
             sslSession = sslSocket.getSession();
             sock = sslSocket;
           }
