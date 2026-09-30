@@ -331,8 +331,9 @@ final class PriorityLoadBalancer extends LoadBalancer {
         }
         ConnectivityState oldState = connectivityState;
         connectivityState = newState;
-        if (newState == CONNECTING || newState == IDLE) {
-          picker = new PriorityPicker(newPicker, priority);
+        int priorityIndex = priorityNames.indexOf(priority);
+        if (priorityIndex >= 0 && (newState == CONNECTING || newState == IDLE)) {
+          picker = new PriorityPicker(newPicker, String.valueOf(priorityIndex));
         } else {
           picker = newPicker;
         }
