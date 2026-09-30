@@ -1008,6 +1008,57 @@ public class OkHttpClientTransportTest {
   }
 
   /**
+   * The server closes the call while the client's END_STREAM is still queued in the outbound flow
+   * controller. That END_STREAM will never be written, so the client must reset the stream;
+   * otherwise the server never sees the stream close.
+   */
+  @Test
+  public void serverClosesWhileEndOfStreamBlockedByFlowControl_sendsReset() throws Exception {
+    initTransport();
+    MockStreamListener listener = new MockStreamListener();
+    ClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(listener);
+
+    // Larger than the outbound window, so the tail of the message stays queued.
+    stream.writeMessage(new ByteArrayInputStream(new byte[INITIAL_WINDOW_SIZE]));
+    stream.flush();
+    verify(frameWriter, timeout(TIME_OUT_MS))
+        .data(eq(false), eq(3), any(Buffer.class), eq(INITIAL_WINDOW_SIZE));
+    // END_STREAM is queued behind the tail.
+    stream.halfClose();
+
+    frameHandler().headers(true, true, 3, 0, grpcResponseTrailers(), HeadersMode.HTTP_20_HEADERS);
+    listener.waitUntilStreamClosed();
+
+    assertEquals(Status.Code.OK, listener.status.getCode());
+    verify(frameWriter, timeout(TIME_OUT_MS)).rstStream(eq(3), eq(ErrorCode.CANCEL));
+    verify(frameWriter, never()).data(eq(true), eq(3), any(Buffer.class), anyInt());
+    shutdownAndVerify();
+  }
+
+  @Test
+  public void serverClosesAfterEndOfStreamSent_noReset() throws Exception {
+    initTransport();
+    MockStreamListener listener = new MockStreamListener();
+    ClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(listener);
+
+    stream.writeMessage(new ByteArrayInputStream(new byte[10]));
+    stream.halfClose();
+    verify(frameWriter, timeout(TIME_OUT_MS))
+        .data(eq(true), eq(3), any(Buffer.class), eq(10 + HEADER_LENGTH));
+
+    frameHandler().headers(true, true, 3, 0, grpcResponseTrailers(), HeadersMode.HTTP_20_HEADERS);
+    listener.waitUntilStreamClosed();
+
+    assertEquals(Status.Code.OK, listener.status.getCode());
+    verify(frameWriter, never()).rstStream(eq(3), any(ErrorCode.class));
+    shutdownAndVerify();
+  }
+
+  /**
    * Outbound flow control where the initial window size is reduced before a stream is started.
    */
   @Test
