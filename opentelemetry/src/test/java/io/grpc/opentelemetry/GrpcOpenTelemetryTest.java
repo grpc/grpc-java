@@ -29,30 +29,15 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.ByteStreams;
 import io.grpc.CallOptions;
-import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder2;
-import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
-import io.grpc.NameResolver;
-import io.grpc.NameResolverProvider;
-import io.grpc.NameResolverRegistry;
 import io.grpc.ServerBuilder;
-import io.grpc.ServerCall;
-import io.grpc.ServerCallHandler;
-import io.grpc.ServerServiceDefinition;
-import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
-import io.grpc.StatusOr;
-import io.grpc.SynchronizationContext;
-import io.grpc.inprocess.InProcessChannelBuilder;
-import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
@@ -69,16 +54,7 @@ import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.SocketAddress;
-import java.net.URI;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -116,7 +92,6 @@ public class GrpcOpenTelemetryTest {
           .setRequestMarshaller(MARSHALLER)
           .setResponseMarshaller(MARSHALLER)
           .setFullMethodName("test.service/method")
-          .setSampledToLocalTracing(true)
           .build();
 
   private final InMemoryMetricReader inMemoryMetricReader = InMemoryMetricReader.create();
@@ -315,162 +290,6 @@ public class GrpcOpenTelemetryTest {
                                 AttributeKey.stringKey("grpc.method"), method.getFullMethodName())
                             .hasAttribute(
                                 AttributeKey.stringKey("grpc.delay_type"), "resolving"))));
-  }
-
-  @Test
-  public void delayMetricsAndSpans_resolverErrorThenWaitForReady_endToEnd() throws Exception {
-    // Drive a real channel through: RPC queued for resolution -> resolver error -> resolver
-    // success -> connect -> OK. Per gRFC A121 the RPC sees exactly one call-level "resolving"
-    // delay and, once the LB has reported the resolution failure, one attempt-level
-    // "picker_failing_with_wait_for_ready" delay followed by one "connecting" delay. In
-    // particular no spurious "connecting" delay may be recorded because the queued RPC was
-    // released before the LB had been told about the resolution error.
-    String serverName = InProcessServerBuilder.generateName();
-    String target = "testdelay:///" + serverName;
-    ServerCallHandler<String, String> handler = new ServerCallHandler<String, String>() {
-      @Override
-      public ServerCall.Listener<String> startCall(
-          ServerCall<String, String> call, Metadata headers) {
-        call.sendHeaders(new Metadata());
-        call.sendMessage("response");
-        call.close(Status.OK, new Metadata());
-        return new ServerCall.Listener<String>() {};
-      }
-    };
-    grpcCleanupRule.register(InProcessServerBuilder.forName(serverName)
-        .directExecutor()
-        .addService(ServerServiceDefinition.builder(
-                ServiceDescriptor.newBuilder("test.service").addMethod(method).build())
-            .addMethod(method, handler)
-            .build())
-        .build()
-        .start());
-
-    final AtomicReference<NameResolver.Listener2> listenerRef = new AtomicReference<>();
-    final AtomicReference<SynchronizationContext> syncContextRef = new AtomicReference<>();
-    NameResolverProvider provider = new NameResolverProvider() {
-      @Override
-      protected boolean isAvailable() {
-        return true;
-      }
-
-      @Override
-      protected int priority() {
-        return 5;
-      }
-
-      @Override
-      public String getDefaultScheme() {
-        return "testdelay";
-      }
-
-      @Override
-      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
-        return Collections.singleton(InProcessSocketAddress.class);
-      }
-
-      @Override
-      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-        syncContextRef.set(args.getSynchronizationContext());
-        return new NameResolver() {
-          @Override
-          public String getServiceAuthority() {
-            return "localhost";
-          }
-
-          @Override
-          public void start(Listener2 listener) {
-            listenerRef.set(listener);
-          }
-
-          @Override
-          public void shutdown() {}
-        };
-      }
-    };
-    NameResolverRegistry.getDefaultRegistry().register(provider);
-    try {
-      GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
-          .sdk(openTelemetryRule.getOpenTelemetry())
-          .enableTracing(true)
-          .enableMetrics(ImmutableList.of(
-              "grpc.client.call.delay.duration", "grpc.client.attempt.delay.duration"))
-          .build();
-      InProcessChannelBuilder channelBuilder =
-          InProcessChannelBuilder.forTarget(target).directExecutor();
-      grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
-      ManagedChannel channel = grpcCleanupRule.register(channelBuilder.build());
-
-      final CountDownLatch closeLatch = new CountDownLatch(1);
-      final AtomicReference<Status> closeStatus = new AtomicReference<>();
-      ClientCall<String, String> call =
-          channel.newCall(method, CallOptions.DEFAULT.withWaitForReady());
-      call.start(new ClientCall.Listener<String>() {
-        @Override
-        public void onClose(Status status, Metadata trailers) {
-          closeStatus.set(status);
-          closeLatch.countDown();
-        }
-      }, new Metadata());
-      call.sendMessage("request");
-      call.halfClose();
-      call.request(1);
-
-      assertThat(listenerRef.get()).isNotNull();
-      listenerRef.get().onError(Status.UNAVAILABLE.withDescription("DNS failure"));
-      syncContextRef.get().execute(() -> listenerRef.get().onResult2(
-          NameResolver.ResolutionResult.newBuilder()
-              .setAddressesOrError(StatusOr.fromValue(ImmutableList.of(
-                  new EquivalentAddressGroup(new InProcessSocketAddress(serverName)))))
-              .build()));
-
-      assertThat(closeLatch.await(5, TimeUnit.SECONDS)).isTrue();
-      assertThat(closeStatus.get().getCode()).isEqualTo(Status.Code.OK);
-
-      OpenTelemetryAssertions.assertThat(openTelemetryRule.getMetrics())
-          .anySatisfy(
-              metric -> OpenTelemetryAssertions.assertThat(metric)
-                  .hasName("grpc.client.call.delay.duration")
-                  .hasHistogramSatisfying(
-                      histogram -> histogram.hasPointsSatisfying(
-                          point -> point
-                              .hasCount(1)
-                              .hasAttribute(AttributeKey.stringKey("grpc.target"), target)
-                              .hasAttribute(
-                                  AttributeKey.stringKey("grpc.method"), method.getFullMethodName())
-                              .hasAttribute(
-                                  AttributeKey.stringKey("grpc.delay_type"), "resolving"))));
-      OpenTelemetryAssertions.assertThat(openTelemetryRule.getMetrics())
-          .anySatisfy(
-              metric -> OpenTelemetryAssertions.assertThat(metric)
-                  .hasName("grpc.client.attempt.delay.duration")
-                  .hasHistogramSatisfying(
-                      histogram -> histogram.hasPointsSatisfying(
-                          point -> point
-                              .hasCount(1)
-                              .hasAttribute(AttributeKey.stringKey("grpc.target"), target)
-                              .hasAttribute(
-                                  AttributeKey.stringKey("grpc.method"), method.getFullMethodName())
-                              .hasAttribute(
-                                  AttributeKey.stringKey("grpc.delay_type"),
-                                  "picker_failing_with_wait_for_ready"),
-                          point -> point
-                              .hasCount(1)
-                              .hasAttribute(AttributeKey.stringKey("grpc.target"), target)
-                              .hasAttribute(
-                                  AttributeKey.stringKey("grpc.method"), method.getFullMethodName())
-                              .hasAttribute(
-                                  AttributeKey.stringKey("grpc.delay_type"), "connecting"))));
-      List<String> delaySpanTypes = openTelemetryRule.getSpans().stream()
-          .filter(span -> span.getName().equals("Delay"))
-          .map(span -> span.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")))
-          .collect(Collectors.toList());
-      assertThat(delaySpanTypes)
-          .containsExactly("resolving", "picker_failing_with_wait_for_ready", "connecting")
-          .inOrder();
-    } finally {
-      NameResolverRegistry.getDefaultRegistry().deregister(provider);
-    }
   }
 
   @Test

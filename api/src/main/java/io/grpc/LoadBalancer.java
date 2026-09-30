@@ -1653,7 +1653,7 @@ public abstract class LoadBalancer {
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(result, result.getDelayType(), result.getDelayReason());
+      return result.hashCode();
     }
 
     @Override
@@ -1662,9 +1662,7 @@ public abstract class LoadBalancer {
         return false;
       }
       FixedResultPicker that = (FixedResultPicker) o;
-      return this.result.equals(that.result)
-          && Objects.equal(this.result.getDelayType(), that.result.getDelayType())
-          && Objects.equal(this.result.getDelayReason(), that.result.getDelayReason());
+      return this.result.equals(that.result);
     }
   }
 }

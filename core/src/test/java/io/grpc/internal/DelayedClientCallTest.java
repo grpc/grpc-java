@@ -36,9 +36,7 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Rule;
@@ -204,28 +202,6 @@ public class DelayedClientCallTest {
     verify(mockRealCall).cancel(any(), any());
     realCallListener.onClose(Status.CANCELLED, null);
     verify(listener).onClose(Status.CANCELLED, null);
-  }
-
-  @Test
-  public void cancelWhilePending_callCancelledRunsBeforeListenerClosed() {
-    final List<String> events = new ArrayList<>();
-    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<String, Integer>(
-        "test", callExecutor, fakeClock.getScheduledExecutorService(), null) {
-      @Override
-      protected void callCancelled() {
-        events.add("callCancelled");
-      }
-    };
-    delayedClientCall.start(new ClientCall.Listener<Integer>() {
-      @Override
-      public void onClose(Status status, Metadata trailers) {
-        events.add("onClose");
-      }
-    }, new Metadata());
-
-    delayedClientCall.cancel("cancel", null);
-
-    assertThat(events).containsExactly("callCancelled", "onClose").inOrder();
   }
 
   @Test

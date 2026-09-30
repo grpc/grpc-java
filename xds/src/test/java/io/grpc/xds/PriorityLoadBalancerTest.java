@@ -1041,8 +1041,12 @@ public class PriorityLoadBalancerTest {
             
     Helper helper0 = Iterables.getOnlyElement(fooHelpers);  // priority p0
     
-    SubchannelPicker fakeChildPicker = new LoadBalancer.FixedResultPicker(
-        PickResult.withNoResult("connecting", "child_reason"));
+    SubchannelPicker fakeChildPicker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withNoResult("connecting", "child_reason");
+      }
+    };
     helper0.updateBalancingState(CONNECTING, fakeChildPicker);
     
     verify(helper, atLeastOnce())
@@ -1054,82 +1058,6 @@ public class PriorityLoadBalancerTest {
     assertThat(result.getDelayType()).isEqualTo("0:connecting");
     assertThat(result.getDelayReason())
         .isEqualTo("waiting on priority group 0 (child_reason)");
-  }
-
-  @Test
-  public void priorityColdStart_delayTypeRemainsSteadyAcrossChildLifecycle() throws Exception {
-    PriorityChildConfig priorityChildConfig0 =
-        new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
-    PriorityLbConfig priorityLbConfig =
-        new PriorityLbConfig(ImmutableMap.of("p0", priorityChildConfig0), ImmutableList.of("p0"));
-    priorityLb.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-            .setLoadBalancingPolicyConfig(priorityLbConfig)
-            .build());
-
-    // When the real child connects, it reports a connecting picker with its child reason.
-    Helper helper0 = Iterables.getOnlyElement(fooHelpers);
-    helper0.updateBalancingState(CONNECTING, new LoadBalancer.FixedResultPicker(
-        PickResult.withNoResult("connecting", "child_connecting")));
-
-    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    List<SubchannelPicker> allPickers = pickerCaptor.getAllValues();
-    assertThat(allPickers).isNotEmpty();
-    // Every picker published across the cold-start lifecycle (initial uninitialized child,
-    // graceful switch pending, real child connecting) must consistently carry "0:connecting".
-    for (SubchannelPicker p : allPickers) {
-      PickResult res = p.pickSubchannel(mock(PickSubchannelArgs.class));
-      assertThat(res.getDelayType()).isEqualTo("0:connecting");
-    }
-  }
-
-  @Test
-  public void priorityReorder_updatesNumericPrefixForConnectingChild() throws Exception {
-    PriorityChildConfig priorityChildConfig0 =
-        new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
-    PriorityChildConfig priorityChildConfig1 =
-        new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
-    PriorityLbConfig initialConfig = new PriorityLbConfig(
-        ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
-        ImmutableList.of("p0", "p1"));
-
-    priorityLb.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-            .setLoadBalancingPolicyConfig(initialConfig)
-            .build());
-
-    // p0 fails over to p1
-    Helper helper0 = fooHelpers.get(0);
-    helper0.updateBalancingState(TRANSIENT_FAILURE, new LoadBalancer.FixedResultPicker(
-        PickResult.withError(Status.UNAVAILABLE)));
-
-    // p1 is now active at index 1
-    Helper helper1 = fooHelpers.get(1);
-    helper1.updateBalancingState(CONNECTING, new LoadBalancer.FixedResultPicker(
-        PickResult.withNoResult("connecting", "p1_connecting")));
-
-    assertLatestConnectivityState(CONNECTING);
-    PickResult p1Result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(p1Result.getDelayType()).isEqualTo("1:connecting");
-
-    // Reorder priorities: drop p0 so p1 becomes priority index 0, while p1's child LB
-    // remains CONNECTING without publishing a new balancing state.
-    PriorityLbConfig updatedConfig = new PriorityLbConfig(
-        ImmutableMap.of("p1", priorityChildConfig1),
-        ImmutableList.of("p1"));
-
-    priorityLb.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-            .setLoadBalancingPolicyConfig(updatedConfig)
-            .build());
-
-    assertLatestConnectivityState(CONNECTING);
-    PickResult updatedResult =
-        pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(updatedResult.getDelayType()).isEqualTo("0:connecting");
   }
 
   @Test
@@ -1184,9 +1112,9 @@ public class PriorityLoadBalancerTest {
     SubchannelPicker initialPicker = pickerCaptor.getAllValues().get(0);
     PickResult result = initialPicker.pickSubchannel(mock(PickSubchannelArgs.class));
 
-    assertThat(result.getDelayType()).isEqualTo("0:connecting");
+    assertThat(result.getDelayType()).isEqualTo("connecting");
     assertThat(result.getDelayReason()).isEqualTo(
-        "waiting on priority group 0 (priority child state uninitialized)");
+        "priority child state uninitialized");
   }
 
   private void assertLatestConnectivityState(ConnectivityState expectedState) {

@@ -204,9 +204,6 @@ final class PriorityLoadBalancer extends LoadBalancer {
 
   private void updateOverallState(
       @Nullable String priority, ConnectivityState state, SubchannelPicker picker) {
-    if (priority != null && (state == CONNECTING || state == IDLE)) {
-      picker = new PriorityPicker(picker, String.valueOf(priorityNames.indexOf(priority)));
-    }
     if (!Objects.equals(priority, currentPriority) || !state.equals(currentConnectivityState)
         || !picker.equals(currentPicker)) {
       currentPriority = priority;
@@ -334,7 +331,12 @@ final class PriorityLoadBalancer extends LoadBalancer {
         }
         ConnectivityState oldState = connectivityState;
         connectivityState = newState;
-        picker = newPicker;
+        int priorityIndex = priorityNames.indexOf(priority);
+        if (priorityIndex >= 0 && (newState == CONNECTING || newState == IDLE)) {
+          picker = new PriorityPicker(newPicker, String.valueOf(priorityIndex));
+        } else {
+          picker = newPicker;
+        }
 
         if (deletionTimer != null && deletionTimer.isPending()) {
           return;
@@ -382,11 +384,9 @@ final class PriorityLoadBalancer extends LoadBalancer {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       PickResult childResult = delegate.pickSubchannel(args);
-      if (!childResult.hasResult()) {
-        String childType =
-            childResult.getDelayType() != null ? childResult.getDelayType() : "connecting";
+      if (!childResult.hasResult() && childResult.getDelayType() != null) {
         String childReason = childResult.getDelayReason();
-        String composedType = priority + ":" + childType;
+        String composedType = priority + ":" + childResult.getDelayType();
         String reason = "waiting on priority group " + priority + " ("
             + (childReason != null ? childReason : "connecting") + ")";
         return PickResult.withNoResult(composedType, reason);
