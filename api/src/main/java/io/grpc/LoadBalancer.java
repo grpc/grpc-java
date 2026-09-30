@@ -739,7 +739,7 @@ public abstract class LoadBalancer {
      *
      * @param delayType low-cardinality root cause label (e.g., "connecting")
      * @param delayReason high-cardinality diagnostic string for trace events
-     * @since 1.85.0
+     * @since 1.86.0
      */
     public static PickResult withNoResult(String delayType, String delayReason) {
       Preconditions.checkNotNull(delayType, "delayType");
@@ -750,7 +750,7 @@ public abstract class LoadBalancer {
     /**
      * Returns the delay type label if any.
      *
-     * @since 1.85.0
+     * @since 1.86.0
      */
     @Nullable
     public String getDelayType() {
@@ -760,7 +760,7 @@ public abstract class LoadBalancer {
     /**
      * Returns the diagnostic delay reason if any.
      *
-     * @since 1.85.0
+     * @since 1.86.0
      */
     @Nullable
     public String getDelayReason() {

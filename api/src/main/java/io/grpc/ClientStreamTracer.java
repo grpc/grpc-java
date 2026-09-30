@@ -67,7 +67,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    *
    * @param delayType canonical low-cardinality label categorizing the delay (e.g., "connecting")
    * @param delayReason high-cardinality diagnostic string describing granular runtime conditions
-   * @since 1.85.0
+   * @since 1.86.0
    */
   public void recordDelayStart(String delayType, String delayReason) {
   }
@@ -81,7 +81,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    *
    * @param delayType canonical low-cardinality label of the ongoing delay
    * @param delayReason updated high-cardinality diagnostic string describing new conditions
-   * @since 1.85.0
+   * @since 1.86.0
    */
   public void recordDelayReasonChanged(String delayType, String delayReason) {
   }
@@ -94,7 +94,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    * to the {@code grpc.client.attempt.delay.duration} histogram labeled with {@code delayType}.
    *
    * @param delayType canonical low-cardinality label of the delay being ended
-   * @since 1.85.0
+   * @since 1.86.0
    */
   public void recordDelayEnd(String delayType) {
   }
@@ -170,7 +170,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
      *
      * @param delayType canonical low-cardinality label categorizing the delay (e.g., "resolving")
      * @param delayReason high-cardinality diagnostic string describing granular runtime conditions
-     * @since 1.85.0
+     * @since 1.86.0
      */
     public void recordDelayStart(String delayType, String delayReason) {
     }
@@ -183,7 +183,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
      *
      * @param delayType canonical low-cardinality label of the ongoing delay
      * @param delayReason updated high-cardinality diagnostic string describing new conditions
-     * @since 1.85.0
+     * @since 1.86.0
      */
     public void recordDelayReasonChanged(String delayType, String delayReason) {
     }
@@ -196,7 +196,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
      * to the {@code grpc.client.call.delay.duration} histogram labeled with {@code delayType}.
      *
      * @param delayType canonical low-cardinality label of the delay being ended
-     * @since 1.85.0
+     * @since 1.86.0
      */
     public void recordDelayEnd(String delayType) {
     }
