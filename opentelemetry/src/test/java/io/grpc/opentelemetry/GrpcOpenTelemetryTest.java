@@ -29,15 +29,34 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.ByteStreams;
 import io.grpc.CallOptions;
+import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ConnectivityState;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder2;
+import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
+import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
+import io.grpc.StatusOr;
+import io.grpc.SynchronizationContext;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
@@ -51,10 +70,21 @@ import io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.data.EventData;
+import io.opentelemetry.sdk.trace.data.SpanData;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -328,6 +358,322 @@ public class GrpcOpenTelemetryTest {
       assertThat(m.getName()).isNotIn(
           ImmutableList.of(
               "grpc.client.attempt.delay.duration", "grpc.client.call.delay.duration"));
+    }
+  }
+
+  @Test
+  public void delayObservability_endToEnd_fullCallAndAttemptLifecycle() throws Exception {
+    MethodDescriptor<String, String> method =
+        this.method.toBuilder().setSampledToLocalTracing(true).build();
+    String serverName = InProcessServerBuilder.generateName();
+    String target = "testdelaye2e:///" + serverName;
+    ServerCallHandler<String, String> handler = new ServerCallHandler<String, String>() {
+      @Override
+      public ServerCall.Listener<String> startCall(
+          ServerCall<String, String> call, Metadata headers) {
+        call.sendHeaders(new Metadata());
+        call.sendMessage("response");
+        call.close(Status.OK, new Metadata());
+        return new ServerCall.Listener<String>() {};
+      }
+    };
+    grpcCleanupRule.register(InProcessServerBuilder.forName(serverName)
+        .directExecutor()
+        .addService(ServerServiceDefinition.builder(
+                ServiceDescriptor.newBuilder("test.service").addMethod(method).build())
+            .addMethod(method, handler)
+            .build())
+        .build()
+        .start());
+
+    final AtomicReference<NameResolver.Listener2> listenerRef = new AtomicReference<>();
+    final AtomicReference<SynchronizationContext> syncContextRef = new AtomicReference<>();
+    final AtomicReference<LoadBalancer.Helper> lbHelperRef = new AtomicReference<>();
+    final AtomicReference<List<EquivalentAddressGroup>> addressesRef = new AtomicReference<>();
+    final AtomicReference<LoadBalancer.Subchannel> subchannelRef = new AtomicReference<>();
+
+    NameResolverProvider resolverProvider = new NameResolverProvider() {
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "testdelaye2e";
+      }
+
+      @Override
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(InProcessSocketAddress.class);
+      }
+
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        syncContextRef.set(args.getSynchronizationContext());
+        return new NameResolver() {
+          @Override
+          public String getServiceAuthority() {
+            return "localhost";
+          }
+
+          @Override
+          public void start(Listener2 listener) {
+            listenerRef.set(listener);
+          }
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+
+    LoadBalancerProvider lbProvider = new LoadBalancerProvider() {
+      @Override
+      public boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      public int getPriority() {
+        return 5;
+      }
+
+      @Override
+      public String getPolicyName() {
+        return "test_delay_e2e_lb";
+      }
+
+      @Override
+      public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+        lbHelperRef.set(helper);
+        return new LoadBalancer() {
+          @Override
+          public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+            addressesRef.set(resolvedAddresses.getAddresses());
+            helper.updateBalancingState(
+                ConnectivityState.CONNECTING,
+                new FixedResultPicker(
+                    PickResult.withNoResult(
+                        "0:connecting", "waiting on priority group 0 (connecting)")));
+            return Status.OK;
+          }
+
+          @Override
+          public void handleNameResolutionError(Status error) {
+            helper.updateBalancingState(
+                ConnectivityState.TRANSIENT_FAILURE,
+                new FixedResultPicker(PickResult.withError(error)));
+          }
+
+          @Override
+          public void shutdown() {
+            if (subchannelRef.get() != null) {
+              subchannelRef.get().shutdown();
+            }
+          }
+        };
+      }
+    };
+
+    NameResolverRegistry.getDefaultRegistry().register(resolverProvider);
+    LoadBalancerRegistry.getDefaultRegistry().register(lbProvider);
+    try {
+      GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+          .sdk(openTelemetryRule.getOpenTelemetry())
+          .enableTracing(true)
+          .enableMetrics(ImmutableList.of(
+              "grpc.client.call.delay.duration", "grpc.client.attempt.delay.duration"))
+          .build();
+      InProcessChannelBuilder channelBuilder =
+          InProcessChannelBuilder.forTarget(target)
+              .defaultLoadBalancingPolicy("test_delay_e2e_lb")
+              .directExecutor();
+      grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+      ManagedChannel channel = grpcCleanupRule.register(channelBuilder.build());
+
+      final CountDownLatch closeLatch = new CountDownLatch(1);
+      final AtomicReference<Status> closeStatus = new AtomicReference<>();
+      final AtomicReference<String> responseRef = new AtomicReference<>();
+      ClientCall<String, String> call =
+          channel.newCall(method, CallOptions.DEFAULT.withWaitForReady());
+      call.start(new ClientCall.Listener<String>() {
+        @Override
+        public void onMessage(String message) {
+          responseRef.set(message);
+        }
+
+        @Override
+        public void onClose(Status status, Metadata trailers) {
+          closeStatus.set(status);
+          closeLatch.countDown();
+        }
+      }, new Metadata());
+      call.sendMessage("request");
+      call.halfClose();
+      call.request(1);
+
+      // 1. Complete name resolution -> ends call-level "resolving" delay and starts attempt-level
+      // "0:connecting" delay.
+      assertThat(listenerRef.get()).isNotNull();
+      syncContextRef.get().execute(() -> listenerRef.get().onResult2(
+          NameResolver.ResolutionResult.newBuilder()
+              .setAddressesOrError(StatusOr.fromValue(ImmutableList.of(
+                  new EquivalentAddressGroup(new InProcessSocketAddress(serverName)))))
+              .build()));
+
+      // 2. Same delayType ("0:connecting") with updated delayReason -> triggers
+      // recordDelayReasonChanged without closing the span or resetting the metric stopwatch.
+      syncContextRef.get().execute(() -> lbHelperRef.get().updateBalancingState(
+          ConnectivityState.CONNECTING,
+          new LoadBalancer.FixedResultPicker(
+              LoadBalancer.PickResult.withNoResult(
+                  "0:connecting", "waiting on priority group 0 (subchannel connecting)"))));
+
+      // 3. Transition to TRANSIENT_FAILURE while wait-for-ready -> transitions attempt delay to
+      // "picker_failing_with_wait_for_ready".
+      syncContextRef.get().execute(() -> lbHelperRef.get().updateBalancingState(
+          ConnectivityState.TRANSIENT_FAILURE,
+          new LoadBalancer.FixedResultPicker(
+              LoadBalancer.PickResult.withError(
+                  Status.UNAVAILABLE.withDescription("backend down")))));
+
+      // 4. Connect a real InProcess subchannel and transition to READY -> ends attempt delay and
+      // completes the RPC with Status.OK.
+      syncContextRef.get().execute(() -> {
+        LoadBalancer.Helper helper = lbHelperRef.get();
+        final LoadBalancer.Subchannel subchannel = helper.createSubchannel(
+            LoadBalancer.CreateSubchannelArgs.newBuilder()
+                .setAddresses(addressesRef.get())
+                .build());
+        subchannelRef.set(subchannel);
+        subchannel.start(stateInfo -> {
+          if (stateInfo.getState() == ConnectivityState.READY) {
+            helper.updateBalancingState(
+                ConnectivityState.READY,
+                new LoadBalancer.FixedResultPicker(
+                    LoadBalancer.PickResult.withSubchannel(subchannel)));
+          }
+        });
+        subchannel.requestConnection();
+      });
+
+      assertThat(closeLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(closeStatus.get().getCode()).isEqualTo(Status.Code.OK);
+      assertThat(responseRef.get()).isEqualTo("response");
+
+      // Verify call-level delay histogram
+      OpenTelemetryAssertions.assertThat(openTelemetryRule.getMetrics())
+          .anySatisfy(
+              metric -> OpenTelemetryAssertions.assertThat(metric)
+                  .hasName("grpc.client.call.delay.duration")
+                  .hasHistogramSatisfying(
+                      histogram -> histogram.hasPointsSatisfying(
+                          point -> point
+                              .hasCount(1)
+                              .hasAttribute(AttributeKey.stringKey("grpc.target"), target)
+                              .hasAttribute(
+                                  AttributeKey.stringKey("grpc.method"), method.getFullMethodName())
+                              .hasAttribute(
+                                  AttributeKey.stringKey("grpc.delay_type"), "resolving"))));
+
+      // Verify attempt-level delay histogram points across all 3 delay types
+      OpenTelemetryAssertions.assertThat(openTelemetryRule.getMetrics())
+          .anySatisfy(
+              metric -> OpenTelemetryAssertions.assertThat(metric)
+                  .hasName("grpc.client.attempt.delay.duration")
+                  .hasHistogramSatisfying(
+                      histogram -> histogram.hasPointsSatisfying(
+                          point -> point
+                              .hasCount(1)
+                              .hasAttribute(AttributeKey.stringKey("grpc.target"), target)
+                              .hasAttribute(
+                                  AttributeKey.stringKey("grpc.method"), method.getFullMethodName())
+                              .hasAttribute(
+                                  AttributeKey.stringKey("grpc.delay_type"), "0:connecting"),
+                          point -> point
+                              .hasCount(1)
+                              .hasAttribute(AttributeKey.stringKey("grpc.target"), target)
+                              .hasAttribute(
+                                  AttributeKey.stringKey("grpc.method"), method.getFullMethodName())
+                              .hasAttribute(
+                                  AttributeKey.stringKey("grpc.delay_type"),
+                                  "picker_failing_with_wait_for_ready"),
+                          point -> point
+                              .hasCount(1)
+                              .hasAttribute(AttributeKey.stringKey("grpc.target"), target)
+                              .hasAttribute(
+                                  AttributeKey.stringKey("grpc.method"), method.getFullMethodName())
+                              .hasAttribute(
+                                  AttributeKey.stringKey("grpc.delay_type"), "connecting"))));
+
+      // Verify trace spans and events
+      List<SpanData> spans = openTelemetryRule.getSpans();
+      SpanData callSpan = spans.stream()
+          .filter(s -> s.getName().equals("Sent.test.service.method"))
+          .findFirst()
+          .orElseThrow(AssertionError::new);
+      SpanData attemptSpan = spans.stream()
+          .filter(s -> s.getName().equals("Attempt.test.service.method"))
+          .findFirst()
+          .orElseThrow(AssertionError::new);
+      List<SpanData> delaySpans = spans.stream()
+          .filter(s -> s.getName().equals("Delay"))
+          .collect(Collectors.toList());
+      assertThat(delaySpans).hasSize(4);
+
+      SpanData resolvingSpan = delaySpans.get(0);
+      assertThat(resolvingSpan.getParentSpanId()).isEqualTo(callSpan.getSpanId());
+      assertThat(resolvingSpan.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")))
+          .isEqualTo("resolving");
+      assertThat(resolvingSpan.getEvents().stream()
+              .map(e -> e.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))
+              .collect(Collectors.toList()))
+          .containsExactly("waiting for name resolution or service config");
+
+      SpanData initialConnectingSpan = delaySpans.get(1);
+      assertThat(initialConnectingSpan.getParentSpanId()).isEqualTo(attemptSpan.getSpanId());
+      assertThat(
+              initialConnectingSpan.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")))
+          .isEqualTo("connecting");
+      assertThat(initialConnectingSpan.getEvents().stream()
+              .map(e -> e.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))
+              .collect(Collectors.toList()))
+          .containsExactly("client channel: waiting for picker");
+
+      SpanData priorityConnectingSpan = delaySpans.get(2);
+      assertThat(priorityConnectingSpan.getParentSpanId()).isEqualTo(attemptSpan.getSpanId());
+      assertThat(
+              priorityConnectingSpan.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")))
+          .isEqualTo("0:connecting");
+      assertThat(priorityConnectingSpan.getEvents().stream()
+              .map(EventData::getName)
+              .collect(Collectors.toList()))
+          .containsExactly("Delay triggered", "Delay triggered");
+      assertThat(priorityConnectingSpan.getEvents().stream()
+              .map(e -> e.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))
+              .collect(Collectors.toList()))
+          .containsExactly(
+              "waiting on priority group 0 (connecting)",
+              "waiting on priority group 0 (subchannel connecting)")
+          .inOrder();
+
+      SpanData waitForReadySpan = delaySpans.get(3);
+      assertThat(waitForReadySpan.getParentSpanId()).isEqualTo(attemptSpan.getSpanId());
+      assertThat(waitForReadySpan.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")))
+          .isEqualTo("picker_failing_with_wait_for_ready");
+      assertThat(waitForReadySpan.getEvents().stream()
+              .map(e -> e.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))
+              .collect(Collectors.toList()))
+          .containsExactly("wait_for_ready RPC failed with status: UNAVAILABLE: backend down");
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(lbProvider);
+      NameResolverRegistry.getDefaultRegistry().deregister(resolverProvider);
     }
   }
 
