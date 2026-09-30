@@ -207,53 +207,53 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void missingChannelFactory_fallbackEnabled_entersFallback() {
+  public void missingChannelFactory_fallbackEnabled_failsRpcsAnyway() {
     Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, true), "a");
-    reportReady("a");
 
-    // Handled like an error from the client, not as a problem with the resolution.
-    assertThat(status.isOk()).isTrue();
-    assertThat(currentState).isEqualTo(READY);
-    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+    // Fallback only covers the sharding service; without a factory the update itself fails.
+    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
   }
 
   @Test
   public void missingChannelFactory_fallbackDisabled_failsRpcs() {
-    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "a");
-
-    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
-  }
-
-  @Test
-  public void missingChannelFactory_onKeyChange_closesTheClientAndStaysFailed()
-      throws Exception {
-    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
-    deliverAssignment(1, slice("", "a"));
-    reportReady("a");
-
-    deliverWithoutChannelFactory(config(OTHER_CHANNEL_FACTORY_KEY, false), "a");
-    syncContext.execute(() -> childForHost("a").reportReady());
-
-    assertThat(channelFactory.isReleased(0)).isTrue();
-    assertThat(channelFactory.liveCallsAtRelease).containsExactly(0);
-    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
-  }
-
-  @Test
-  public void missingChannelFactory_sameKey_keepsTheChannelAndClient() throws Exception {
-    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
-    deliverAssignment(1, slice("", "a"));
-    reportReady("a");
-
-    // The factory is only needed to create a channel, and the unchanged key needs none.
     Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "a");
 
-    assertThat(status.isOk()).isTrue();
+    assertThat(status.isOk()).isFalse();
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
+  }
+
+  @Test
+  public void missingChannelFactory_onKeyChange_failsAndKeepsTheOldChannel() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+
+    Status status =
+        deliverWithoutChannelFactory(config(OTHER_CHANNEL_FACTORY_KEY, false), "a");
+
+    assertThat(status.isOk()).isFalse();
+    assertThat(channelFactory.released).isEmpty();
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
+  }
+
+  @Test
+  public void missingChannelFactory_sameKey_failsAndKeepsTheChannel() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+
+    // The factory is required on every update, even when the key is unchanged.
+    Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "a");
+
+    assertThat(status.isOk()).isFalse();
     assertThat(channelFactory.released).isEmpty();
     assertThat(service.streamCount.get()).isEqualTo(1);
-    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
   }
 
   @Test
@@ -286,79 +286,78 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void unknownChannelFactoryKey_fallbackEnabled_entersFallback() {
+  public void unknownChannelFactoryKey_fallbackEnabled_failsRpcsAnyway() {
     Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, true), "a");
-    reportReady("a");
 
-    assertThat(status.isOk()).isTrue();
-    assertThat(currentState).isEqualTo(READY);
-    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription())
+        .contains("channel factory rejected key '" + UNKNOWN_CHANNEL_FACTORY_KEY + "'");
   }
 
   @Test
   public void unknownChannelFactoryKey_fallbackDisabled_failsRpcsWithTheFactoryError() {
     Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
 
-    assertThat(status.isOk()).isTrue();
+    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
     assertThat(pick("k").getStatus().getDescription())
         .contains("channel factory rejected key '" + UNKNOWN_CHANNEL_FACTORY_KEY + "'");
   }
 
   @Test
-  public void channelFactoryFailure_sameKey_isNotRetried() {
+  public void channelFactoryFailure_sameKey_isRetriedOnTheNextUpdate() {
     deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
     assertThat(channelFactory.attempts).isEqualTo(1);
 
     Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a", "b");
 
-    // Only a new key is worth another attempt; the failure stays in place until then.
-    assertThat(status.isOk()).isTrue();
-    assertThat(channelFactory.attempts).isEqualTo(1);
+    // The failed config was never applied, so the same key still looks like a change.
+    assertThat(status.isOk()).isFalse();
+    assertThat(channelFactory.attempts).isEqualTo(2);
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
     assertThat(pick("k").getStatus().getDescription())
         .contains("channel factory rejected key '" + UNKNOWN_CHANNEL_FACTORY_KEY + "'");
   }
 
   @Test
-  public void missingChannelFactory_thenSuppliedUnderTheSameKey_isNotRetried() {
+  public void missingChannelFactory_thenSuppliedUnderTheSameKey_createsTheChannel() {
     deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, true), "a");
 
-    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
-    reportReady("a");
+    Status status = deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
 
-    assertThat(channelFactory.attempts).isEqualTo(0);
-    assertThat(service.streamCount.get()).isEqualTo(0);
-    assertThat(currentState).isEqualTo(READY);
-    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+    assertThat(status.isOk()).isTrue();
+    assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
+    assertThat(service.streamCount.get()).isEqualTo(1);
   }
 
   @Test
-  public void channelFactoryFailure_closesThePreviousClientAndChannel() throws Exception {
+  public void channelFactoryFailure_keepsThePreviousChannel() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
     deliverAssignment(1, slice("", "a"));
     reportReady("a");
 
-    deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
+    Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
 
-    assertThat(channelFactory.isReleased(0)).isTrue();
-    assertThat(channelFactory.liveCallsAtRelease).containsExactly(0);
-    // Handled like an error from a new client, so the previous assignment is not used.
+    assertThat(status.isOk()).isFalse();
+    assertThat(channelFactory.released).isEmpty();
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
     assertThat(pick("k").getStatus().getDescription()).contains("channel factory rejected key");
   }
 
   @Test
-  public void channelFactoryFailure_thenRecovers_keepsTheErrorUntilTheNewClientReports()
+  public void channelFactoryFailure_thenRecovers_queuesUntilTheNewClientReports()
       throws Exception {
     deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
-    reportReady("a");
 
     Status status = deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    reportReady("a");
 
     assertThat(status.isOk()).isTrue();
     assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
-    assertThat(pick("k").getStatus().getDescription()).contains("channel factory rejected key");
+    PickResult queued = pick("k");
+    assertThat(queued.getStatus().isOk()).isTrue();
+    assertThat(queued.getSubchannel()).isNull();
 
     deliverAssignment(1, slice("", "a"));
 
@@ -390,24 +389,37 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void channelFactoryKeyChangedWhileEndpointsEmpty_stillCreatesTheNewChannel() {
+  public void endpointsRetracted_keepsTheChildren() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+
+    Status status = deliverAddresses(config(CHANNEL_FACTORY_KEY, true));
+
+    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(childProvider.children).hasSize(1);
+    assertThat(childProvider.children.get(0).shutdown).isFalse();
+  }
+
+  @Test
+  public void channelFactoryKeyChangedWhileEndpointsEmpty_appliesOnceEndpointsReturn() {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
     assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
 
-    // An empty endpoint set says nothing about the configuration, so the new key still takes
-    // effect. Recording the config without acting on it would make the next update look
-    // unchanged, stranding the policy on the old sharding service for good.
+    // Nothing from an update without endpoints is applied, so the key is still seen as changed
+    // by the next update.
     deliverAddresses(config(OTHER_CHANNEL_FACTORY_KEY, true));
+
+    assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
+    assertThat(channelFactory.released).isEmpty();
+
+    deliverAddresses(config(OTHER_CHANNEL_FACTORY_KEY, true), "a");
 
     assertThat(channelFactory.keys)
         .containsExactly(CHANNEL_FACTORY_KEY, OTHER_CHANNEL_FACTORY_KEY)
         .inOrder();
     assertThat(channelFactory.isReleased(0)).isTrue();
-
-    deliverAddresses(config(OTHER_CHANNEL_FACTORY_KEY, true), "a");
-
-    // Already applied above; the restored endpoints must not cause a second channel.
-    assertThat(channelFactory.keys).hasSize(2);
   }
 
   @Test
@@ -546,8 +558,8 @@ public class AutoShardingLoadBalancerTest {
     deliverEndpoints(localityConfig, endpointInLocality("a", "us-central1-a"));
     takeRequest();
 
-    // An empty update carries no locality. Treating that as "no locality" would move the client
-    // to "target/" and then back again once the endpoints return.
+    // An empty update carries no locality, and must not move the client to "target/" and then
+    // back again once the endpoints return.
     deliverEndpoints(localityConfig);
     deliverEndpoints(localityConfig, endpointInLocality("a", "us-central1-a"));
 
@@ -555,11 +567,16 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void targetChangedWhileEndpointsRetracted_keepsTheLocality() throws Exception {
+  public void targetChangedWhileEndpointsRetracted_appliesOnceEndpointsReturn()
+      throws Exception {
     deliverEndpoints(retargetedConfig("target/%s"), endpointInLocality("a", "us-central1-a"));
     takeRequest();
 
     deliverEndpoints(retargetedConfig("other/%s"));
+
+    assertThat(service.streamCount.get()).isEqualTo(1);
+
+    deliverEndpoints(retargetedConfig("other/%s"), endpointInLocality("a", "us-central1-a"));
 
     assertThat(takeRequest().getInitialClientConfig().getTarget())
         .isEqualTo("other/us-central1-a");

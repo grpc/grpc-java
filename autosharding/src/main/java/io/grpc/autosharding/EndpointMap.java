@@ -64,17 +64,9 @@ import javax.annotation.concurrent.NotThreadSafe;
  *
  * <h3>Lifecycle</h3>
  *
- * <p>gRFC A119 says the policy "must create a new {@code EndpointMap} whenever it receives
- * endpoints from the Name Resolver". This class instead keeps one long-lived instance and
- * rebuilds its contents in {@link #updateEndpoints}, which is the only method that changes the
- * set of endpoints or their indices.
- *
- * <p>The difference is mechanical, not observable. Taken literally the gRFC's pseudocode builds
- * fresh endpoint states with no child load balancer carried over, which would drop every
- * connection on every resolver update; the C++ implementation accordingly builds a new map but
- * moves surviving endpoints into it. Retaining the instance achieves the same thing and lets
- * child load balancers — and therefore established connections — survive a resolver update that
- * merely adds or removes unrelated endpoints.
+ * <p>One instance lives as long as the LB policy. {@link #updateEndpoints}, the only method that
+ * changes the set of endpoints or their indices, updates it in place: child load balancers of
+ * endpoints that remain, and therefore their connections, survive the update.
  *
  * <h3>Threading model</h3>
  *

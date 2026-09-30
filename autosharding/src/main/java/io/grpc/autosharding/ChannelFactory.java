@@ -48,8 +48,8 @@ public interface ChannelFactory {
    * is done with it.
    *
    * <p>Failure is reported by throwing, for a key that is not recognized or not allowed as well as
-   * for any other reason the channel cannot be created. The LB policy then enters fallback or
-   * fails RPCs, as it would for an error from the sharding service.
+   * for any other reason the channel cannot be created. The LB policy then reports
+   * TRANSIENT_FAILURE, fails RPCs, and retries on the next resolver update.
    *
    * @throws IllegalArgumentException if the key is not recognized or not allowed
    * @throws RuntimeException if the channel cannot be created for any other reason

@@ -123,10 +123,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   @Nullable private String shardingTarget;
 
   /**
-   * Locality last derived from the endpoints, substituted for {@code %s} in the target. Kept
-   * through an empty endpoint update, which carries no locality, so that retracting the endpoints
-   * does not move the client to another target and back. Null when the endpoints did not share
-   * one.
+   * Locality last derived from the endpoints, substituted for {@code %s} in the target. Null when
+   * the endpoints did not share one.
    */
   @Nullable private String locality;
 
@@ -139,9 +137,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   @Nullable private Assignment assignment;
 
   /**
-   * Most recent error reported by an {@link AutoshardingClient}, or the failure to create the
-   * channel for one. Never set together with {@link #assignment}; with both null, nothing has
-   * been reported yet and RPCs are queued.
+   * Most recent error reported by an {@link AutoshardingClient}. Never set together with
+   * {@link #assignment}; with both null, nothing has been reported yet and RPCs are queued.
    */
   @Nullable private Status clientError;
 
@@ -198,60 +195,46 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     }
     AutoShardingLoadBalancerConfig newConfig = (AutoShardingLoadBalancerConfig) rawConfig;
 
-    // May be null, which updateShardingServiceChannel() treats as a failure to create the
-    // channel if it needs one.
+    // Each failure below rejects the whole update, and nothing from it is applied: the next
+    // update is compared against the configuration still in use, so a changed key or target is
+    // still acted on then, and a failed channel is retried.
+    List<EquivalentAddressGroup> endpoints = resolvedAddresses.getAddresses();
+    if (endpoints.isEmpty()) {
+      return failPermanently("autosharding: name resolver returned no endpoints");
+    }
+
     ChannelFactory factory =
         resolvedAddresses.getAttributes().get(AutoShardingAttributes.ATTR_CHANNEL_FACTORY);
-
-    // gRFC A119 gives the configuration and the endpoints separate handling rules, and an empty
-    // endpoint set only speaks to the latter. Everything below that is driven by comparing the
-    // new configuration against the old one therefore has to run first: storing the new
-    // configuration without acting on it would destroy the comparison, and the change would then
-    // be lost for good, since the following update would no longer look like a change at all.
-    List<EquivalentAddressGroup> endpoints = resolvedAddresses.getAddresses();
+    if (factory == null) {
+      return failPermanently("autosharding: no channel factory supplied to the LB policy");
+    }
 
     Channel previousChannel = shardingChannel;
     ChannelFactory previousFactory = channelFactory;
     Status channelStatus = updateShardingServiceChannel(factory, newConfig);
+    if (!channelStatus.isOk()) {
+      return failPermanently(channelStatus);
+    }
 
     if (config == null || !config.keyHeaderName.equals(newConfig.keyHeaderName)) {
       keyHeader = AutoShardingPicker.createKeyHeader(newConfig.keyHeaderName);
     }
     config = newConfig;
 
-    // When the set is empty this tears the children down, so that in-flight picks stop resolving
-    // to endpoints the resolver has retracted.
     endpointMap.updateEndpoints(endpoints, resolvedAddresses.getAttributes());
-    if (!endpoints.isEmpty()) {
-      locality = sharedLocality(endpoints);
-    }
+    locality = sharedLocality(endpoints);
 
-    if (!channelStatus.isOk()) {
-      // Handled like an error from the client: RPCs go to fallback or fail with this status.
-      shutdownClient();
-      assignment = null;
-      clientError = channelStatus;
-    } else if (shardingChannel != null) {
-      // The locality comes from the endpoints, so the target can change even when the config did
-      // not.
-      maybeRecreateClient(
-          shardingChannel != previousChannel,
-          resolveTarget(newConfig.autoshardingTarget, locality),
-          newConfig.initialAssignmentTimeoutNanos);
-    }
-    // Otherwise creating the channel failed under this key earlier, and that error stays in
-    // place until the key changes.
+    // The locality comes from the endpoints, so the target can change even when the config did
+    // not.
+    maybeRecreateClient(
+        shardingChannel != previousChannel,
+        resolveTarget(newConfig.autoshardingTarget, locality),
+        newConfig.initialAssignmentTimeoutNanos);
 
     // Only now that the old stream has been cancelled. Release through the factory that produced
     // it, which is not necessarily the new one.
     if (previousChannel != null && previousChannel != shardingChannel) {
       previousFactory.releaseChannel(previousChannel);
-    }
-
-    if (endpoints.isEmpty()) {
-      // Any assignment is kept: it stays valid if the endpoints come back. Until they do,
-      // publishPicker() leaves this failure in place rather than publishing over it.
-      return failPermanently("autosharding: name resolver returned no endpoints");
     }
 
     rebuildSliceMapAndPublish();
@@ -312,32 +295,23 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
 
   /**
    * Creates a channel to the sharding service if this is the first configuration update or the
-   * {@code channel_factory_key} changed. The factory is not consulted otherwise: the key
-   * identifies the channel, so a different or missing factory under the same key changes nothing,
-   * and a failure under it would only recur. Leaves {@link #shardingChannel} untouched when
-   * nothing changed, which is how the caller detects that no new channel was needed. On failure,
-   * including a missing factory, it is set to null and the error returned. The previous channel is
-   * not released here: the caller does that once the stream on it has been cancelled.
+   * {@code channel_factory_key} changed. A different factory under the same key changes nothing,
+   * since the key identifies the channel. Leaves {@link #shardingChannel} untouched when nothing
+   * changed, which is how the caller detects that no new channel was needed, and also on failure,
+   * returning the error. The previous channel is not released here: the caller does that once the
+   * stream on it has been cancelled.
    */
   private Status updateShardingServiceChannel(
-      @Nullable ChannelFactory factory, AutoShardingLoadBalancerConfig newConfig) {
+      ChannelFactory factory, AutoShardingLoadBalancerConfig newConfig) {
     if (config != null && config.channelFactoryKey.equals(newConfig.channelFactoryKey)) {
       return Status.OK;
     }
 
-    if (factory == null) {
-      shardingChannel = null;
-      channelFactory = null;
-      return Status.UNAVAILABLE.withDescription(
-          "autosharding: no channel factory supplied to the LB policy");
-    }
     Channel newChannel;
     try {
       newChannel = factory.createChannel(newConfig.channelFactoryKey);
     } catch (RuntimeException e) {
       logger.log(Level.WARNING, "Failed to create a channel to the sharding service", e);
-      shardingChannel = null;
-      channelFactory = null;
       return Status.UNAVAILABLE
           .withDescription(
               "autosharding: channel factory rejected key '"
@@ -515,10 +489,6 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     if (shutdown || config == null) {
       return;
     }
-    if (endpointMap.size() == 0) {
-      // acceptResolvedAddresses already reported TRANSIENT_FAILURE for this case.
-      return;
-    }
     ConnectivityState state = endpointMap.aggregateConnectivityState();
     if (assignment == null && clientError == null) {
       // RPCs are queued, but the state still follows the endpoints, so the policy starts IDLE
@@ -557,7 +527,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    * {@link #acceptResolvedAddresses} to hand back to the channel.
    */
   private Status failPermanently(String description) {
-    Status error = Status.UNAVAILABLE.withDescription(description);
+    return failPermanently(Status.UNAVAILABLE.withDescription(description));
+  }
+
+  private Status failPermanently(Status error) {
     helper.updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
         error)));
     return error;
