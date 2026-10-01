@@ -54,6 +54,13 @@ public class AutoShardingPickerTest {
     return new PickSubchannelArgsImpl(METHOD, headers, CallOptions.DEFAULT, NOOP_CONSUMER);
   }
 
+  /** Headers carrying a key under {@code headerName}; every test slice starts at "". */
+  private static Metadata keyed(String headerName) {
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER), "k");
+    return headers;
+  }
+
   private static class FakePicker extends SubchannelPicker {
     private final PickResult result;
 
@@ -74,7 +81,7 @@ public class AutoShardingPickerTest {
         ConnectivityState.READY, new FakePicker(readyResult), NOOP_EXIT_IDLER);
 
     SliceMap emptySliceMap = new SliceMap(
-        Collections.emptyList(), Collections.singletonList(0), 1L);
+        Collections.emptyList(), Collections.singletonList(0));
     AutoShardingPicker picker = new AutoShardingPicker(
         emptySliceMap,
         Collections.singletonList(ep0),
@@ -95,15 +102,14 @@ public class AutoShardingPickerTest {
         ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP_EXIT_IDLER);
 
     SliceMap emptySliceMap = new SliceMap(
-        Collections.emptyList(), Collections.singletonList(0), 1L);
+        Collections.emptyList(), Collections.singletonList(0));
     AutoShardingPicker picker = new AutoShardingPicker(
         emptySliceMap,
         Collections.singletonList(ep0),
         false,
         AutoShardingPicker.createKeyHeader("x-slice-key"));
 
-    Metadata headers = new Metadata();
-    PickResult result = picker.pickSubchannel(createArgs(headers));
+    PickResult result = picker.pickSubchannel(createArgs(keyed("x-slice-key")));
 
     assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription())
@@ -119,7 +125,7 @@ public class AutoShardingPickerTest {
     SliceEntry slice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(slice), Collections.singletonList(0), 1L);
+        Collections.singletonList(slice), Collections.singletonList(0));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -146,7 +152,7 @@ public class AutoShardingPickerTest {
     SliceEntry slice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(slice), Collections.singletonList(0), 1L);
+        Collections.singletonList(slice), Collections.singletonList(0));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -154,7 +160,7 @@ public class AutoShardingPickerTest {
         false,
         AutoShardingPicker.createKeyHeader("x-slice-key"));
 
-    PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
+    PickResult result = picker.pickSubchannel(createArgs(keyed("x-slice-key")));
 
     assertThat(connectCalls.get()).isEqualTo(1);
     assertThat(result.hasResult()).isFalse();
@@ -171,7 +177,7 @@ public class AutoShardingPickerTest {
     SliceEntry slice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(slice), Collections.singletonList(0), 1L);
+        Collections.singletonList(slice), Collections.singletonList(0));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -179,7 +185,7 @@ public class AutoShardingPickerTest {
         false,
         AutoShardingPicker.createKeyHeader("x-slice-key"));
 
-    PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
+    PickResult result = picker.pickSubchannel(createArgs(keyed("x-slice-key")));
 
     assertThat(connectCalls.get()).isEqualTo(0);
     assertThat(result.hasResult()).isFalse();
@@ -200,7 +206,7 @@ public class AutoShardingPickerTest {
         "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
     // Fallback pool has ep1 (which is ready)
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(slice0), Collections.singletonList(1), 1L);
+        Collections.singletonList(slice0), Collections.singletonList(1));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -208,7 +214,7 @@ public class AutoShardingPickerTest {
         true,
         AutoShardingPicker.createKeyHeader("x-slice-key"));
 
-    PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
+    PickResult result = picker.pickSubchannel(createArgs(keyed("x-slice-key")));
     assertThat(result).isSameInstanceAs(fallbackReadyResult);
   }
 
@@ -223,7 +229,7 @@ public class AutoShardingPickerTest {
     SliceEntry slice0 = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(slice0), Collections.singletonList(0), 1L);
+        Collections.singletonList(slice0), Collections.singletonList(0));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -231,7 +237,7 @@ public class AutoShardingPickerTest {
         false,
         AutoShardingPicker.createKeyHeader("x-slice-key"));
 
-    PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
+    PickResult result = picker.pickSubchannel(createArgs(keyed("x-slice-key")));
     assertThat(result.getStatus()).isEqualTo(epError);
   }
 
@@ -247,7 +253,7 @@ public class AutoShardingPickerTest {
 
     SliceEntry s0 = new SliceEntry(new byte[] {0x00}, Collections.singletonList(0));
     SliceEntry s1 = new SliceEntry(new byte[] {0x50}, Collections.singletonList(1));
-    SliceMap sliceMap = new SliceMap(Arrays.asList(s0, s1), Arrays.asList(0, 1), 1L);
+    SliceMap sliceMap = new SliceMap(Arrays.asList(s0, s1), Arrays.asList(0, 1));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -265,6 +271,34 @@ public class AutoShardingPickerTest {
   }
 
   @Test
+  public void pick_missingKeyHeader_dropsWithoutConnecting() {
+    AtomicInteger connectCalls = new AtomicInteger(0);
+    PickerEndpoint ep0 = new PickerEndpoint(
+        ConnectivityState.IDLE,
+        new FakePicker(PickResult.withNoResult()),
+        connectCalls::incrementAndGet);
+
+    SliceEntry slice = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
+    SliceMap sliceMap = new SliceMap(
+        Collections.singletonList(slice), Collections.singletonList(0));
+
+    AutoShardingPicker picker = new AutoShardingPicker(
+        sliceMap,
+        Collections.singletonList(ep0),
+        true,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
+
+    PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
+
+    // A drop, so wait-for-ready RPCs fail instead of queuing for a header that never arrives.
+    assertThat(result.isDrop()).isTrue();
+    assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription()).contains("x-slice-key");
+    assertThat(connectCalls.get()).isEqualTo(0);
+  }
+
+  @Test
   public void pick_emptySliceEndpoints_fallbackDisabled_returnsUnavailable() {
     PickerEndpoint ep0 = new PickerEndpoint(
         ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP_EXIT_IDLER);
@@ -272,7 +306,7 @@ public class AutoShardingPickerTest {
     SliceEntry emptySlice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.emptyList());
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(emptySlice), Collections.singletonList(0), 1L);
+        Collections.singletonList(emptySlice), Collections.singletonList(0));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -280,7 +314,7 @@ public class AutoShardingPickerTest {
         false,
         AutoShardingPicker.createKeyHeader("x-slice-key"));
 
-    PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
+    PickResult result = picker.pickSubchannel(createArgs(keyed("x-slice-key")));
     assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription())
         .contains("No valid endpoints in slice and fallback disabled");
@@ -297,7 +331,7 @@ public class AutoShardingPickerTest {
         "".getBytes(StandardCharsets.UTF_8), Collections.emptyList());
     // Fallback pool has ep0
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(gapSlice), Collections.singletonList(0), 1L);
+        Collections.singletonList(gapSlice), Collections.singletonList(0));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -318,7 +352,7 @@ public class AutoShardingPickerTest {
     SliceEntry emptySlice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.emptyList());
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(emptySlice), Collections.emptyList(), 1L);
+        Collections.singletonList(emptySlice), Collections.emptyList());
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -326,7 +360,7 @@ public class AutoShardingPickerTest {
         true,
         AutoShardingPicker.createKeyHeader("x-key"));
 
-    PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
+    PickResult result = picker.pickSubchannel(createArgs(keyed("x-key")));
     assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription())
         .contains("No endpoints available in fallback pool");
@@ -345,12 +379,6 @@ public class AutoShardingPickerTest {
 
     ep.requestConnection();
     assertThat(count.get()).isEqualTo(1);
-  }
-
-  @Test
-  public void createKeyHeader_nullOrEmpty_returnsNull() {
-    assertThat(AutoShardingPicker.createKeyHeader(null)).isNull();
-    assertThat(AutoShardingPicker.createKeyHeader("")).isNull();
   }
 
   @Test
@@ -379,7 +407,7 @@ public class AutoShardingPickerTest {
     SliceEntry slice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Arrays.asList(0, 1));
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(slice), Arrays.asList(0, 1), 1L);
+        Collections.singletonList(slice), Arrays.asList(0, 1));
 
     // Test picking index 0
     AutoShardingPicker picker0 = new AutoShardingPicker(
@@ -388,7 +416,7 @@ public class AutoShardingPickerTest {
         false,
         AutoShardingPicker.createKeyHeader("x-key"),
         bound -> 0);
-    PickResult result0 = picker0.pickSubchannel(createArgs(new Metadata()));
+    PickResult result0 = picker0.pickSubchannel(createArgs(keyed("x-key")));
     assertThat(result0).isSameInstanceAs(ready0);
 
     // Test picking index 1
@@ -398,7 +426,7 @@ public class AutoShardingPickerTest {
         false,
         AutoShardingPicker.createKeyHeader("x-key"),
         bound -> 1);
-    PickResult result1 = picker1.pickSubchannel(createArgs(new Metadata()));
+    PickResult result1 = picker1.pickSubchannel(createArgs(keyed("x-key")));
     assertThat(result1).isSameInstanceAs(ready1);
   }
 
@@ -411,7 +439,7 @@ public class AutoShardingPickerTest {
     SliceEntry slice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(5));
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(slice), Collections.singletonList(0), 1L);
+        Collections.singletonList(slice), Collections.singletonList(0));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -421,7 +449,7 @@ public class AutoShardingPickerTest {
 
     Assert.assertThrows(
         IndexOutOfBoundsException.class,
-        () -> picker.pickSubchannel(createArgs(new Metadata())));
+        () -> picker.pickSubchannel(createArgs(keyed("x-key"))));
   }
 
   @Test
@@ -433,7 +461,7 @@ public class AutoShardingPickerTest {
     SliceEntry slice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(-1));
     SliceMap sliceMap = new SliceMap(
-        Collections.singletonList(slice), Collections.singletonList(0), 1L);
+        Collections.singletonList(slice), Collections.singletonList(0));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         sliceMap,
@@ -443,7 +471,7 @@ public class AutoShardingPickerTest {
 
     Assert.assertThrows(
         IndexOutOfBoundsException.class,
-        () -> picker.pickSubchannel(createArgs(new Metadata())));
+        () -> picker.pickSubchannel(createArgs(keyed("x-key"))));
   }
 
   @Test
@@ -453,7 +481,7 @@ public class AutoShardingPickerTest {
 
     // Fallback pool references index 10, but only 1 endpoint exists
     SliceMap emptySliceMap = new SliceMap(
-        Collections.emptyList(), Collections.singletonList(10), 1L);
+        Collections.emptyList(), Collections.singletonList(10));
 
     AutoShardingPicker picker = new AutoShardingPicker(
         emptySliceMap,
@@ -463,18 +491,35 @@ public class AutoShardingPickerTest {
 
     Assert.assertThrows(
         IndexOutOfBoundsException.class,
-        () -> picker.pickSubchannel(createArgs(new Metadata())));
+        () -> picker.pickSubchannel(createArgs(keyed("x-key"))));
   }
 
   @Test
   public void constructor_nullInputs_throwsNullPointerException() {
     SliceMap sliceMap = new SliceMap(
-        Collections.emptyList(), Collections.emptyList(), 1L);
+        Collections.emptyList(), Collections.emptyList());
+    Metadata.Key<byte[]> keyHeader = AutoShardingPicker.createKeyHeader("x-key");
 
     Assert.assertThrows(
         NullPointerException.class,
         () -> new AutoShardingPicker(
             null,
+            Collections.emptyList(),
+            false,
+            keyHeader));
+
+    Assert.assertThrows(
+        NullPointerException.class,
+        () -> new AutoShardingPicker(
+            sliceMap,
+            null,
+            false,
+            keyHeader));
+
+    Assert.assertThrows(
+        NullPointerException.class,
+        () -> new AutoShardingPicker(
+            sliceMap,
             Collections.emptyList(),
             false,
             null));
@@ -483,17 +528,9 @@ public class AutoShardingPickerTest {
         NullPointerException.class,
         () -> new AutoShardingPicker(
             sliceMap,
-            null,
-            false,
-            null));
-
-    Assert.assertThrows(
-        NullPointerException.class,
-        () -> new AutoShardingPicker(
-            sliceMap,
             Collections.emptyList(),
             false,
-            null,
+            keyHeader,
             null));
   }
 }

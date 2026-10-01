@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.primitives.UnsignedBytes;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -46,8 +45,6 @@ import javax.annotation.Nullable;
  *   <li>Key smaller than first slice start key: {@link #lookup(byte[])} returns {@code -1}
  *       if the first slice's {@code startKey} is not {@code ""} and the key precedes it.</li>
  *   <li>Null key: Treated as an empty byte array ({@code new byte[0]}).</li>
- *   <li>Unsorted slices: The constructor automatically sorts slices lexicographically
- *       using unsigned byte comparison.</li>
  *   <li>Null constructor arguments: Throws {@link NullPointerException} if {@code slices},
  *       {@code fallbackPool}, {@code startKey}, or {@code endpoints} is {@code null}.</li>
  * </ul>
@@ -87,22 +84,17 @@ final class SliceMap {
 
   private final ImmutableList<SliceEntry> slices;
   private final ImmutableList<Integer> fallbackPool;
-  private final long generation;
 
   /**
    * Constructs an immutable {@link SliceMap}.
    *
-   * @param slices the pre-validated list of key-range slice entries
+   * @param slices the pre-validated list of key-range slice entries, in ascending unsigned
+   *     {@code startKey} order as produced by {@link AssignmentParser}
    * @param fallbackPool the list of all available endpoint indices for fallback routing
-   * @param generation the snapshot generation number from the assignment
    */
-  SliceMap(List<SliceEntry> slices, List<Integer> fallbackPool, long generation) {
-    List<SliceEntry> sortedSlices = new ArrayList<>(checkNotNull(slices, "slices"));
-    sortedSlices.sort(
-        (e1, e2) -> UNSIGNED_BYTES_COMPARATOR.compare(e1.getStartKey(), e2.getStartKey()));
-    this.slices = ImmutableList.copyOf(sortedSlices);
+  SliceMap(List<SliceEntry> slices, List<Integer> fallbackPool) {
+    this.slices = ImmutableList.copyOf(checkNotNull(slices, "slices"));
     this.fallbackPool = ImmutableList.copyOf(checkNotNull(fallbackPool, "fallbackPool"));
-    this.generation = generation;
   }
 
   /**
@@ -146,9 +138,5 @@ final class SliceMap {
 
   ImmutableList<Integer> getFallbackPool() {
     return fallbackPool;
-  }
-
-  long getGeneration() {
-    return generation;
   }
 }

@@ -29,7 +29,6 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -53,8 +52,6 @@ import javax.annotation.concurrent.ThreadSafe;
  * </ul>
  */
 final class AutoShardingPicker extends SubchannelPicker {
-  private static final byte[] EMPTY_BYTES = new byte[0];
-
   @ThreadSafe
   @FunctionalInterface
   interface ThreadSafeRandom {
@@ -81,20 +78,17 @@ final class AutoShardingPicker extends SubchannelPicker {
   private final ImmutableList<PickerEndpoint> endpoints;
   private final boolean[] sliceInFallback;
   private final boolean fallbackEnabled;
-  @Nullable private final Metadata.Key<byte[]> keyHeader;
+  private final Metadata.Key<byte[]> keyHeader;
   private final ThreadSafeRandom random;
 
   /**
    * Pre-creates a {@link Metadata.Key} for the given key header name.
    *
-   * @param keyHeaderName the metadata header name, or {@code null}/empty if no header routing
-   * @return the pre-computed {@link Metadata.Key}, or {@code null} if keyHeaderName is null/empty
+   * @param keyHeaderName the metadata header name
+   * @return the pre-computed {@link Metadata.Key}
    */
-  @Nullable
-  static Metadata.Key<byte[]> createKeyHeader(@Nullable String keyHeaderName) {
-    if (keyHeaderName == null || keyHeaderName.isEmpty()) {
-      return null;
-    } else if (keyHeaderName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+  static Metadata.Key<byte[]> createKeyHeader(String keyHeaderName) {
+    if (keyHeaderName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
       return Metadata.Key.of(keyHeaderName, Metadata.BINARY_BYTE_MARSHALLER);
     } else {
       return InternalMetadata.keyOf(keyHeaderName, RAW_ASCII_MARSHALLER);
@@ -113,7 +107,7 @@ final class AutoShardingPicker extends SubchannelPicker {
       SliceMap sliceMap,
       List<PickerEndpoint> endpoints,
       boolean fallbackEnabled,
-      @Nullable Metadata.Key<byte[]> keyHeader) {
+      Metadata.Key<byte[]> keyHeader) {
     this(sliceMap, endpoints, fallbackEnabled, keyHeader, DEFAULT_RANDOM);
   }
 
@@ -122,12 +116,12 @@ final class AutoShardingPicker extends SubchannelPicker {
       SliceMap sliceMap,
       List<PickerEndpoint> endpoints,
       boolean fallbackEnabled,
-      @Nullable Metadata.Key<byte[]> keyHeader,
+      Metadata.Key<byte[]> keyHeader,
       ThreadSafeRandom random) {
     this.sliceMap = checkNotNull(sliceMap, "sliceMap");
     this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
     this.fallbackEnabled = fallbackEnabled;
-    this.keyHeader = keyHeader;
+    this.keyHeader = checkNotNull(keyHeader, "keyHeader");
     this.random = checkNotNull(random, "random");
 
     boolean hasTransientFailure = false;
@@ -164,7 +158,13 @@ final class AutoShardingPicker extends SubchannelPicker {
 
   @Override
   public PickResult pickSubchannel(PickSubchannelArgs args) {
-    byte[] key = extractKeyBytes(args.getHeaders());
+    byte[] key = args.getHeaders().get(keyHeader);
+    if (key == null) {
+      // A drop rather than an error: wait-for-ready RPCs would otherwise queue forever.
+      return PickResult.withDrop(
+          Status.UNAVAILABLE.withDescription(
+              "autosharding: request is missing the '" + keyHeader.name() + "' key header"));
+    }
     int sliceIdx = sliceMap.lookup(key);
 
     if (sliceIdx == -1) {
@@ -222,13 +222,5 @@ final class AutoShardingPicker extends SubchannelPicker {
 
     int firstEpIdx = indices.get(firstIndex);
     return endpoints.get(firstEpIdx).getPicker().pickSubchannel(args);
-  }
-
-  private byte[] extractKeyBytes(Metadata headers) {
-    if (keyHeader != null) {
-      byte[] val = headers.get(keyHeader);
-      return val != null ? val : EMPTY_BYTES;
-    }
-    return EMPTY_BYTES;
   }
 }
