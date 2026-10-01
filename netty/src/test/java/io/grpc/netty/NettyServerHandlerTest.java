@@ -138,6 +138,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private int maxConcurrentStreams = Integer.MAX_VALUE;
   private int maxHeaderListSize = Integer.MAX_VALUE;
   private int softLimitHeaderListSize = Integer.MAX_VALUE;
+  private int hpackDynamicTableSize = GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE;
   private boolean permitKeepAliveWithoutCalls = true;
   private long permitKeepAliveTimeInNanos = 0;
   private long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -472,6 +473,44 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
 
     assertEquals(maxHeaderListSize, captor.getValue().maxHeaderListSize().longValue());
+    assertNull(captor.getValue().headerTableSize());
+  }
+
+  @Test
+  public void shouldAdvertiseZeroHpackDynamicTable() throws Exception {
+    hpackDynamicTableSize = 0;
+    manualSetUp();
+
+    ArgumentCaptor<Http2Settings> captor = ArgumentCaptor.forClass(Http2Settings.class);
+    verifyWrite().writeSettings(
+        any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
+    assertEquals(0, captor.getValue().headerTableSize().longValue());
+    assertEquals(4096,
+        frameReader().configuration().headersConfiguration().maxHeaderTableSize());
+
+    channelRead(serializeSettingsAck());
+
+    assertEquals(0, frameReader().configuration().headersConfiguration().maxHeaderTableSize());
+  }
+
+  @Test
+  public void shouldAdvertiseEightKiBHpackDynamicTable() throws Exception {
+    hpackDynamicTableSize = 8192;
+    manualSetUp();
+
+    ArgumentCaptor<Http2Settings> captor = ArgumentCaptor.forClass(Http2Settings.class);
+    verifyWrite().writeSettings(
+        any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
+    assertEquals(8192, captor.getValue().headerTableSize().longValue());
+    assertEquals(4096,
+        frameReader().configuration().headersConfiguration().maxHeaderTableSize());
+
+    channelRead(serializeSettingsAck());
+
+    // The allowed maximum is now 8 KiB, but Netty reports the current capacity. It remains at the
+    // RFC default until the peer sends an HPACK dynamic table size update.
+    assertEquals(4096,
+        frameReader().configuration().headersConfiguration().maxHeaderTableSize());
   }
 
   @Test
@@ -1425,6 +1464,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxConcurrentStreams,
         autoFlowControl,
         flowControlWindow,
+        hpackDynamicTableSize,
         maxHeaderListSize,
         softLimitHeaderListSize,
         DEFAULT_MAX_MESSAGE_SIZE,

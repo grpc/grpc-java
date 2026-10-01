@@ -150,6 +150,7 @@ public class NettyServerTest {
             false, // ignore
             1, // ignore
             Collections.<AsciiString>emptySet(),
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -208,6 +209,7 @@ public class NettyServerTest {
             false, // ignore
             1, // ignore
             Collections.<AsciiString>emptySet(),
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -289,6 +291,7 @@ public class NettyServerTest {
             false, // ignore
             1, // ignore
             Collections.<AsciiString>emptySet(),
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -358,6 +361,7 @@ public class NettyServerTest {
             false, // ignore
             1, // ignore
             Collections.<AsciiString>emptySet(),
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -440,6 +444,7 @@ public class NettyServerTest {
             false, // ignore
             1, // ignore
             Collections.<AsciiString>emptySet(),
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -495,6 +500,7 @@ public class NettyServerTest {
             false, // ignore
             1, // ignore
             Collections.<AsciiString>emptySet(),
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -644,6 +650,7 @@ public class NettyServerTest {
         false, // ignore
         1, // ignore
         Collections.<AsciiString>emptySet(),
+        GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
         1, // ignore
         1, // ignore
         1, // ignore
