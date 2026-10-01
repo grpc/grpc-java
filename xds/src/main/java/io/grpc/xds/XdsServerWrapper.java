@@ -340,7 +340,10 @@ final class XdsServerWrapper extends Server {
     Exception exception;
     try {
       exception = initialStartFuture.get();
-    } catch (InterruptedException | ExecutionException e) {
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException(e);
+    } catch (ExecutionException e) {
       throw new RuntimeException(e);
     }
     if (exception != null) {
