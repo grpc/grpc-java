@@ -1159,7 +1159,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       OkHttpClientStream stream = streams.remove(streamId);
       if (stream != null) {
         if (errorCode != null) {
-          frameWriter.rstStream(streamId, ErrorCode.CANCEL);
+          frameWriter.rstStream(streamId, errorCode);
         }
         if (status != null) {
           stream

@@ -2224,6 +2224,63 @@ public class OkHttpClientTransportTest {
     shutdownAndVerify();
   }
 
+  // RFC 9113 section 6.9: a WINDOW_UPDATE with increment 0 for a specific stream is a *stream*
+  // error of type PROTOCOL_ERROR; the connection and unrelated streams must remain unaffected.
+  @Test
+  public void windowUpdateZeroIncrementOnStream_shouldResetOnlyThatStream() throws Exception {
+    initTransport();
+    MockStreamListener listenerA = new MockStreamListener();
+    MockStreamListener listenerB = new MockStreamListener();
+    ClientStream streamA =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
+    streamA.start(listenerA);
+    ClientStream streamB =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
+    streamB.start(listenerB);
+
+    assertEquals(2, activeStreamCount());
+    assertContainStream(DEFAULT_START_STREAM_ID);
+    assertContainStream(DEFAULT_START_STREAM_ID + 2);
+
+    frameHandler().windowUpdate(DEFAULT_START_STREAM_ID, 0);
+
+    verify(frameWriter, timeout(TIME_OUT_MS))
+        .rstStream(eq(DEFAULT_START_STREAM_ID), eq(ErrorCode.PROTOCOL_ERROR));
+    listenerA.waitUntilStreamClosed();
+    assertEquals(Status.Code.INTERNAL, listenerA.status.getCode());
+
+    // The violation is scoped to stream A only: no GOAWAY, no transport shutdown, and stream B
+    // must remain untouched.
+    verify(frameWriter, never()).goAway(anyInt(), any(ErrorCode.class), any(byte[].class));
+    verify(transportListener, never())
+        .transportShutdown(any(Status.class), any(DisconnectError.class));
+    assertNull(listenerB.status);
+    assertContainStream(DEFAULT_START_STREAM_ID + 2);
+
+    getStream(DEFAULT_START_STREAM_ID + 2).cancel(Status.CANCELLED);
+    listenerB.waitUntilStreamClosed();
+
+    shutdownAndVerify();
+  }
+
+  // Control test: a WINDOW_UPDATE with increment 0 on the connection (streamId == 0) is a
+  // *connection* error per RFC 9113 section 6.9, and must still tear down the whole transport.
+  // This pins the existing, already-correct connection-scoped behavior so a future parser change
+  // (letting increment==0 reach the handler instead of being rejected during frame parsing)
+  // cannot silently regress it.
+  @Test
+  public void windowUpdateZeroIncrementOnConnection_shouldKillConnection() throws Exception {
+    initTransport();
+
+    frameHandler().windowUpdate(0, 0);
+
+    verify(frameWriter, timeout(TIME_OUT_MS))
+        .goAway(eq(0), eq(ErrorCode.PROTOCOL_ERROR), any(byte[].class));
+    verify(transportListener).transportShutdown(isA(Status.class), any(DisconnectError.class));
+    verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+    shutdownAndVerify();
+  }
+
   @Test
   public void shutdownNow_streamListenerRpcProgress() throws Exception {
     initTransport();

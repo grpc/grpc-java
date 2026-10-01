@@ -364,7 +364,9 @@ public final class Http2 implements Variant {
         throws IOException {
       if (length != 4) throw ioException("TYPE_WINDOW_UPDATE length !=4: %s", length);
       long increment = (source.readInt() & 0x7fffffffL);
-      if (increment == 0) throw ioException("windowSizeIncrement was 0");
+      // A zero increment is a protocol error (RFC 9113 section 6.9), but whether that is a
+      // stream error or a connection error depends on streamId, which this parser does not
+      // interpret. Dispatch it to the handler, which owns that scope decision.
       handler.windowUpdate(streamId, increment);
     }
 
