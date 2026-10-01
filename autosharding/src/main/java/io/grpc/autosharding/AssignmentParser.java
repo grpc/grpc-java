@@ -269,11 +269,6 @@ final class AssignmentParser {
     // Exclusive upper bound of the key range covered so far; null once infinity is reached.
     byte[] cursor = EMPTY_BYTES;
     for (Assignment.Slice slice : sorted) {
-      if (cursor == null) {
-        // Unreachable: an infinity-ended slice overlaps anything after it, so dropOverlaps()
-        // drops the whole run; a kept one is always last.
-        break;
-      }
       if (UNSIGNED_BYTES_COMPARATOR.compare(cursor, slice.getStartKey()) < 0) {
         filled.add(new Assignment.Slice(cursor, slice.getStartKey(), ImmutableList.of()));
       }
@@ -309,11 +304,6 @@ final class AssignmentParser {
       }
       message.append(problem);
       reported++;
-    }
-    if (reported == 0) {
-      // Not reachable while every description is bounded, but a lone oversized one is better
-      // reported in part than not at all; AutoshardingClient trims it to the limit.
-      return dropped.get(0);
     }
     return message + andMore(dropped.size() - reported);
   }
