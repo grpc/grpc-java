@@ -1207,8 +1207,15 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       frameWriter.goAway(0, ErrorCode.NO_ERROR, new byte[0]);
     }
 
-    // We will close the underlying socket in the writing thread to break out the reader
-    // thread, which will close the frameReader and notify the listener.
+    // Close the frameReader first to stop the ClientFrameHandler thread, then
+    // close the frameWriter (which closes the underlying socket through the
+    // writing thread). This prevents a TSAN data race between the socket close
+    // and the ClientFrameHandler's read from the same socket.
+    try {
+      clientFrameHandler.frameReader.close();
+    } catch (IOException e) {
+      log.log(java.util.logging.Level.FINE, "Exception closing frame reader", e);
+    }
     frameWriter.close();
   }
 
