@@ -392,6 +392,26 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   public final void start(ClientStreamListener listener) {
     masterListener = listener;
 
+    if (savedCloseMasterListenerReason != null) {
+      // cancel() was called before start() completed; close immediately with
+      // the already-saved reason.
+      listenerSerializeExecutor.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              if (masterListener == null || isClosed) {
+                return;
+              }
+              isClosed = true;
+              masterListener.closed(
+                  savedCloseMasterListenerReason.status,
+                  savedCloseMasterListenerReason.progress,
+                  savedCloseMasterListenerReason.metadata);
+            }
+          });
+      return;
+    }
+
     Status shutdownStatus = prestart();
 
     if (shutdownStatus != null) {
@@ -844,6 +864,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           new Runnable() {
             @Override
             public void run() {
+              if (masterListener == null) {
+                return;
+              }
               isClosed = true;
               masterListener.closed(status, progress, metadata);
             }
