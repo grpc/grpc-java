@@ -111,9 +111,8 @@ final class AssignmentParser {
    *
    * @param chunks the chunks received since the last {@code AssignmentMetadata}, in the order
    *     they were received
-   * @param generation the generation number from the terminating {@code AssignmentMetadata}
    */
-  static Result parse(List<AssignmentChunk> chunks, long generation) {
+  static Result parse(List<AssignmentChunk> chunks) {
     checkNotNull(chunks, "chunks");
 
     ImmutableList<String> endpointNames = combineEndpointNames(chunks);
@@ -129,8 +128,7 @@ final class AssignmentParser {
           null, dropped.isEmpty() ? "assignment contains no slices" : describe(dropped));
     }
     String errorMessage = dropped.isEmpty() ? null : describe(dropped);
-    return new Result(
-        new Assignment(fillGaps(slices), endpointNames, generation), errorMessage);
+    return new Result(new Assignment(fillGaps(slices), endpointNames), errorMessage);
   }
 
   /**

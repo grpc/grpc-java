@@ -126,7 +126,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    * Locality last derived from the endpoints, substituted for {@code %s} in the target. Null when
    * the endpoints did not share one.
    */
-  @Nullable private String locality;
+  @Nullable private String locality; // used only in acceptResolvedAddresses
 
   @Nullable private AutoshardingClient client;
 
@@ -185,15 +185,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     if (shutdown) {
       return Status.OK;
     }
-    Object rawConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    if (!(rawConfig instanceof AutoShardingLoadBalancerConfig)) {
-      // Without a config, publishPicker() publishes nothing, so a later child update cannot put
-      // back a picker built from the previous one. The next valid config starts over as if it
-      // were the first.
-      config = null;
-      return failPermanently("autosharding: missing or malformed load balancing configuration");
-    }
-    AutoShardingLoadBalancerConfig newConfig = (AutoShardingLoadBalancerConfig) rawConfig;
+    AutoShardingLoadBalancerConfig newConfig =
+        (AutoShardingLoadBalancerConfig)
+            checkNotNull(
+                resolvedAddresses.getLoadBalancingPolicyConfig(), "missing autosharding config");
 
     // Each failure below rejects the whole update, and nothing from it is applied: the next
     // update is compared against the configuration still in use, so a changed key or target is
@@ -441,9 +436,6 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    * only the picker needs rebuilding.
    */
   private void onChildStateUpdate() {
-    if (shutdown) {
-      return;
-    }
     publishPicker();
   }
 

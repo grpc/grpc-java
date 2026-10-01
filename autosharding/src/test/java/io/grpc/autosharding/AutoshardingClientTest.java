@@ -122,7 +122,6 @@ public class AutoshardingClientTest {
     serverStream.onNext(metadataResponse(5));
 
     Assignment assignment = takeAssignment();
-    assertThat(assignment.getGeneration()).isEqualTo(5);
     assertThat(assignment.getEndpointNames()).containsExactly("host-a");
     assertThat(assignment.getSlices()).hasSize(1);
 
@@ -215,7 +214,7 @@ public class AutoshardingClientTest {
     serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
     serverStream.onNext(metadataResponse(0));
 
-    assertThat(takeAssignment().getGeneration()).isEqualTo(0);
+    takeAssignment();
     WatchShardingAssignmentRequest ack = takeRequest();
     assertThat(ack.getAssignmentAck().getGeneration()).isEqualTo(0);
     assertThat(ack.getAssignmentAck().getAccepted()).isTrue();
@@ -249,7 +248,7 @@ public class AutoshardingClientTest {
     serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
     serverStream.onNext(metadataResponse(-3));
 
-    assertThat(takeAssignment().getGeneration()).isEqualTo(-3);
+    takeAssignment();
     assertThat(client.getLatestGeneration()).isEqualTo(-3);
   }
 

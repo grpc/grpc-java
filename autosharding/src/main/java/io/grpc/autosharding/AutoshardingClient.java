@@ -387,7 +387,7 @@ final class AutoshardingClient {
         return;
       }
 
-      AssignmentParser.Result result = AssignmentParser.parse(chunks, generation);
+      AssignmentParser.Result result = AssignmentParser.parse(chunks);
       if (result.assignment == null) {
         logger.log(
             Level.WARNING,

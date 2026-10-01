@@ -93,7 +93,6 @@ final class Assignment {
 
   private final ImmutableList<Slice> slices;
   private final ImmutableList<String> endpointNames;
-  private final long generation;
 
   /**
    * Constructs an {@link Assignment}.
@@ -101,12 +100,10 @@ final class Assignment {
    * @param slices the validated, sorted, contiguous and gap-free list of key-range slices
    * @param endpointNames the complete list of endpoint names, combined across all chunks in
    *     chunk order
-   * @param generation the generation number of this logical assignment
    */
-  Assignment(List<Slice> slices, List<String> endpointNames, long generation) {
+  Assignment(List<Slice> slices, List<String> endpointNames) {
     this.slices = ImmutableList.copyOf(checkNotNull(slices, "slices"));
     this.endpointNames = ImmutableList.copyOf(checkNotNull(endpointNames, "endpointNames"));
-    this.generation = generation;
   }
 
   ImmutableList<Slice> getSlices() {
@@ -117,14 +114,9 @@ final class Assignment {
     return endpointNames;
   }
 
-  long getGeneration() {
-    return generation;
-  }
-
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
-        .add("generation", generation)
         .add("endpointNames", endpointNames)
         .add("slices", slices)
         .toString();

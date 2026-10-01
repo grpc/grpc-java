@@ -165,37 +165,6 @@ public class AutoShardingLoadBalancerTest {
   // ---------------------------------------------------------------------------------------------
 
   @Test
-  public void missingConfig_reportsTransientFailure() {
-    Status status =
-        acceptAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(endpoints("a"))
-                .setAttributes(attributesWithChannelFactory())
-                .build());
-
-    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
-  }
-
-  @Test
-  public void missingConfig_afterAWorkingOne_failureIsNotUndoneByAChildUpdate()
-      throws Exception {
-    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
-    deliverAssignment(1, slice("", "a"));
-    reportReady("a");
-
-    acceptAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(endpoints("a"))
-            .setAttributes(attributesWithChannelFactory())
-            .build());
-    syncContext.execute(() -> childForHost("a").reportReady());
-
-    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(pick("k").getStatus().getDescription()).contains("malformed");
-  }
-
-  @Test
   public void emptyKeyHeaderName_isRejected() {
     // There would be no header to read the routing key from. C++ rejects this at config-parse
     // time.

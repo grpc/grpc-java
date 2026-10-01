@@ -46,9 +46,8 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("m", null, 1))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk), 7);
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
 
-    assertThat(assignment.getGeneration()).isEqualTo(7);
     assertThat(assignment.getEndpointNames()).containsExactly("host-a", "host-b").inOrder();
     assertThat(assignment.getSlices()).hasSize(2);
     assertSlice(assignment.getSlices().get(0), "", "m", 0);
@@ -69,7 +68,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("", null, 2))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk1, chunk2), 1);
+    Assignment assignment = parseFully(ImmutableList.of(chunk1, chunk2));
 
     assertThat(assignment.getEndpointNames())
         .containsExactly("host-a", "host-b", "host-c")
@@ -87,7 +86,7 @@ public class AssignmentParserTest {
     AssignmentChunk chunk2 =
         AssignmentChunk.newBuilder().addSliceAssignments(sliceAssignment("", "m", 0)).build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk1, chunk2), 1);
+    Assignment assignment = parseFully(ImmutableList.of(chunk1, chunk2));
 
     assertThat(assignment.getSlices()).hasSize(2);
     assertSlice(assignment.getSlices().get(0), "", "m", 0);
@@ -102,7 +101,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("d", null, 0))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk), 1);
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
 
     assertThat(assignment.getSlices()).hasSize(2);
     assertSlice(assignment.getSlices().get(0), "", "d");
@@ -117,7 +116,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("", "d", 0))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk), 1);
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
 
     assertThat(assignment.getSlices()).hasSize(2);
     assertSlice(assignment.getSlices().get(0), "", "d", 0);
@@ -134,7 +133,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("m", null, 1))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk), 1);
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
 
     assertThat(assignment.getSlices()).hasSize(3);
     assertSlice(assignment.getSlices().get(0), "", "d", 0);
@@ -145,7 +144,7 @@ public class AssignmentParserTest {
   @Test
   public void parse_noSlices_isRejected() {
     AssignmentParser.Result result =
-        AssignmentParser.parse(ImmutableList.of(AssignmentChunk.getDefaultInstance()), 3);
+        AssignmentParser.parse(ImmutableList.of(AssignmentChunk.getDefaultInstance()));
 
     // Treated like an assignment whose slices were all dropped: no usable slice remains.
     assertThat(result.assignment).isNull();
@@ -154,7 +153,7 @@ public class AssignmentParserTest {
 
   @Test
   public void parse_noChunks_isRejected() {
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of());
 
     assertThat(result.assignment).isNull();
     assertThat(result.errorMessage).contains("no slices");
@@ -169,7 +168,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("d", null, 0))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk), 1);
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
 
     assertThat(assignment.getSlices()).hasSize(2);
     assertSlice(assignment.getSlices().get(0), "", "d");
@@ -185,7 +184,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("", null, 0, 1))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk), 1);
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
 
     assertSlice(assignment.getSlices().get(0), "", null, 0, 1);
   }
@@ -208,7 +207,7 @@ public class AssignmentParserTest {
                             .setEndKey(ByteString.copyFrom(new byte[] {(byte) 0x80}))))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk), 1);
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
 
     // Leading gap ["", 0x01) plus the two declared slices.
     assertThat(assignment.getSlices()).hasSize(3);
@@ -226,7 +225,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("k", "m", 0))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk), 1);
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
 
     List<Assignment.Slice> slices = assignment.getSlices();
     assertThat(slices.get(0).getStartKey()).isEqualTo(new byte[0]);
@@ -245,7 +244,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("m", null, 5))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("out-of-range endpoint index 5");
     assertThat(result.assignment.getSlices()).hasSize(2);
@@ -262,7 +261,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("m", null, -1))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("out-of-range endpoint index -1");
     assertThat(result.assignment.getSlices()).hasSize(2);
@@ -279,7 +278,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("m", null, 0, 5))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertSlice(result.assignment.getSlices().get(1), "m", null);
   }
@@ -293,7 +292,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("z", "n"))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("greater than end_key");
     assertThat(result.assignment.getSlices()).hasSize(2);
@@ -314,7 +313,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("m", null, 1))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("is empty");
     // No gap appears where it was: its neighbours already met at "m".
@@ -338,7 +337,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("z", null, 0))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("is empty");
     assertThat(result.assignment.getSlices()).hasSize(3);
@@ -364,7 +363,7 @@ public class AssignmentParserTest {
                     .addEndpoints(PerSliceEndpointState.newBuilder().setEndpointIndex(0)))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).isNull();
     assertThat(result.assignment.getSlices()).hasSize(3);
@@ -386,7 +385,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("m", null, 0))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     List<Assignment.Slice> slices = result.assignment.getSlices();
     for (int i = 0; i + 1 < slices.size(); i++) {
@@ -404,7 +403,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("d", null))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("overlaps");
     assertThat(result.assignment).isNull();
@@ -419,7 +418,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("p", "z"))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("overlaps");
     // ["p", "z") abuts the overlap without entering it, so only it is kept.
@@ -440,7 +439,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("d", "e"))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("overlaps");
     assertThat(result.assignment).isNull();
@@ -454,7 +453,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("a", "z"))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("overlaps");
     assertThat(result.assignment).isNull();
@@ -468,7 +467,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("m", null))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("overlaps");
     assertThat(result.assignment).isNull();
@@ -482,7 +481,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("", null, 1))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.assignment).isNull();
     assertThat(result.errorMessage).contains("out-of-range endpoint index 1");
@@ -496,7 +495,7 @@ public class AssignmentParserTest {
       chunk.addSliceAssignments(sliceAssignment("z" + i, "a"));
     }
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk.build()), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk.build()));
 
     assertThat(result.assignment).isNull();
     // autosharding.proto: error_message "MUST NOT exceed 512 characters".
@@ -512,7 +511,7 @@ public class AssignmentParserTest {
       chunk.addSliceAssignments(sliceAssignment(startKey, "a"));
     }
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk.build()), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk.build()));
 
     // Five short descriptions fit comfortably, so nothing is elided.
     assertThat(result.errorMessage).doesNotContain("more");
@@ -533,7 +532,7 @@ public class AssignmentParserTest {
                             .setEndKey(ByteString.copyFromUtf8("a"))))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     // Hex-encoding 512 bytes in full would be 1024 characters on its own.
     assertThat(result.errorMessage.length()).isAtMost(512);
@@ -553,7 +552,7 @@ public class AssignmentParserTest {
                     .addEndpoints(PerSliceEndpointState.newBuilder().setEndpointIndex(1)))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.errorMessage).contains("no slice");
     assertThat(result.assignment).isNotNull();
@@ -571,7 +570,7 @@ public class AssignmentParserTest {
                     .addEndpoints(PerSliceEndpointState.newBuilder().setEndpointIndex(0)))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk), 1);
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     assertThat(result.assignment).isNull();
     assertThat(result.errorMessage).contains("no slice");
@@ -592,8 +591,8 @@ public class AssignmentParserTest {
   }
 
   /** Parses chunks that are expected to be usable in their entirety. */
-  private static Assignment parseFully(List<AssignmentChunk> chunks, long generation) {
-    AssignmentParser.Result result = AssignmentParser.parse(chunks, generation);
+  private static Assignment parseFully(List<AssignmentChunk> chunks) {
+    AssignmentParser.Result result = AssignmentParser.parse(chunks);
     assertThat(result.errorMessage).isNull();
     assertThat(result.assignment).isNotNull();
     return result.assignment;
