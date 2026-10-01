@@ -49,6 +49,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.base.Throwables;
 import com.google.common.base.Ticker;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
@@ -101,6 +102,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.net.SocketTimeoutException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2096,6 +2098,35 @@ public class OkHttpClientTransportTest {
     verify(transportListener, timeout(200)).transportShutdown(any(Status.class),
         any(DisconnectError.class));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+    sock.close();
+  }
+
+  @Test
+  public void tls_serverHangs() throws Exception {
+    ServerSocket serverSocket = new ServerSocket(0);
+    clientTransport =
+        new OkHttpClientTransport(
+            channelBuilder.useTransportSecurity().buildTransportFactory(),
+            new InetSocketAddress("localhost", serverSocket.getLocalPort()),
+            "authority",
+            "userAgent",
+            EAG_ATTRS,
+            NO_PROXY,
+            tooManyPingsRunnable,
+            null);
+    clientTransport.proxySocketTimeout = 10;
+    clientTransport.start(transportListener);
+
+    Socket sock = serverSocket.accept();
+    serverSocket.close();
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(transportListener, timeout(200))
+        .transportShutdown(statusCaptor.capture(), any(DisconnectError.class));
+    verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(Throwables.getRootCause(statusCaptor.getValue().getCause()))
+        .isInstanceOf(SocketTimeoutException.class);
     sock.close();
   }
 
