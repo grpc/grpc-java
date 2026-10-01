@@ -451,6 +451,29 @@ public class OutlierDetectionLoadBalancerTest {
     verify(mockStreamTracer).inboundHeaders();
   }
 
+  @Test
+  public void delegatePick_cancelledForwarded() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildConfig(newChildConfig(fakeLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
+
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(2)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+
+    SubchannelPicker picker = pickerCaptor.getAllValues().get(1);
+    PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+
+    ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+        .newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+    clientStreamTracer.cancelled(Status.CANCELLED);
+    verify(mockStreamTracer).cancelled(Status.CANCELLED);
+  }
+
   /**
    * Assure the tracer works even when the underlying LB does not have a tracer to delegate to.
    */
@@ -522,12 +545,114 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
+  }
+
+  /**
+   * The success rate algorithm ignores CANCELLED status calls.
+   */
+  @Test
+  public void successRateOneOutlier_cancelledIgnored() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns CANCELLED.
+    generateLoad(ImmutableMap.of(subchannel1, Status.CANCELLED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // CANCELLED status should be excluded from call counting, so no ejections occur.
+    assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /**
+   * The success rate algorithm ignores DEADLINE_EXCEEDED status calls.
+   */
+  @Test
+  public void successRateOneOutlier_deadlineExceededIgnored() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns DEADLINE_EXCEEDED.
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // DEADLINE_EXCEEDED status should be excluded from call counting, so no ejections occur.
+    assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /**
+   * Server-initiated CANCELLED status over the wire (stopDelivery = false) counts as failure
+   * and results in ejection under success rate algorithm.
+   */
+  @Test
+  public void successRateOneOutlier_serverInitiatedCancelledEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns CANCELLED from server (no client cancellation tracer callback).
+    generateServerInitiatedLoad(ImmutableMap.of(subchannel1, Status.CANCELLED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // Server-initiated CANCELLED status is counted as a failure, so subchannel1 should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
+  }
+
+  /**
+   * Server-initiated DEADLINE_EXCEEDED status over the wire (stopDelivery = false) counts
+   * as failure and results in ejection under success rate algorithm.
+   */
+  @Test
+  public void successRateOneOutlier_serverInitiatedDeadlineExceededEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns DEADLINE_EXCEEDED from server (no client cancellation tracer callback).
+    generateServerInitiatedLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // Server-initiated DEADLINE_EXCEEDED status is counted as a failure, so subchannel1 is ejected.
     assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
   }
 
@@ -547,7 +672,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -567,7 +692,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED), 8);
+    generateLoad(ImmutableMap.of(subchannel2, Status.UNAVAILABLE), 8);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -592,7 +717,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     fakeClock.forwardTime(config.intervalNanos + 1, TimeUnit.NANOSECONDS);
@@ -627,7 +752,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     // We produce an outlier, but don't give it enough calls to reach the minimum volume.
     generateLoad(
-        ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
+        ImmutableMap.of(subchannel1, Status.UNAVAILABLE),
         ImmutableMap.of(subchannel1, 19), 7);
 
     // Move forward in time to a point where the detection timer has fired.
@@ -654,7 +779,7 @@ public class OutlierDetectionLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(
-        ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
+        ImmutableMap.of(subchannel1, Status.UNAVAILABLE),
         // subchannel2 has only 19 calls which results in success rate not triggering.
         ImmutableMap.of(subchannel2, 19),
         7);
@@ -683,7 +808,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -709,8 +834,8 @@ public class OutlierDetectionLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(
-        subchannel1, Status.DEADLINE_EXCEEDED,
-        subchannel2, Status.DEADLINE_EXCEEDED), 7);
+        subchannel1, Status.UNAVAILABLE,
+        subchannel2, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -738,9 +863,9 @@ public class OutlierDetectionLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(
-        subchannel1, Status.DEADLINE_EXCEEDED,
-        subchannel2, Status.DEADLINE_EXCEEDED,
-        subchannel3, Status.DEADLINE_EXCEEDED), 7);
+        subchannel1, Status.UNAVAILABLE,
+        subchannel2, Status.UNAVAILABLE,
+        subchannel3, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -782,6 +907,52 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
+   * Client-cancelled streams (e.g. non-winning hedged attempts) do not count as failures for
+   * failure percentage algorithm.
+   */
+  @Test
+  public void failurePercentage_clientCancelled_notEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel5, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(7)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getAllValues()
+        .get(pickerCaptor.getAllValues().size() - 1);
+
+    for (int i = 0; i < 100; i++) {
+      PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+      ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+          .newClientStreamTracer(null, null);
+      Subchannel subchannel = (Subchannel) pickResult.getSubchannel().getInternalSubchannel();
+      if (subchannel == subchannel1) {
+        clientStreamTracer.cancelled(Status.CANCELLED);
+        clientStreamTracer.streamClosed(Status.CANCELLED);
+      } else {
+        clientStreamTracer.streamClosed(Status.OK);
+      }
+    }
+
+    forwardTime(config);
+
+    // subchannel1 was cancelled client-side and should not be ejected as an outlier.
+    assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /**
    * The success rate algorithm ejects the outlier.
    */
   @Test
@@ -796,12 +967,114 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
+  }
+
+  /**
+   * The failure percentage algorithm ignores CANCELLED status calls.
+   */
+  @Test
+  public void failurePercentageOneOutlier_cancelledIgnored() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns CANCELLED.
+    generateLoad(ImmutableMap.of(subchannel1, Status.CANCELLED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // CANCELLED status should be excluded from call counting, so no ejections occur.
+    assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /**
+   * The failure percentage algorithm ignores DEADLINE_EXCEEDED status calls.
+   */
+  @Test
+  public void failurePercentageOneOutlier_deadlineExceededIgnored() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns DEADLINE_EXCEEDED.
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // DEADLINE_EXCEEDED status should be excluded from call counting, so no ejections occur.
+    assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /**
+   * Server-initiated CANCELLED status over the wire (stopDelivery = false) counts as failure
+   * and results in ejection under failure percentage algorithm.
+   */
+  @Test
+  public void failurePercentageOneOutlier_serverInitiatedCancelledEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns CANCELLED from server (no client cancellation tracer callback).
+    generateServerInitiatedLoad(ImmutableMap.of(subchannel1, Status.CANCELLED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // Server-initiated CANCELLED status is counted as a failure, so subchannel1 should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
+  }
+
+  /**
+   * Server-initiated DEADLINE_EXCEEDED status over the wire (stopDelivery = false) counts
+   * as failure and results in ejection under failure percentage algorithm.
+   */
+  @Test
+  public void failurePercentageOneOutlier_serverInitiatedDeadlineExceededEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns DEADLINE_EXCEEDED from server (no client cancellation tracer callback).
+    generateServerInitiatedLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // Server-initiated DEADLINE_EXCEEDED status is counted as a failure, so subchannel1 is ejected.
     assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
   }
 
@@ -820,7 +1093,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -846,7 +1119,7 @@ public class OutlierDetectionLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(
-        ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
+        ImmutableMap.of(subchannel1, Status.UNAVAILABLE),
         // subchannel2 has only 19 calls which results in failure percentage not triggering.
         ImmutableMap.of(subchannel2, 19),
         7);
@@ -875,7 +1148,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -909,9 +1182,9 @@ public class OutlierDetectionLoadBalancerTest {
     // configured with a 0 tolerance threshold.
     generateLoad(
         ImmutableMap.of(
-            subchannel1, Status.DEADLINE_EXCEEDED,
-            subchannel2, Status.DEADLINE_EXCEEDED,
-            subchannel3, Status.DEADLINE_EXCEEDED),
+            subchannel1, Status.UNAVAILABLE,
+            subchannel2, Status.UNAVAILABLE,
+            subchannel3, Status.UNAVAILABLE),
         ImmutableMap.of(subchannel3, 1), 7);
 
     // Move forward in time to a point where the detection timer has fired.
@@ -941,7 +1214,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -1003,8 +1276,8 @@ public class OutlierDetectionLoadBalancerTest {
     assertThat(loadBalancer.endpointTrackerMap.size()).isEqualTo(3);
     assertThat(loadBalancer.addressMap.size()).isEqualTo(5);
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED,
-        subchannel2, Status.DEADLINE_EXCEEDED), 13);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE,
+        subchannel2, Status.UNAVAILABLE), 13);
     forwardTime(config);
 
     // eject the first endpoint: (address0, address1)
@@ -1072,7 +1345,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 6);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -1162,7 +1435,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -1191,7 +1464,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 6);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -1235,7 +1508,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -1264,7 +1537,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
+    generateLoad(ImmutableMap.of(subchannel1, Status.UNAVAILABLE), 6);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -1363,9 +1636,43 @@ public class OutlierDetectionLoadBalancerTest {
       int calls = callCountMap.containsKey(subchannel) ? callCountMap.get(subchannel) : 0;
       if (calls < maxCalls) {
         callCountMap.put(subchannel, ++calls);
-        clientStreamTracer.streamClosed(
-            statusMap.containsKey(subchannel) ? statusMap.get(subchannel) : Status.OK);
+        Status status = statusMap.containsKey(subchannel) ? statusMap.get(subchannel) : Status.OK;
+        if (status.getCode() == Status.Code.CANCELLED
+            || status.getCode() == Status.Code.DEADLINE_EXCEEDED) {
+          clientStreamTracer.cancelled(status);
+        }
+        clientStreamTracer.streamClosed(status);
       }
+    }
+  }
+
+  // Generates 100 calls, simulating server-initiated status responses over the wire.
+  private void generateServerInitiatedLoad(
+      Map<Subchannel, Status> statusMap, int expectedStateChanges) {
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel5, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(expectedStateChanges)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getAllValues()
+        .get(pickerCaptor.getAllValues().size() - 1);
+
+    HashMap<Subchannel, Integer> callCountMap = new HashMap<>();
+    for (int i = 0; i < 100; i++) {
+      PickResult pickResult = picker
+          .pickSubchannel(mock(PickSubchannelArgs.class));
+      ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+          .newClientStreamTracer(null, null);
+
+      Subchannel subchannel = (Subchannel) pickResult.getSubchannel().getInternalSubchannel();
+
+      int calls = callCountMap.containsKey(subchannel) ? callCountMap.get(subchannel) : 0;
+      callCountMap.put(subchannel, ++calls);
+      Status status = statusMap.containsKey(subchannel) ? statusMap.get(subchannel) : Status.OK;
+      clientStreamTracer.streamClosed(status);
     }
   }
 
