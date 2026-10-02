@@ -249,6 +249,13 @@ public final class BlockingClientCall<ReqT, RespT> {
   public void cancel(String message, Throwable cause) {
     writeClosed = true;
     call.cancel(message, cause);
+    // After canceling a BlockingClientCall, the caller may not interact with it further. That means
+    // the call executor, a ThreadSafeThreadlessExecutor, will not execute any more tasks. There may
+    // still be tasks submitted to the call executor, though, until the underlying call completes.
+    // Some of these tasks (e.g., server messages available) may leak native resources unless
+    // executed. So, we convert the executor to a "direct" executor in order to ensure all call
+    // tasks run.
+    executor.becomeDirect();
   }
 
   /**
