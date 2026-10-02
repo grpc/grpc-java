@@ -231,14 +231,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
     }
 
-    // The filter chain is preceded by RawMessageClientInterceptor, so ReqT and RespT are
-    // InputStream.
-    MethodDescriptor<InputStream, InputStream> rawMethod =
-        (MethodDescriptor<InputStream, InputStream>) (MethodDescriptor<?, ?>) method;
-    ClientCall<InputStream, InputStream> rawCall =
-        new SimpleForwardingClientCall<InputStream, InputStream>(
-            (ClientCall<InputStream, InputStream>) (ClientCall<?, ?>)
-                next.newCall(method, callOptions)) {
+    // The filter chain is preceded by RawMessageClientInterceptor when payload access is
+    // required, in which case ReqT and RespT are InputStream.
+    ClientCall<ReqT, RespT> rawCall =
+        new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
           private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
           @Override
@@ -250,15 +246,15 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         };
 
     // Create a local subclass instance to buffer outbound actions
-    DataPlaneDelayedCall<InputStream, InputStream> delayedCall =
+    DataPlaneDelayedCall<ReqT, RespT> delayedCall =
         new DataPlaneDelayedCall<>(
             serializingExecutor, scheduler, callOptions.getDeadline());
 
-    DataPlaneClientCall dataPlaneCall = new DataPlaneClientCall(
+    DataPlaneClientCall<ReqT, RespT> dataPlaneCall = new DataPlaneClientCall<>(
         delayedCall, rawCall, extProcStub, filterConfig, filterConfig.getMutationRulesConfig(),
-        scheduler, rawMethod, next, metricsRecorder, next.authority());
+        scheduler, method, next, metricsRecorder, next.authority());
 
-    return (ClientCall<ReqT, RespT>) (ClientCall<?, ?>) dataPlaneCall;
+    return dataPlaneCall;
   }
 
   // --- SHARED UTILITY METHODS ---
@@ -277,13 +273,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
    * Handles the bidirectional stream with the External Processor.
    * Buffers the actual RPC start until the Ext Proc header response is received.
    */
-  private static class DataPlaneClientCall 
-      extends SimpleForwardingClientCall<InputStream, InputStream> {
+  private static class DataPlaneClientCall<ReqT, RespT>
+      extends SimpleForwardingClientCall<ReqT, RespT> {
 
     private final ExternalProcessorGrpc.ExternalProcessorStub stub;
     private final ExternalProcessorFilterConfig config;
-    private final ClientCall<InputStream, InputStream> rawCall;
-    private final DataPlaneDelayedCall<InputStream, InputStream> delayedCall;
+    private final ClientCall<ReqT, RespT> rawCall;
+    private final DataPlaneDelayedCall<ReqT, RespT> delayedCall;
     private final ScheduledExecutorService scheduler;
     final Object streamLock = new Object();
     @Nullable private volatile EventType expectedRequestResponse;
@@ -291,9 +287,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @Nullable private volatile ClientCallStreamObserver<ProcessingRequest>
         extProcClientCallRequestObserver;
     @GuardedBy("streamLock")
-    private final Queue<InputStream> pendingDrainingMessages =
+    private final Queue<ReqT> pendingDrainingMessages =
         new ConcurrentLinkedQueue<>();
-    @Nullable private volatile DataPlaneListener wrappedListener;
+    @Nullable private volatile DataPlaneListener<RespT> wrappedListener;
     private final HeaderMutationFilter mutationFilter;
     private final HeaderMutator mutator = HeaderMutator.create();
     private final AtomicInteger pendingRequests = new AtomicInteger(0);
@@ -372,8 +368,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
 
     protected DataPlaneClientCall(
-        DataPlaneDelayedCall<InputStream, InputStream> delayedCall,
-        ClientCall<InputStream, InputStream> rawCall,
+        DataPlaneDelayedCall<ReqT, RespT> delayedCall,
+        ClientCall<ReqT, RespT> rawCall,
         ExternalProcessorGrpc.ExternalProcessorStub stub,
         ExternalProcessorFilterConfig config,
         Optional<HeaderMutationRulesConfig> mutationRulesConfig,
@@ -465,11 +461,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     @Override
-    public void start(Listener<InputStream> responseListener, Metadata headers) {
+    public void start(Listener<RespT> responseListener, Metadata headers) {
       this.callContext = Context.current();
       clientHeadersStartNanos = System.nanoTime();
       this.requestHeaders = headers;
-      this.wrappedListener = new DataPlaneListener(responseListener, this);
+      this.wrappedListener = new DataPlaneListener<>(responseListener, this);
 
       // DelayedClientCall.start will buffer the listener and headers until setCall is called.
       super.start(wrappedListener, headers);
@@ -977,8 +973,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
-    public void sendMessage(InputStream message) {
+    public void sendMessage(ReqT message) {
       if (requestSideClosed.get()) {
         // External processor already closed the request stream. Discard further messages.
         return;
@@ -1002,8 +999,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             return;
           }
           try {
-            ByteString copiedBody = ByteString.readFrom(message);
-            pendingDrainingMessages.add(new KnownLengthInputStream(copiedBody));
+            ByteString copiedBody = ByteString.readFrom((InputStream) message);
+            pendingDrainingMessages.add((ReqT) new KnownLengthInputStream(copiedBody));
           } catch (IOException e) {
             cancelDownstream("Failed to copy outbound message for buffering", e);
           }
@@ -1017,7 +1014,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         // Mode is GRPC
         try {
-          ByteString bodyByteString = outboundStreamToByteString(message);
+          ByteString bodyByteString = outboundStreamToByteString((InputStream) message);
           if (config.getObservabilityMode()) {
             sendToExtProc(ProcessingRequest.newBuilder()
                 .setRequestBody(HttpBody.newBuilder()
@@ -1026,7 +1023,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     .build())
                 .build());
             bodyMessageSentToExtProc.set(true);
-            super.sendMessage(new KnownLengthInputStream(bodyByteString));
+            super.sendMessage((ReqT) new KnownLengthInputStream(bodyByteString));
           } else {
             if (downstreamToSidestreamWindow <= 0 || !pendingRequestBodyMessages.isEmpty()) {
               pendingRequestBodyMessages.add(bodyByteString);
@@ -1159,6 +1156,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       cancelDownstream(message, cause);
     }
 
+    @SuppressWarnings("unchecked")
     private void handleRequestBodyResponse(BodyResponse bodyResponse) {
       if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
         BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
@@ -1180,7 +1178,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               }
             }
             if (sendImmediately) {
-              super.sendMessage(new KnownLengthInputStream(body));
+              super.sendMessage((ReqT) new KnownLengthInputStream(body));
               trySendAccumulatedWindowUpdates();
             }
           }
@@ -1200,7 +1198,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void handleResponseBodyResponse(
-        BodyResponse bodyResponse, DataPlaneListener listener) {
+        BodyResponse bodyResponse, DataPlaneListener<RespT> listener) {
       if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
         BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
         if (mutation.hasStreamedResponse()) {
@@ -1215,7 +1213,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
-    private void deliverResponseBody(ByteString body, DataPlaneListener listener) {
+    private void deliverResponseBody(ByteString body, DataPlaneListener<RespT> listener) {
       boolean shouldDeliver = false;
       synchronized (streamLock) {
         if (downstreamRequestsPending > 0) {
@@ -1267,7 +1265,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     // Used to immediately flush any mutated response chunks that we already received and buffered
     // before the stream failed, ensuring the application receives them in the correct order
-    void drainPendingMutatedResponseBodiesDirect(DataPlaneListener listener) {
+    void drainPendingMutatedResponseBodiesDirect(DataPlaneListener<RespT> listener) {
       List<ByteString> toDeliver = new ArrayList<>();
       synchronized (streamLock) {
         ByteString body;
@@ -1280,6 +1278,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
+    @SuppressWarnings("unchecked")
     void drainPendingUpstreamBodyMessages() {
       while (true) {
         ByteString body = null;
@@ -1297,7 +1296,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (body == null) {
           break;
         }
-        super.sendMessage(new KnownLengthInputStream(body));
+        super.sendMessage((ReqT) new KnownLengthInputStream(body));
         trySendAccumulatedWindowUpdates();
         if (triggerHalfClose) {
           if (requestSideClosed.compareAndSet(false, true)) {
@@ -1307,7 +1306,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
-    private void handleImmediateResponse(ImmediateResponse immediate, DataPlaneListener listener)
+    private void handleImmediateResponse(
+        ImmediateResponse immediate, DataPlaneListener<RespT> listener)
         throws HeaderMutationDisallowedException {
       Status status = Status.fromCodeValue(immediate.getGrpcStatus().getStatus());
       if (!immediate.getDetails().isEmpty()) {
@@ -1335,6 +1335,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       closeExtProcStream();
     }
 
+    @SuppressWarnings("unchecked")
     private void drainPendingDrainingMessages() {
       while (true) {
         Object msg = null; // Can be ByteString or InputStream
@@ -1378,14 +1379,14 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
 
         if (isMutated) {
-          super.sendMessage(new KnownLengthInputStream((ByteString) msg));
+          super.sendMessage((ReqT) new KnownLengthInputStream((ByteString) msg));
         } else {
-          super.sendMessage((InputStream) msg);
+          super.sendMessage((ReqT) msg);
         }
       }
     }
 
-    private void handleFailOpen(DataPlaneListener listener) {
+    private void handleFailOpen(DataPlaneListener<RespT> listener) {
       if (!activateCall()) {
         drainPendingRequests();
       }
@@ -1452,11 +1453,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
   }
 
-  private static class DataPlaneListener extends SimpleForwardingClientCallListener<InputStream> {
-    private final DataPlaneClientCall dataPlaneClientCall;
+  private static class DataPlaneListener<RespT> extends SimpleForwardingClientCallListener<RespT> {
+    private final DataPlaneClientCall<?, RespT> dataPlaneClientCall;
     // Path 3: Upstream response bodies queued because upstream to sidestream window not available,
     // response headers not cleared by ext_proc or ext_proc stream draining
-    private final Queue<InputStream> savedMessages = new ConcurrentLinkedQueue<>();
+    private final Queue<RespT> savedMessages = new ConcurrentLinkedQueue<>();
     private boolean inboundPassThrough = false;
     @Nullable private volatile Metadata savedHeaders;
     @Nullable private volatile Metadata savedTrailers;
@@ -1466,8 +1467,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final AtomicBoolean trailersOnly = new AtomicBoolean(false);
 
     protected DataPlaneListener(
-        ClientCall.Listener<InputStream> delegate,
-        DataPlaneClientCall dataPlaneClientCall) {
+        ClientCall.Listener<RespT> delegate,
+        DataPlaneClientCall<?, RespT> dataPlaneClientCall) {
       super(delegate);
       this.dataPlaneClientCall = dataPlaneClientCall;
     }
@@ -1529,22 +1530,36 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
-    public void onMessage(InputStream message) {
+    public void onMessage(RespT message) {
       synchronized (dataPlaneClientCall.streamLock) {
         if (inboundPassThrough) {
           dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
           return;
         }
 
-        boolean checkDrain = dataPlaneClientCall.getExtProcStreamState().get().isDraining()
-            && dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
-                == ProcessingMode.BodySendMode.GRPC;
+        if (dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
+            != ProcessingMode.BodySendMode.GRPC) {
+          if (savedHeaders != null) {
+            savedMessages.add(message);
+            return;
+          }
+          if (dataPlaneClientCall.getPassThroughMode().get()
+              || dataPlaneClientCall.getExtProcStreamState().get().isCompleted()) {
+            dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
+            return;
+          }
+          dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
+          return;
+        }
+
+        boolean checkDrain = dataPlaneClientCall.getExtProcStreamState().get().isDraining();
 
         if (savedHeaders != null || checkDrain) {
           try {
-            ByteString copiedBody = ByteString.readFrom(message);
-            savedMessages.add(new KnownLengthInputStream(copiedBody));
+            ByteString copiedBody = ByteString.readFrom((InputStream) message);
+            savedMessages.add((RespT) new KnownLengthInputStream(copiedBody));
           } catch (IOException e) {
             dataPlaneClientCall.cancelDownstream("Failed to copy inbound message for buffering", e);
           }
@@ -1556,24 +1571,22 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           return;
         }
 
-        if (dataPlaneClientCall.getExtProcStreamState().get().isCompleted()
-            || dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
-                != ProcessingMode.BodySendMode.GRPC) {
+        if (dataPlaneClientCall.getExtProcStreamState().get().isCompleted()) {
           dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
           return;
         }
 
         try {
-          ByteString bodyByteString = ByteString.readFrom(message);
+          ByteString bodyByteString = ByteString.readFrom((InputStream) message);
           // TODO: Consider having separate classes handling normal mode and observability mode
           if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
             sendResponseBodyToExtProc(bodyByteString, false);
             dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
             dataPlaneClientCall.getCallContext().run(
-                () -> delegate().onMessage(bodyByteString.newInput()));
+                () -> delegate().onMessage((RespT) bodyByteString.newInput()));
           } else {
             if (dataPlaneClientCall.upstreamToSidestreamWindow <= 0 || !savedMessages.isEmpty()) {
-              savedMessages.add(new KnownLengthInputStream(bodyByteString));
+              savedMessages.add((RespT) new KnownLengthInputStream(bodyByteString));
             } else {
               dataPlaneClientCall.upstreamToSidestreamWindow -= bodyByteString.size();
               sendResponseBodyToExtProc(bodyByteString, false);
@@ -1592,10 +1605,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         while (dataPlaneClientCall.isSidecarReady()
             && dataPlaneClientCall.upstreamToSidestreamWindow > 0
             && !savedMessages.isEmpty()) {
-          InputStream msg = savedMessages.poll();
+          RespT msg = savedMessages.poll();
           if (msg != null) {
             try {
-              ByteString bodyByteString = ByteString.readFrom(msg);
+              ByteString bodyByteString = ByteString.readFrom((InputStream) msg);
               dataPlaneClientCall.upstreamToSidestreamWindow -= bodyByteString.size();
               sendResponseBodyToExtProc(bodyByteString, false);
               dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
@@ -1666,7 +1679,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         synchronized (dataPlaneClientCall.streamLock) {
           savedHeaders = null;
           if (!dataPlaneClientCall.getExtProcStreamState().get().isDraining()) {
-            InputStream msg;
+            RespT msg;
             while ((msg = savedMessages.poll()) != null) {
               onMessage(msg);
             }
@@ -1707,12 +1720,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       dataPlaneClientCall.getCallContext().run(() -> delegate().onClose(status, trailers));
     }
 
+    @SuppressWarnings("unchecked")
     void onExternalBody(ByteString body) {
       // If needed, downstream reading can be made more optimal by creating a wrapped
       // Inputstream wraps the underlying bytestring and that implements HasByteBuffer,
       // Detachable, KnownLength
       dataPlaneClientCall.getCallContext().run(
-          () -> delegate().onMessage(body.newInput()));
+          () -> delegate().onMessage((RespT) body.newInput()));
     }
 
     void unblockAfterStreamComplete() {
@@ -1728,9 +1742,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     private void proceedWithSavedMessages() {
       synchronized (dataPlaneClientCall.streamLock) {
-        InputStream msg;
+        RespT msg;
         while ((msg = savedMessages.poll()) != null) {
-          final InputStream finalMsg = msg;
+          final RespT finalMsg = msg;
           dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(finalMsg));
         }
         inboundPassThrough = true;

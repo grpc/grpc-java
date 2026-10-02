@@ -21,10 +21,16 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Message;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.MethodDescriptor;
 import io.grpc.ServerInterceptor;
 import java.util.ConcurrentModificationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.IntStream;
 import javax.annotation.Nullable;
@@ -38,10 +44,22 @@ class StatefulFilter implements Filter {
   private final AtomicBoolean shutdown = new AtomicBoolean();
 
   final int idx;
+  private final boolean requiresPayloadAccess;
   @Nullable volatile String lastCfg = null;
 
   public StatefulFilter(int idx) {
+    this(idx, false);
+  }
+
+  public StatefulFilter(int idx, boolean requiresPayloadAccess) {
     this.idx = idx;
+    this.requiresPayloadAccess = requiresPayloadAccess;
+  }
+
+  @Override
+  public boolean requiresPayloadAccess(
+      FilterConfig config, @Nullable FilterConfig overrideConfig) {
+    return requiresPayloadAccess;
   }
 
   public boolean isShutdown() {
@@ -67,6 +85,21 @@ class StatefulFilter implements Filter {
     return null;
   }
 
+  @Nullable
+  @Override
+  public ClientInterceptor buildClientInterceptor(
+      FilterConfig config,
+      @Nullable FilterConfig overrideConfig,
+      ScheduledExecutorService scheduler) {
+    return new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return next.newCall(method, callOptions);
+      }
+    };
+  }
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder().append("StatefulFilter{")
@@ -80,16 +113,26 @@ class StatefulFilter implements Filter {
   static final class Provider implements Filter.Provider {
 
     private final String typeUrl;
+    private final boolean requiresPayloadAccess;
     private final ConcurrentMap<Integer, StatefulFilter> instances = new ConcurrentHashMap<>();
 
     volatile int counter;
 
     Provider() {
-      this(DEFAULT_TYPE_URL);
+      this(DEFAULT_TYPE_URL, false);
+    }
+
+    Provider(boolean requiresPayloadAccess) {
+      this(DEFAULT_TYPE_URL, requiresPayloadAccess);
     }
 
     Provider(String typeUrl) {
+      this(typeUrl, false);
+    }
+
+    Provider(String typeUrl, boolean requiresPayloadAccess) {
       this.typeUrl = typeUrl;
+      this.requiresPayloadAccess = requiresPayloadAccess;
     }
 
     @Override
@@ -109,7 +152,7 @@ class StatefulFilter implements Filter {
 
     @Override
     public synchronized StatefulFilter newInstance(FilterContext context) {
-      StatefulFilter filter = new StatefulFilter(counter++);
+      StatefulFilter filter = new StatefulFilter(counter++, requiresPayloadAccess);
       instances.put(filter.idx, filter);
       return filter;
     }
