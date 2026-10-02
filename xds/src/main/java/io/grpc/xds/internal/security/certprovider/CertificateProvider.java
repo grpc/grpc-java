@@ -19,11 +19,11 @@ package io.grpc.xds.internal.security.certprovider;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.Status;
 import io.grpc.xds.internal.security.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -78,8 +78,9 @@ public abstract class CertificateProvider implements Closeable {
       downstreamWatchers.remove(watcher);
     }
 
-    @VisibleForTesting public Set<Watcher> getDownstreamWatchers() {
-      return Collections.unmodifiableSet(downstreamWatchers);
+    @VisibleForTesting public synchronized Set<Watcher> getDownstreamWatchers() {
+      // Callbacks may register or remove watchers reentrantly, even while we hold the lock.
+      return ImmutableSet.copyOf(downstreamWatchers);
     }
 
     private void sendLastCertificateUpdate(Watcher watcher) {
@@ -100,7 +101,7 @@ public abstract class CertificateProvider implements Closeable {
       checkNotNull(certChain, "certChain");
       privateKey = key;
       this.certChain = certChain;
-      for (Watcher watcher : downstreamWatchers) {
+      for (Watcher watcher : getDownstreamWatchers()) {
         sendLastCertificateUpdate(watcher);
       }
     }
@@ -109,39 +110,40 @@ public abstract class CertificateProvider implements Closeable {
     public synchronized void updateTrustedRoots(List<X509Certificate> trustedRoots) {
       checkNotNull(trustedRoots, "trustedRoots");
       this.trustedRoots = trustedRoots;
-      for (Watcher watcher : downstreamWatchers) {
+      for (Watcher watcher : getDownstreamWatchers()) {
         sendLastTrustedRootsUpdate(watcher);
       }
     }
 
     @Override
-    public void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap) {
+    public synchronized void updateSpiffeTrustMap(
+        Map<String, List<X509Certificate>> spiffeTrustMap) {
       this.spiffeTrustMap = spiffeTrustMap;
-      for (Watcher watcher : downstreamWatchers) {
+      for (Watcher watcher : getDownstreamWatchers()) {
         sendLastSpiffeTrustMapUpdate(watcher);
       }
     }
 
     @Override
     public synchronized void onError(Status errorStatus) {
-      for (Watcher watcher : downstreamWatchers) {
+      for (Watcher watcher : getDownstreamWatchers()) {
         watcher.onError(errorStatus);
       }
     }
 
-    X509Certificate getLastIdentityCert() {
+    synchronized X509Certificate getLastIdentityCert() {
       if (certChain != null && !certChain.isEmpty()) {
         return certChain.get(0);
       }
       return null;
     }
 
-    void close() {
+    synchronized void close() {
       downstreamWatchers.clear();
       clearValues();
     }
 
-    void clearValues() {
+    synchronized void clearValues() {
       privateKey = null;
       certChain = null;
       trustedRoots = null;
