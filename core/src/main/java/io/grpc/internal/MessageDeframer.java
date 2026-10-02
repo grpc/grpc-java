@@ -437,14 +437,102 @@ public class MessageDeframer implements Closeable, Deframer {
           .asRuntimeException();
     }
 
-    try {
-      // Enforce the maxMessageSize limit on the returned stream.
-      InputStream unlimitedStream =
-          decompressor.decompress(ReadableBuffers.openStream(nextFrame, true));
-      return new SizeEnforcingInputStream(
-          unlimitedStream, maxInboundMessageSize, statsTraceCtx);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+    return new LazyDecompressingInputStream(
+        ReadableBuffers.openStream(nextFrame, true),
+        maxInboundMessageSize,
+        statsTraceCtx,
+        decompressor);
+  }
+
+  /**
+   * An {@link InputStream} that delays decompressing a compressed frame until data is first read.
+   */
+  @VisibleForTesting
+  static final class LazyDecompressingInputStream extends FilterInputStream {
+    private final Decompressor decompressor;
+    private final int maxMessageSize;
+    private final StatsTraceContext statsTraceCtx;
+    private boolean initialized;
+    private boolean closed;
+
+    LazyDecompressingInputStream(
+        InputStream rawStream,
+        int maxMessageSize,
+        StatsTraceContext statsTraceCtx,
+        Decompressor decompressor) {
+      super(rawStream);
+      this.decompressor = decompressor;
+      this.maxMessageSize = maxMessageSize;
+      this.statsTraceCtx = statsTraceCtx;
+    }
+
+    private synchronized void ensureInitialized() throws IOException {
+      if (closed) {
+        throw new IOException("Stream closed");
+      }
+      if (!initialized) {
+        InputStream decompressed = decompressor.decompress(in);
+        in = new SizeEnforcingInputStream(decompressed, maxMessageSize, statsTraceCtx);
+        initialized = true;
+      }
+    }
+
+    @Override
+    public int read() throws IOException {
+      ensureInitialized();
+      return super.read();
+    }
+
+    @Override
+    public int read(byte[] b, int off, int len) throws IOException {
+      ensureInitialized();
+      return super.read(b, off, len);
+    }
+
+    @Override
+    public long skip(long n) throws IOException {
+      ensureInitialized();
+      return super.skip(n);
+    }
+
+    @Override
+    public int available() throws IOException {
+      ensureInitialized();
+      return super.available();
+    }
+
+    @Override
+    public synchronized void close() throws IOException {
+      if (!closed) {
+        closed = true;
+        super.close();
+      }
+    }
+
+    @Override
+    public synchronized void mark(int readlimit) {
+      try {
+        ensureInitialized();
+        super.mark(readlimit);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public synchronized void reset() throws IOException {
+      ensureInitialized();
+      super.reset();
+    }
+
+    @Override
+    public boolean markSupported() {
+      try {
+        ensureInitialized();
+        return super.markSupported();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 

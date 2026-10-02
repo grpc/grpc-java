@@ -19,6 +19,8 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -35,9 +37,11 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
 import io.grpc.Codec;
+import io.grpc.Decompressor;
 import io.grpc.InternalChannelz.TransportStats;
 import io.grpc.StatusRuntimeException;
 import io.grpc.StreamTracer;
+import io.grpc.internal.MessageDeframer.LazyDecompressingInputStream;
 import io.grpc.internal.MessageDeframer.Listener;
 import io.grpc.internal.MessageDeframer.SizeEnforcingInputStream;
 import io.grpc.internal.testing.TestStreamTracer.TestBaseStreamTracer;
@@ -52,6 +56,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.GZIPOutputStream;
 import org.junit.Before;
 import org.junit.Test;
@@ -314,6 +319,75 @@ public class MessageDeframerTest {
     }
 
     @Test
+    public void compressed_lazyDecompression() throws IOException {
+      final AtomicBoolean decompressCalled = new AtomicBoolean(false);
+      Decompressor countingDecompressor = new Decompressor() {
+        @Override
+        public String getMessageEncoding() {
+          return "gzip";
+        }
+
+        @Override
+        public InputStream decompress(InputStream is) throws IOException {
+          decompressCalled.set(true);
+          return new Codec.Gzip().decompress(is);
+        }
+      };
+
+      deframer = new MessageDeframer(listener, countingDecompressor, DEFAULT_MAX_MESSAGE_SIZE,
+          statsTraceCtx, transportTracer);
+      deframer.request(1);
+
+      byte[] payload = compress(new byte[1000]);
+      byte[] header = new byte[]{1, 0, 0, 0, (byte) payload.length};
+      deframer.deframe(buffer(Bytes.concat(header, payload)));
+
+      verify(listener).messagesAvailable(producer.capture());
+      InputStream stream = producer.getValue().next();
+      assertNotNull(stream);
+
+      // Decompressor should not be invoked before bytes are read
+      assertFalse(decompressCalled.get());
+
+      // Reading a byte triggers decompression
+      assertEquals(0, stream.read());
+      assertTrue(decompressCalled.get());
+    }
+
+    @Test
+    public void compressed_closeWithoutReading_noDecompression() throws IOException {
+      final AtomicBoolean decompressCalled = new AtomicBoolean(false);
+      Decompressor countingDecompressor = new Decompressor() {
+        @Override
+        public String getMessageEncoding() {
+          return "gzip";
+        }
+
+        @Override
+        public InputStream decompress(InputStream is) throws IOException {
+          decompressCalled.set(true);
+          return new Codec.Gzip().decompress(is);
+        }
+      };
+
+      deframer = new MessageDeframer(listener, countingDecompressor, DEFAULT_MAX_MESSAGE_SIZE,
+          statsTraceCtx, transportTracer);
+      deframer.request(1);
+
+      byte[] payload = compress(new byte[1000]);
+      byte[] header = new byte[]{1, 0, 0, 0, (byte) payload.length};
+      deframer.deframe(buffer(Bytes.concat(header, payload)));
+
+      verify(listener).messagesAvailable(producer.capture());
+      InputStream stream = producer.getValue().next();
+      assertNotNull(stream);
+
+      // Closing without reading should not decompress
+      stream.close();
+      assertFalse(decompressCalled.get());
+    }
+
+    @Test
     public void deliverIsReentrantSafe() {
       doAnswer(
           new Answer<Void>() {
@@ -490,6 +564,79 @@ public class MessageDeframerTest {
       assertEquals(2, skipped);
       stream.close();
       checkSizeEnforcingInputStreamStats(tracer, 3);
+    }
+  }
+
+  @RunWith(JUnit4.class)
+  public static class LazyDecompressingInputStreamTests {
+    private TestBaseStreamTracer tracer = new TestBaseStreamTracer();
+    private StatsTraceContext statsTraceCtx = new StatsTraceContext(new StreamTracer[]{tracer});
+
+    @Test
+    public void lazyDecompressingInputStream_doesNotInitializeUntilRead() throws IOException {
+      final AtomicBoolean decompressCalled = new AtomicBoolean(false);
+      Decompressor countingDecompressor = new Decompressor() {
+        @Override
+        public String getMessageEncoding() {
+          return "gzip";
+        }
+
+        @Override
+        public InputStream decompress(InputStream is) throws IOException {
+          decompressCalled.set(true);
+          return new Codec.Gzip().decompress(is);
+        }
+      };
+
+      ByteArrayInputStream in =
+          new ByteArrayInputStream(compress("hello".getBytes(StandardCharsets.UTF_8)));
+      LazyDecompressingInputStream stream = new LazyDecompressingInputStream(
+          in, 100, statsTraceCtx, countingDecompressor);
+
+      assertFalse(decompressCalled.get());
+      byte[] buf = new byte[5];
+      int read = stream.read(buf);
+      assertEquals(5, read);
+      assertEquals("hello", new String(buf, StandardCharsets.UTF_8));
+      assertTrue(decompressCalled.get());
+      stream.close();
+    }
+
+    @Test
+    public void lazyDecompressingInputStream_closeWithoutRead() throws IOException {
+      final AtomicBoolean decompressCalled = new AtomicBoolean(false);
+      final AtomicBoolean inClosed = new AtomicBoolean(false);
+      Decompressor countingDecompressor = new Decompressor() {
+        @Override
+        public String getMessageEncoding() {
+          return "gzip";
+        }
+
+        @Override
+        public InputStream decompress(InputStream is) throws IOException {
+          decompressCalled.set(true);
+          return new Codec.Gzip().decompress(is);
+        }
+      };
+
+      ByteArrayInputStream in =
+          new ByteArrayInputStream(compress("hello".getBytes(StandardCharsets.UTF_8))) {
+            @Override
+            public void close() throws IOException {
+              inClosed.set(true);
+              super.close();
+            }
+          };
+      LazyDecompressingInputStream stream = new LazyDecompressingInputStream(
+          in, 100, statsTraceCtx, countingDecompressor);
+
+      assertFalse(decompressCalled.get());
+      stream.close();
+      assertTrue(inClosed.get());
+      assertFalse(decompressCalled.get());
+
+      // Reading after close should throw IOException
+      assertThrows(IOException.class, () -> stream.read());
     }
   }
 
