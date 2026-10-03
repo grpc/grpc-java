@@ -85,6 +85,20 @@ public final class ServerCalls {
    * Adaptor to a unary call method.
    */
   public interface UnaryMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    /**
+     * Invoke the method.
+     *
+     * @param request the request message from the client
+     * @param responseObserver the observer to receive the single response. Calling {@code
+     *     responseObserver}'s {@link StreamObserver#onCompleted} or {@link
+     *     StreamObserver#onError} is the end of the RPC. {@code onCompleted()} will close the RPC
+     *     with status code OK. {@code onError()} will convert the Throwable to a Status with {@link
+     *     Status#fromThrowable} and trailers with {@link Status#trailersFromThrowable}. The {@link
+     *     Status#getCause} is not sent to the client, except if done by an interceptor. Callers
+     *     generally create a Throwable with {@link Status#asException()}, {@link
+     *     Status#asException(Metadata)}, {@link Status#asRuntimeException()}, or {@link
+     *     Status#asRuntimeException(Metadata)}.
+     */
     @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
   }
 
@@ -92,6 +106,20 @@ public final class ServerCalls {
    * Adaptor to a server streaming method.
    */
   public interface ServerStreamingMethod<ReqT, RespT> extends UnaryRequestMethod<ReqT, RespT> {
+    /**
+     * Invoke the method.
+     *
+     * @param request the request message from the client
+     * @param responseObserver the observer to receive the response stream. Calling {@code
+     *     responseObserver}'s {@link StreamObserver#onCompleted} or {@link
+     *     StreamObserver#onError} is the end of the RPC. {@code onCompleted()} will close the RPC
+     *     with status code OK. {@code onError()} will convert the Throwable to a Status with {@link
+     *     Status#fromThrowable} and trailers with {@link Status#trailersFromThrowable}. The {@link
+     *     Status#getCause} is not sent to the client, except if done by an interceptor. Callers
+     *     generally create a Throwable with {@link Status#asException()}, {@link
+     *     Status#asException(Metadata)}, {@link Status#asRuntimeException()}, or {@link
+     *     Status#asRuntimeException(Metadata)}.
+     */
     @Override void invoke(ReqT request, StreamObserver<RespT> responseObserver);
   }
 
@@ -99,6 +127,24 @@ public final class ServerCalls {
    * Adaptor to a client streaming method.
    */
   public interface ClientStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    /**
+     * Invoke the method.
+     *
+     * <h3>Client errors</h3>
+     * The Throwable received by the server's request stream observer when converted to a status
+     * with Status.fromThrowable(), always has the status code CANCELLED.
+     *
+     * @param responseObserver the observer to receive the single response. Calling {@code
+     *     responseObserver}'s {@link StreamObserver#onCompleted} or {@link
+     *     StreamObserver#onError} is the end of the RPC. {@code onCompleted()} will close the RPC
+     *     with status code OK. {@code onError()} will convert the Throwable to a Status with {@link
+     *     Status#fromThrowable} and trailers with {@link Status#trailersFromThrowable}. The {@link
+     *     Status#getCause} is not sent to the client, except if done by an interceptor. Callers
+     *     generally create a Throwable with {@link Status#asException()}, {@link
+     *     Status#asException(Metadata)}, {@link Status#asRuntimeException()}, or {@link
+     *     Status#asRuntimeException(Metadata)}.
+     * @return a stream observer for receiving the request stream from the client
+     */
     @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
   }
 
@@ -106,6 +152,24 @@ public final class ServerCalls {
    * Adaptor to a bidirectional streaming method.
    */
   public interface BidiStreamingMethod<ReqT, RespT> extends StreamingRequestMethod<ReqT, RespT> {
+    /**
+     * Invoke the method.
+     *
+     * <h3>Client errors</h3>
+     * The Throwable received by the server's request stream observer when converted to a status
+     * with Status.fromThrowable(), always has the status code CANCELLED.
+     *
+     * @param responseObserver the observer to receive the response stream. Calling {@code
+     *     responseObserver}'s {@link StreamObserver#onCompleted} or {@link
+     *     StreamObserver#onError} is the end of the RPC. {@code onCompleted()} will close the RPC
+     *     with status code OK. {@code onError()} will convert the Throwable to a Status with {@link
+     *     Status#fromThrowable} and trailers with {@link Status#trailersFromThrowable}. The {@link
+     *     Status#getCause} is not sent to the client, except if done by an interceptor. Callers
+     *     generally create a Throwable with {@link Status#asException()}, {@link
+     *     Status#asException(Metadata)}, {@link Status#asRuntimeException()}, or {@link
+     *     Status#asRuntimeException(Metadata)}.
+     * @return a stream observer for receiving the request stream from the client
+     */
     @Override StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
   }
 
