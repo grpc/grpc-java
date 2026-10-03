@@ -78,6 +78,15 @@ public final class ProtoLiteUtils {
   }
 
   /**
+   * Returns the global extension registry.
+   *
+   * @since 1.62.0
+   */
+  public static ExtensionRegistryLite getExtensionRegistry() {
+    return globalRegistry;
+  }
+
+  /**
    * Creates a {@link Marshaller} for protos of the same type as {@code defaultInstance}.
    *
    * @since 1.0.0
