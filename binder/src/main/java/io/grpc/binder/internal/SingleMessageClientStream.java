@@ -152,6 +152,11 @@ final class SingleMessageClientStream implements ClientStream {
   }
 
   @Override
+  public void setMessageCompression(boolean enabled, String compressorName) {
+    // Ignore.
+  }
+
+  @Override
   public void setAuthority(String authority) {
     // Ignore.
   }

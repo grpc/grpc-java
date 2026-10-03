@@ -542,7 +542,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   @Override
   public void setMessageCompression(boolean enabled) {
     checkState(stream != null, "Not started");
-    stream.setMessageCompression(enabled);
+    String compressorName = callOptions.getCompressor();
+    stream.setMessageCompression(enabled, compressorName);
   }
 
   @Override
