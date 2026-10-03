@@ -125,6 +125,8 @@ $ bazel-bin/hello-world-client
 
 - [OAuth2-based Authentication](example-oauth)
 
+- [Log4j 2 logging context](example-log4j2)
+
 - [Pre-serialized messages](src/main/java/io/grpc/examples/preserialized)
 
 ## Unit test examples
