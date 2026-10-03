@@ -175,8 +175,10 @@ class NettyClientHandler extends AbstractNettyHandler {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
+    // TODO: Add support upstream in Netty for injecting a custom Http2HeadersEncoder subclass
+    // into Http2FrameCodecBuilder before migrating to that API.
     Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
-        sensitivityDetector(neverIndexedMetadataKeys), false, 16, Integer.MAX_VALUE);
+        sensitivityDetector(neverIndexedMetadataKeys), false, 128, Integer.MAX_VALUE);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter(encoder);
     Http2Connection connection = new DefaultHttp2Connection(false);
     UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);

@@ -189,7 +189,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
         NettyClientHandler.sensitivityDetector(neverIndexedMetadataKeys),
         false,
-        16,
+        128,
         Integer.MAX_VALUE);
     Http2FrameWriter frameWriter =
         new Http2OutboundFrameLogger(new DefaultHttp2FrameWriter(encoder), frameLogger);
