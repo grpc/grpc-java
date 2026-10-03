@@ -1125,6 +1125,14 @@ public class ProtocolNegotiatorsTest {
   }
 
   @Test
+  public void tls_hostLastLabelStartsWithDigit() {
+    HostPort hostPort = ProtocolNegotiators.parseAuthority("otlp.1234-k8s-namespace:4317");
+
+    assertEquals("otlp.1234-k8s-namespace", hostPort.host);
+    assertEquals(4317, hostPort.port);
+  }
+
+  @Test
   public void tls_invalidHost() throws SSLException {
     HostPort hostPort = ProtocolNegotiators.parseAuthority("bad_host:1234");
 

@@ -39,6 +39,7 @@ import io.grpc.Status.Code;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil.Http2Error;
 import io.grpc.testing.TestMethodDescriptors;
+import java.net.URI;
 import java.util.ArrayList;
 import org.junit.Rule;
 import org.junit.Test;
@@ -237,6 +238,41 @@ public class GrpcUtilTest {
         () -> GrpcUtil.checkAuthority("foo@valid"));
     assertThat(e).hasMessageThat()
         .isEqualTo("Userinfo must not be present on authority: 'foo@valid'");
+  }
+
+  @Test
+  public void authorityFromHostAndPort_lastLabelStartsWithDigit() {
+    assertEquals(
+        "otlp.1234-k8s-namespace:4317",
+        GrpcUtil.authorityFromHostAndPort("otlp.1234-k8s-namespace", 4317));
+    assertEquals(
+        "otlp.1234-k8s-namespace.:4317",
+        GrpcUtil.authorityFromHostAndPort("otlp.1234-k8s-namespace.", 4317));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> GrpcUtil.authorityFromHostAndPort("bad_host.1234", 4317));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> GrpcUtil.authorityFromHostAndPort("otlp.1234-k8s-namespace", -2));
+  }
+
+  @Test
+  public void getHostAndPort_lastLabelStartsWithDigit() {
+    URI uriWithPort = GrpcUtil.authorityToUri("otlp.1234-k8s-namespace:4317");
+    assertEquals("otlp.1234-k8s-namespace", GrpcUtil.getHost(uriWithPort));
+    assertEquals(4317, GrpcUtil.getPort(uriWithPort));
+
+    URI uriWithoutPort = GrpcUtil.authorityToUri("otlp.1234-k8s-namespace");
+    assertEquals("otlp.1234-k8s-namespace", GrpcUtil.getHost(uriWithoutPort));
+    assertEquals(-1, GrpcUtil.getPort(uriWithoutPort));
+
+    URI uriWithTrailingDot = GrpcUtil.authorityToUri("otlp.1234-k8s-namespace.:4317");
+    assertEquals("otlp.1234-k8s-namespace.", GrpcUtil.getHost(uriWithTrailingDot));
+    assertEquals(4317, GrpcUtil.getPort(uriWithTrailingDot));
+
+    URI invalidUri = GrpcUtil.authorityToUri("bad_host.1234:4317");
+    assertNull(GrpcUtil.getHost(invalidUri));
+    assertEquals(-1, GrpcUtil.getPort(invalidUri));
   }
 
   @Test
