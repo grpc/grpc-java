@@ -9,6 +9,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * also be used to get the current xDS states directly from the client.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class ClientStatusDiscoveryServiceGrpc {
 

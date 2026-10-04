@@ -8,6 +8,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * performance with various types of payload.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class TestServiceGrpc {
 

@@ -25,6 +25,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * it easier for the server to maintain state.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class ExternalProcessorGrpc {
 

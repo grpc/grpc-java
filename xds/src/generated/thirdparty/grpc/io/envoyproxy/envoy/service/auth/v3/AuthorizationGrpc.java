@@ -8,6 +8,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * requests to a networked service.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class AuthorizationGrpc {
 

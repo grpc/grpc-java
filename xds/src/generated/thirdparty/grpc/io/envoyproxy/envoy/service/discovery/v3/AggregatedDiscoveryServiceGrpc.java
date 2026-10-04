@@ -12,6 +12,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * the multiplexed singleton APIs at the Envoy instance and management server.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class AggregatedDiscoveryServiceGrpc {
 

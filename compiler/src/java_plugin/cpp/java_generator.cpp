@@ -1218,6 +1218,9 @@ static void PrintService(const ServiceDescriptor* service,
   // TODO(nmittler): Replace with WriteServiceDocComment once included by protobuf distro.
   GrpcWriteServiceDocComment(p, service, NONE);
 
+  // Disable all javac warnings since the code is generated and the user can do nothing with these warnings.
+  p->Print(*vars, "@java.lang.SuppressWarnings(\"all\")\n");
+
   if (generated_annotation == GeneratedAnnotation::JAVAX) {
     p->Print(
         *vars,
