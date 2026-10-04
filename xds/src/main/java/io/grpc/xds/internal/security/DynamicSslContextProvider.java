@@ -142,7 +142,15 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   /** Propagates error to all the callback receivers. */
   public final void onError(Status error) {
     for (Callback callback : clonePendingCallbacksAndClear()) {
-      callback.onException(error.asException());
+      performCallback(
+          new SslContextGetter() {
+            @Override
+            public AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> get()
+                throws Exception {
+              throw error.asException();
+            }
+          },
+          callback);
     }
   }
 
