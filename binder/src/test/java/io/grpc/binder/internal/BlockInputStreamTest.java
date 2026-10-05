@@ -93,6 +93,18 @@ public final class BlockInputStreamTest {
   }
 
   @Test
+  public void testSingleByteRead_unsigned() throws Exception {
+    try (BlockInputStream bis =
+        new BlockInputStream(new byte[] {0x00, 0x7f, (byte) 0x80, (byte) 0xff})) {
+      assertThat(bis.read()).isEqualTo(0x00);
+      assertThat(bis.read()).isEqualTo(0x7f);
+      assertThat(bis.read()).isEqualTo(0x80);
+      assertThat(bis.read()).isEqualTo(0xff);
+      assertThat(bis.read()).isEqualTo(-1);
+    }
+  }
+
+  @Test
   public void testMultipleBlocksEmptyFinalBlock() throws Exception {
     BlockInputStream bis = new BlockInputStream(new byte[][] {getBytes(10, 1), getBytes(0, 0)}, 10);
 
