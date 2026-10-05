@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -132,6 +133,29 @@ public class NettyChannelBuilderTest {
       assertEquals("original:1234", b.authority());
     } finally {
       shutdown(b);
+    }
+  }
+
+  @Test
+  public void authorityFromHostWithLastLabelStartingWithDigit() throws Exception {
+    NettyChannelBuilder builder =
+        NettyChannelBuilder.forAddress("otlp.1234-k8s-namespace", 4317);
+
+    ManagedChannel b = builder.build();
+    try {
+      assertEquals("otlp.1234-k8s-namespace:4317", b.authority());
+    } finally {
+      shutdown(b);
+    }
+
+    ManagedChannel b2 =
+        Grpc.newChannelBuilderForAddress(
+                "otlp.1234-k8s-namespace", 4317, InsecureChannelCredentials.create())
+            .build();
+    try {
+      assertEquals("otlp.1234-k8s-namespace:4317", b2.authority());
+    } finally {
+      shutdown(b2);
     }
   }
 

@@ -103,6 +103,24 @@ public class ProxyDetectorImplTest {
   }
 
   @Test
+  public void detectProxyForHostnameWithLastLabelStartingWithDigit() throws Exception {
+    InetSocketAddress digitToplevelDest =
+        InetSocketAddress.createUnresolved("otlp.1234-k8s-namespace", 4317);
+    Proxy proxy = new Proxy(Proxy.Type.HTTP, unresolvedProxy);
+    when(proxySelector.select(URI.create("https://otlp.1234-k8s-namespace:4317")))
+        .thenReturn(ImmutableList.of(proxy));
+
+    ProxiedSocketAddress detected = proxyDetector.proxyFor(digitToplevelDest);
+    assertNotNull(detected);
+    HttpConnectProxiedSocketAddress expected = HttpConnectProxiedSocketAddress.newBuilder()
+        .setTargetAddress(digitToplevelDest)
+        .setProxyAddress(
+            new InetSocketAddress(InetAddress.getByName(unresolvedProxy.getHostName()), proxyPort))
+        .build();
+    assertEquals(expected, detected);
+  }
+
+  @Test
   public void detectProxyForResolvedDestination() throws Exception {
     InetSocketAddress resolved = new InetSocketAddress(InetAddress.getByName("10.1.2.3"), 10);
     assertFalse(resolved.isUnresolved());

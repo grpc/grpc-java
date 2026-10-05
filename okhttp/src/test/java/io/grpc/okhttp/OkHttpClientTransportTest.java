@@ -1881,6 +1881,22 @@ public class OkHttpClientTransportTest {
   }
 
   @Test
+  public void authorityWithLastLabelStartingWithDigit() {
+    clientTransport = new OkHttpClientTransport(
+        channelBuilder.buildTransportFactory(),
+        new InetSocketAddress("localhost", 1234),
+        "otlp.1234-k8s-namespace:4317",
+        "userAgent",
+        EAG_ATTRS,
+        NO_PROXY,
+        tooManyPingsRunnable,
+        null);
+
+    assertEquals("otlp.1234-k8s-namespace", clientTransport.getOverridenHost());
+    assertEquals(4317, clientTransport.getOverridenPort());
+  }
+
+  @Test
   public void unreachableServer() throws Exception {
     clientTransport = new OkHttpClientTransport(
         channelBuilder.buildTransportFactory(),
