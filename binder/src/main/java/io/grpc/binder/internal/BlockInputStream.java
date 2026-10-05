@@ -38,7 +38,13 @@ import javax.annotation.concurrent.NotThreadSafe;
 final class BlockInputStream extends InputStream implements KnownLength, Drainable {
 
   @Nullable private byte[][] blocks;
+
+  /**
+   * The block being read, or null at EOF. Invariant: when non-null, {@code available > 0} and
+   * {@code blockOffset < currentBlock.length}, so {@link #read()} can index it unconditionally.
+   */
   @Nullable private byte[] currentBlock;
+
   private int blockIndex;
   private int blockOffset;
   private int available;
@@ -66,17 +72,16 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
   BlockInputStream(byte[][] blocks, int available) {
     this.blocks = blocks;
     this.available = available;
-    if (blocks.length > 0) {
-      currentBlock = blocks[0];
-    }
+    this.blockIndex = -1;
+    nextBlock();
   }
 
   @Override
   public int read() throws IOException {
-    if (currentBlock != null) {
+    if (currentBlock != null) { // Implies available > 0 and an unread byte at blockOffset.
       int res = currentBlock[blockOffset++] & 0xFF;
       available -= 1;
-      if (blockOffset == currentBlock.length) {
+      if (blockOffset == currentBlock.length || available == 0) {
         nextBlock();
       }
       return res;
@@ -87,7 +92,7 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
   @Override
   public int read(byte[] data, int off, int len) throws IOException {
     int stillToRead = len;
-    while (currentBlock != null) {
+    while (currentBlock != null) { // Implies available > 0 and an unread byte at blockOffset.
       int n = Ints.min(stillToRead, currentBlock.length - blockOffset, available);
       System.arraycopy(currentBlock, blockOffset, data, off, n);
       off += n;
@@ -95,7 +100,7 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
       available -= n;
       if (stillToRead == 0) {
         blockOffset += n;
-        if (blockOffset == currentBlock.length) {
+        if (blockOffset == currentBlock.length || available == 0) {
           nextBlock();
         }
         break;
@@ -110,14 +115,18 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
     return -1;
   }
 
+  /** Advances to the next non-empty block, or clears {@link #currentBlock} if none remain. */
   private void nextBlock() {
     blockIndex += 1;
     blockOffset = 0;
-    if (blocks != null && blockIndex < blocks.length) {
-      currentBlock = blocks[blockIndex];
-    } else {
-      currentBlock = null;
+    while (blocks != null && blockIndex < blocks.length && available > 0) {
+      if (blocks[blockIndex].length > 0) {
+        currentBlock = blocks[blockIndex];
+        return;
+      }
+      blockIndex += 1;
     }
+    currentBlock = null;
   }
 
   @Override

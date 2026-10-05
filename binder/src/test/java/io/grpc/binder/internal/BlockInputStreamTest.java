@@ -105,6 +105,63 @@ public final class BlockInputStreamTest {
   }
 
   @Test
+  public void testMultipleBlocksZeroAvailable() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[][] {{1, 2}}, 0)) {
+      assertThat(bis.read()).isEqualTo(-1);
+      assertThat(bis.read(buff, 0, 10)).isEqualTo(-1);
+      assertThat(bis.drainTo(new ByteArrayOutputStream())).isEqualTo(0);
+    }
+  }
+
+  @Test
+  public void testMultipleBlocksLessData_singleByteRead() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[][] {{1, 2}, {3, 4}}, 3)) {
+      assertThat(bis.read()).isEqualTo(1);
+      assertThat(bis.read()).isEqualTo(2);
+      assertThat(bis.read()).isEqualTo(3);
+      assertThat(bis.read()).isEqualTo(-1);
+    }
+  }
+
+  @Test
+  public void testMultipleBlocksLessData_singleByteReadThenDrain() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[][] {{1, 2}, {3, 4}}, 3)) {
+      assertThat(bis.read()).isEqualTo(1);
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      assertThat(bis.drainTo(baos)).isEqualTo(2);
+      assertThat(baos.toByteArray()).isEqualTo(new byte[] {2, 3});
+    }
+  }
+
+  @Test
+  public void testMultipleBlocksLessData_exactBulkReadThenSingleByteRead() throws Exception {
+    try (BlockInputStream bis =
+        new BlockInputStream(new byte[][] {getBytes(10, 1), getBytes(10, 2)}, 15)) {
+      assertThat(bis.read(buff, 0, 15)).isEqualTo(15);
+      assertBytes(buff, 0, 10, 1);
+      assertBytes(buff, 10, 5, 2);
+      assertThat(bis.read()).isEqualTo(-1);
+    }
+  }
+
+  @Test
+  public void testMultipleBlocksEmptyFirstBlock_singleByteRead() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[][] {{}, {1}}, 1)) {
+      assertThat(bis.read()).isEqualTo(1);
+      assertThat(bis.read()).isEqualTo(-1);
+    }
+  }
+
+  @Test
+  public void testMultipleBlocksEmptyMiddleBlock_singleByteRead() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[][] {{1}, {}, {2}}, 2)) {
+      assertThat(bis.read()).isEqualTo(1);
+      assertThat(bis.read()).isEqualTo(2);
+      assertThat(bis.read()).isEqualTo(-1);
+    }
+  }
+
+  @Test
   public void testMultipleBlocksEmptyFinalBlock() throws Exception {
     BlockInputStream bis = new BlockInputStream(new byte[][] {getBytes(10, 1), getBytes(0, 0)}, 10);
 
@@ -112,6 +169,25 @@ public final class BlockInputStreamTest {
     assertBytes(buff, 0, 10, 1);
     assertThat(bis.read(buff, 0, 20)).isEqualTo(-1);
     assertThat(bis.read()).isEqualTo(-1);
+  }
+
+  @Test
+  public void testMultipleBlocksEmptyFinalBlock_singleByteRead() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[][] {{1, 2}, {}}, 2)) {
+      assertThat(bis.read()).isEqualTo(1);
+      assertThat(bis.read()).isEqualTo(2);
+      assertThat(bis.read()).isEqualTo(-1);
+    }
+  }
+
+  @Test
+  public void testMultipleBlocksEmptyFinalBlock_exactBulkReadThenSingleByteRead() throws Exception {
+    try (BlockInputStream bis =
+        new BlockInputStream(new byte[][] {getBytes(10, 1), getBytes(0, 0)}, 10)) {
+      assertThat(bis.read(buff, 0, 10)).isEqualTo(10);
+      assertBytes(buff, 0, 10, 1);
+      assertThat(bis.read()).isEqualTo(-1);
+    }
   }
 
   @Test
