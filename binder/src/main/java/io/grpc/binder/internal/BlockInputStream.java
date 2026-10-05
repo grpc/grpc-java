@@ -74,7 +74,7 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
   @Override
   public int read() throws IOException {
     if (currentBlock != null) {
-      int res = currentBlock[blockOffset++];
+      int res = currentBlock[blockOffset++] & 0xFF;
       available -= 1;
       if (blockOffset == currentBlock.length) {
         nextBlock();
