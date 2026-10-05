@@ -20,14 +20,19 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.xds.internal.security.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A plug-in that provides certificates required by the xDS security component and created
@@ -39,6 +44,8 @@ import java.util.Set;
  * security.
  */
 public abstract class CertificateProvider implements Closeable {
+
+  private static final Logger logger = Logger.getLogger(CertificateProvider.class.getName());
 
   /** A watcher is registered to receive certificate updates. */
   public interface Watcher {
@@ -53,25 +60,41 @@ public abstract class CertificateProvider implements Closeable {
 
   @VisibleForTesting
   public static final class DistributorWatcher implements Watcher {
-    private PrivateKey privateKey;
-    private List<X509Certificate> certChain;
-    private List<X509Certificate> trustedRoots;
-    private Map<String, List<X509Certificate>> spiffeTrustMap;
+    // All watcher callbacks must run in syncContext to avoid possibility of deadlock
+    private final SynchronizationContext syncContext = new SynchronizationContext(
+        new Thread.UncaughtExceptionHandler() {
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            logger.log(Level.SEVERE, "Uncaught exception in DistributorWatcher callback", e);
+          }
+        });
 
-    @VisibleForTesting
-    final Set<Watcher> downstreamWatchers = new HashSet<>();
+    @GuardedBy("this") private PrivateKey privateKey;
+    @GuardedBy("this") private List<X509Certificate> certChain;
+    @GuardedBy("this") private List<X509Certificate> trustedRoots;
+    @GuardedBy("this") private Map<String, List<X509Certificate>> spiffeTrustMap;
 
-    synchronized void addWatcher(Watcher watcher) {
-      downstreamWatchers.add(watcher);
-      if (privateKey != null && certChain != null) {
-        sendLastCertificateUpdate(watcher);
+    @GuardedBy("this")
+    private final Set<Watcher> downstreamWatchers = new HashSet<>();
+
+    void addWatcher(Watcher watcher) {
+      synchronized (this) {
+        downstreamWatchers.add(watcher);
+        if (privateKey != null && certChain != null) {
+          PrivateKey key = privateKey;
+          List<X509Certificate> chain = certChain;
+          syncContext.executeLater(() -> watcher.updateCertificate(key, chain));
+        }
+        if (trustedRoots != null) {
+          List<X509Certificate> roots = trustedRoots;
+          syncContext.executeLater(() -> watcher.updateTrustedRoots(roots));
+        }
+        if (spiffeTrustMap != null) {
+          Map<String, List<X509Certificate>> map = spiffeTrustMap;
+          syncContext.executeLater(() -> watcher.updateSpiffeTrustMap(map));
+        }
       }
-      if (trustedRoots != null) {
-        sendLastTrustedRootsUpdate(watcher);
-      }
-      if (spiffeTrustMap != null) {
-        sendLastSpiffeTrustMapUpdate(watcher);
-      }
+      syncContext.drain();
     }
 
     synchronized void removeWatcher(Watcher watcher) {
@@ -79,56 +102,56 @@ public abstract class CertificateProvider implements Closeable {
     }
 
     @VisibleForTesting public synchronized Set<Watcher> getDownstreamWatchers() {
-      // Callbacks may register or remove watchers reentrantly, even while we hold the lock.
       return ImmutableSet.copyOf(downstreamWatchers);
     }
 
-    private void sendLastCertificateUpdate(Watcher watcher) {
-      watcher.updateCertificate(privateKey, certChain);
-    }
-
-    private void sendLastTrustedRootsUpdate(Watcher watcher) {
-      watcher.updateTrustedRoots(trustedRoots);
-    }
-
-    private void sendLastSpiffeTrustMapUpdate(Watcher watcher) {
-      watcher.updateSpiffeTrustMap(spiffeTrustMap);
-    }
-
     @Override
-    public synchronized void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
+    public void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
       checkNotNull(key, "key");
       checkNotNull(certChain, "certChain");
-      privateKey = key;
-      this.certChain = certChain;
-      for (Watcher watcher : getDownstreamWatchers()) {
-        sendLastCertificateUpdate(watcher);
+      synchronized (this) {
+        privateKey = key;
+        this.certChain = certChain;
+        for (Watcher watcher : downstreamWatchers) {
+          syncContext.executeLater(() -> watcher.updateCertificate(key, certChain));
+        }
       }
+      syncContext.drain();
     }
 
     @Override
-    public synchronized void updateTrustedRoots(List<X509Certificate> trustedRoots) {
+    public void updateTrustedRoots(List<X509Certificate> trustedRoots) {
       checkNotNull(trustedRoots, "trustedRoots");
-      this.trustedRoots = trustedRoots;
-      for (Watcher watcher : getDownstreamWatchers()) {
-        sendLastTrustedRootsUpdate(watcher);
+      synchronized (this) {
+        this.trustedRoots = trustedRoots;
+        for (Watcher watcher : downstreamWatchers) {
+          syncContext.executeLater(() -> watcher.updateTrustedRoots(trustedRoots));
+        }
       }
+      syncContext.drain();
     }
 
     @Override
-    public synchronized void updateSpiffeTrustMap(
-        Map<String, List<X509Certificate>> spiffeTrustMap) {
-      this.spiffeTrustMap = spiffeTrustMap;
-      for (Watcher watcher : getDownstreamWatchers()) {
-        sendLastSpiffeTrustMapUpdate(watcher);
+    public void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap) {
+      synchronized (this) {
+        this.spiffeTrustMap = spiffeTrustMap;
+        for (Watcher watcher : downstreamWatchers) {
+          syncContext.executeLater(() -> watcher.updateSpiffeTrustMap(spiffeTrustMap));
+        }
       }
+      syncContext.drain();
     }
 
     @Override
-    public synchronized void onError(Status errorStatus) {
-      for (Watcher watcher : getDownstreamWatchers()) {
-        watcher.onError(errorStatus);
+    public void onError(Status errorStatus) {
+      List<Watcher> watchers;
+      synchronized (this) {
+        watchers = new ArrayList<>(downstreamWatchers);
       }
+      for (Watcher watcher : watchers) {
+        syncContext.executeLater(() -> watcher.onError(errorStatus));
+      }
+      syncContext.drain();
     }
 
     synchronized X509Certificate getLastIdentityCert() {
@@ -154,7 +177,7 @@ public abstract class CertificateProvider implements Closeable {
    * Concrete subclasses will call this to register the {@link Watcher}.
    *
    * @param watcher to register
-   * @param notifyCertUpdates if true, the provider is required to call the watcher’s
+   * @param notifyCertUpdates if true, the provider is required to call the watcher's
    *     updateCertificate method. Implies the Provider is capable of minting certificates.
    *     Used by server-side and mTLS client-side. Note the Provider is always required
    *     to call updateTrustedRoots to provide trusted-root updates.
