@@ -289,6 +289,7 @@ public final class AsyncSecurityPoliciesTest {
     ListenableFuture<Status> authFuture = asyncPolicy.checkAuthorizationAsync(SOME_UID);
     assertThat(awaitResult(settableUid)).isEqualTo(SOME_UID);
     authFuture.cancel(false);
+    executor.submit(() -> {}).get(10, TimeUnit.SECONDS);
 
     assertThat(delegateAuthFuture.isCancelled()).isTrue();
   }

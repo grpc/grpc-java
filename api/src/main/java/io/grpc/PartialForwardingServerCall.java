@@ -88,6 +88,11 @@ abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT,
   }
 
   @Override
+  public void triggerEvent(Object event) {
+    delegate().triggerEvent(event);
+  }
+
+  @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }

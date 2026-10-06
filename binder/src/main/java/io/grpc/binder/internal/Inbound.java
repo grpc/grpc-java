@@ -367,6 +367,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
           // The first transaction arrived, but it contained no message data.
           queuedTransactionData.remove(0);
           firstQueuedTransactionIndex += 1;
+          lookForCompleteMessage();
         }
       }
       reportInboundSize(parcel.dataSize());
@@ -666,6 +667,17 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
     @GuardedBy("this")
     protected void deliverCloseAbnormal(Status status) {
       listener.closed(status);
+    }
+
+    void triggerEvent(Object event) {
+      synchronized (this) {
+        if (isClosed()) {
+          return;
+        }
+        if (listener != null) {
+          listener.triggerEvent(event);
+        }
+      }
     }
 
     @GuardedBy("this")

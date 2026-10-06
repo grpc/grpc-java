@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -86,6 +87,9 @@ public class XdsClientFallbackTest {
   private static final String FALLBACK_CLUSTER_NAME = "fallback-" + CLUSTER_NAME;
   private static final String EDS_NAME = "eds-service-0";
   private static final String FALLBACK_EDS_NAME = "fallback-" + EDS_NAME;
+  private static final String AUTHORITY_NAME = "authority.example.com";
+  private static final String AUTHORITY_LDS_NAME =
+      "xdstp://" + AUTHORITY_NAME + "/envoy.config.listener.v3.Listener/listener1";
   private static final HttpConnectionManager MAIN_HTTP_CONNECTION_MANAGER =
       HttpConnectionManager.forRdsName(0, RDS_NAME, ImmutableList.of(
           new Filter.NamedFilterConfig("terminal-filter", RouterFilter.ROUTER_CONFIG)));
@@ -95,6 +99,7 @@ public class XdsClientFallbackTest {
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private boolean originalEnableXdsFallback;
+  private boolean originalEnableEndpointFallback;
   private final FakeClock fakeClock = new FakeClock();
   private final MetricRecorder metricRecorder = new MetricRecorder() {};
 
@@ -175,6 +180,8 @@ public class XdsClientFallbackTest {
   @Before
   public void setUp() throws XdsInitializationException {
     originalEnableXdsFallback = CommonBootstrapperTestUtils.setEnableXdsFallback(true);
+    originalEnableEndpointFallback =
+        CommonBootstrapperTestUtils.setEnableEndpointFallback(false);
     if (mainXdsServer == null) {
       throw new XdsInitializationException("Failed to create ControlPlaneRule for main TD server");
     }
@@ -194,6 +201,7 @@ public class XdsClientFallbackTest {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
     CommonBootstrapperTestUtils.setEnableXdsFallback(originalEnableXdsFallback);
+    CommonBootstrapperTestUtils.setEnableEndpointFallback(originalEnableEndpointFallback);
   }
 
   private static void setAdsConfig(ControlPlaneRule controlPlane, String serverName) {
@@ -581,6 +589,106 @@ public class XdsClientFallbackTest {
 
     verify(cdsWatcher, timeout(5000)).onResourceChanged(any());
     assertThat(getLrsServerInfo("localhost:" + fallbackServer.getServer().getPort())).isNull();
+  }
+
+  /**
+   * gRFC A95: for an authority with fallback_on_reachability_only, falling back must happen when
+   * the primary server becomes unreachable, even though every subscribed resource is cached.
+   */
+  @Test
+  public void connect_then_mainServerDown_fallbackOnReachabilityOnly() throws Exception {
+    CommonBootstrapperTestUtils.setEnableEndpointFallback(true);
+    verifyReachabilityOnlyFallback(true);
+  }
+
+  /**
+   * Without the knob, gRFC A71 behavior applies: cached resources suppress fallback entirely.
+   */
+  @Test
+  public void connect_then_mainServerDown_noReachabilityOnlyKnob_staysOnCache() throws Exception {
+    CommonBootstrapperTestUtils.setEnableEndpointFallback(true);
+    verifyReachabilityOnlyFallback(false);
+  }
+
+  private void verifyReachabilityOnlyFallback(boolean fallbackOnReachabilityOnly) throws Exception {
+    mainXdsServer.restartXdsServer();
+    fallbackServer.restartXdsServer();
+    // Serve the same xdstp resource from both servers, with distinguishable contents. The Listener
+    // name must be the xdstp resource name, since that is what the client matches against.
+    mainXdsServer.getService().setXdsConfig(ADS_TYPE_URL_LDS,
+        ImmutableMap.of(AUTHORITY_LDS_NAME,
+            ControlPlaneRule.buildClientListener(AUTHORITY_LDS_NAME, RDS_NAME)));
+    fallbackServer.getService().setXdsConfig(ADS_TYPE_URL_LDS,
+        ImmutableMap.of(AUTHORITY_LDS_NAME,
+            ControlPlaneRule.buildClientListener(AUTHORITY_LDS_NAME, FALLBACK_RDS_NAME)));
+
+    ExecutorService executor = Executors.newFixedThreadPool(1);
+    XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
+      @Override
+      public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
+        ChannelCredentials channelCredentials =
+            (ChannelCredentials) serverInfo.implSpecificConfig();
+        return new GrpcXdsTransportFactory.GrpcXdsTransport(
+            Grpc.newChannelBuilder(serverInfo.target(), channelCredentials)
+                .executor(executor)
+                .build());
+      }
+    };
+    XdsClientImpl xdsClient = CommonBootstrapperTestUtils.createXdsClient(
+        new GrpcBootstrapperImpl().bootstrap(
+            authorityBootstrapOverride(fallbackOnReachabilityOnly)),
+        xdsTransportFactory, fakeClock, new ExponentialBackoffPolicy.Provider(),
+        MessagePrinter.INSTANCE, xdsClientMetricReporter);
+
+    xdsClient.watchXdsResource(
+        XdsListenerResource.getInstance(), AUTHORITY_LDS_NAME, ldsWatcher);
+
+    // Initial resource fetch from the main server; the resource is now cached.
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(
+        StatusOr.fromValue(LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
+
+    mainXdsServer.getServer().shutdownNow();
+    // Sleep for the ADS stream disconnect to be processed and for the retry to fail. Between those
+    // two sleeps we need the fakeClock to progress by 1 second to restart the ADS stream.
+    for (int i = 0; i < 5; i++) {
+      // FakeClock is not thread-safe, and the retry scheduling is concurrent to this test thread
+      executor.submit(() -> fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS)).get();
+      TimeUnit.SECONDS.sleep(1);
+    }
+
+    if (fallbackOnReachabilityOnly) {
+      // Falls back purely because the primary is unreachable, despite the resource being cached.
+      verify(ldsWatcher, timeout(5000)).onResourceChanged(
+          StatusOr.fromValue(LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
+    } else {
+      verify(ldsWatcher, never()).onResourceChanged(
+          StatusOr.fromValue(LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
+    }
+  }
+
+  private Map<String, ?> authorityBootstrapOverride(boolean fallbackOnReachabilityOnly) {
+    ImmutableList<?> servers = ImmutableList.of(
+        ImmutableMap.of(
+            "server_uri", "localhost:" + mainXdsServer.getServer().getPort(),
+            "channel_creds", Collections.singletonList(ImmutableMap.of("type", "insecure")),
+            "server_features", Collections.singletonList("xds_v3")
+        ),
+        ImmutableMap.of(
+            "server_uri", "localhost:" + fallbackServer.getServer().getPort(),
+            "channel_creds", Collections.singletonList(ImmutableMap.of("type", "insecure")),
+            "server_features", Collections.singletonList("xds_v3")
+        ));
+    return ImmutableMap.of(
+        "node", ImmutableMap.of(
+            "id", UUID.randomUUID().toString(),
+            "cluster", CLUSTER_NAME),
+        "xds_servers", servers,
+        "authorities", ImmutableMap.of(
+            AUTHORITY_NAME, ImmutableMap.of(
+                "xds_servers", servers,
+                "fallback_on_reachability_only", fallbackOnReachabilityOnly)),
+        "fallback-policy", "fallback"
+    );
   }
 
   private Map<String, ?> defaultBootstrapOverride() {

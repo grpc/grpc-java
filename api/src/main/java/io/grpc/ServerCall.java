@@ -100,6 +100,28 @@ public abstract class ServerCall<ReqT, RespT> {
      * <em>another</em> {@code onReady()} callback.
      */
     public void onReady() {}
+
+    /**
+     * A custom event has been triggered by the call.
+     *
+     * <p>This callback is guaranteed to run on the call's executor, serialized with other
+     * callbacks (like {@link #onMessage}, {@link #onHalfClose}). This means the implementation
+     * does not need internal synchronization to access call-specific state.
+     *
+     * <p><strong>Deadlock avoidance:</strong> In some transports (such as Binder transport)
+     * or when using a direct executor, this callback may be invoked while transport-level
+     * locks are held. Implementations should avoid acquiring locks that are held by callers of
+     * {@link ServerCall} methods (such as {@link ServerCall#triggerEvent},
+     * {@link ServerCall#close}, or {@link ServerCall#request}), and should avoid calling
+     * {@link ServerCall} methods while holding application-level locks, as this can lead to
+     * deadlocks from lock-order inversion.
+     *
+     * @param event the triggered event.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12979")
+    public void onEvent(Object event) {
+      // Default no-op
+    }
   }
 
   /**
@@ -260,6 +282,31 @@ public abstract class ServerCall<ReqT, RespT> {
   @Nullable
   public String getAuthority() {
     return null;
+  }
+
+  /**
+   * Triggers a custom event to be processed by the listener.
+   * The event will be delivered to {@link Listener#onEvent(Object)} on the call's executor.
+   *
+   * <p>This method is safe to call from multiple threads without external synchronization. No
+   * events will be delivered after the RPC is cancelled or completed.
+   *
+   * <p><strong>Deadlock avoidance:</strong> Callers should avoid holding application-level or
+   * interceptor locks when calling this method. Depending on the transport and executor
+   * configuration (such as {@code directExecutor()} or transports like Binder),
+   * {@code triggerEvent} may acquire transport-level locks and may dispatch
+   * {@link Listener#onEvent(Object)} synchronously on the calling thread.
+   * If the caller holds an application lock while calling {@code triggerEvent}, and
+   * {@code onEvent} or a concurrent transport operation (such as {@link #close} or
+   * {@link #request}) attempts to acquire that same lock, a deadlock can occur from
+   * lock-order inversion. Applications should mutate internal state under lock, release
+   * the lock, and only then invoke {@code triggerEvent}.
+   *
+   * @param event the event to trigger.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12979")
+  public void triggerEvent(Object event) {
+    // Default no-op
   }
 
   /**

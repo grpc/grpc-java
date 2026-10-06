@@ -88,6 +88,12 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
     maybeRunPendingSteps();
   }
 
+  @Override
+  public void onEvent(Object event) {
+    pendingSteps.offer(delegate -> delegate.onEvent(event));
+    maybeRunPendingSteps();
+  }
+
   /**
    * Similar to Java8's {@link java.util.function.Consumer}, but redeclared in order to support
    * Android SDK 21.

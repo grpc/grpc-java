@@ -82,6 +82,11 @@ public class ContextsTest {
         assertSame(uniqueContext, Context.current());
         methodCalls.add(5);
       }
+
+      @Override public void onEvent(Object event) {
+        assertSame(uniqueContext, Context.current());
+        methodCalls.add(6);
+      }
     };
     ServerCall.Listener<Object> wrapped = interceptCall(uniqueContext, call, headers,
         new ServerCallHandler<Object, Object>() {
@@ -101,7 +106,8 @@ public class ContextsTest {
     wrapped.onCancel();
     wrapped.onComplete();
     wrapped.onReady();
-    assertEquals(Arrays.asList(1, 2, 3, 4, 5), methodCalls);
+    wrapped.onEvent(new Object());
+    assertEquals(Arrays.asList(1, 2, 3, 4, 5, 6), methodCalls);
     assertSame(origContext, Context.current());
   }
 
@@ -145,6 +151,10 @@ public class ContextsTest {
       @Override public void onReady() {
         throw new RuntimeException();
       }
+
+      @Override public void onEvent(Object event) {
+        throw new RuntimeException();
+      }
     };
     ServerCall.Listener<Object> wrapped = interceptCall(uniqueContext, call, headers,
         new ServerCallHandler<Object, Object>() {
@@ -177,6 +187,11 @@ public class ContextsTest {
     }
     try {
       wrapped.onReady();
+      fail("Exception expected");
+    } catch (RuntimeException expected) {
+    }
+    try {
+      wrapped.onEvent(new Object());
       fail("Exception expected");
     } catch (RuntimeException expected) {
     }

@@ -556,6 +556,19 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     }
   }
 
+  /**
+   * Whether the given authority is configured to fall back based solely on the reachability of the
+   * primary server, as described in gRFC A95. The knob is only defined for named authorities, so
+   * resources served by the top-level server list always use the gRFC A71 behavior.
+   */
+  private boolean fallbackOnReachabilityOnly(@Nullable String authority) {
+    if (authority == null) {
+      return false;
+    }
+    AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(authority);
+    return authorityInfo != null && authorityInfo.fallbackOnReachabilityOnly();
+  }
+
   @SuppressWarnings("unchecked")
   private <T extends ResourceUpdate> void handleResourceUpdate(
       XdsResourceType.Args args, List<Any> resources, XdsResourceType<T> xdsResourceType,
@@ -1057,8 +1070,10 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           if (!authoritiesForClosedCpc.contains(subscriber.authority)) {
             continue;
           }
-          // If subscriber already has data, this is an ambient error.
-          if (subscriber.hasResult()) {
+          // If subscriber already has data, this is an ambient error. But if the authority is
+          // configured to fall back based solely on reachability (gRFC A95), still attempt
+          // fallback below even though the resource is cached.
+          if (subscriber.hasResult() && !fallbackOnReachabilityOnly(subscriber.authority)) {
             subscriber.onError(status, null);
             continue;
           }
