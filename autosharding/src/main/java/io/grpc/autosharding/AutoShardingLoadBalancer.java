@@ -190,11 +190,15 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
             checkNotNull(
                 resolvedAddresses.getLoadBalancingPolicyConfig(), "missing autosharding config");
 
-    // Each failure below rejects the whole update, and nothing from it is applied: the next
-    // update is compared against the configuration still in use, so a changed key or target is
-    // still acted on then, and a failed channel is retried.
+    // The endpoints are always applied. When the set is empty this tears the children down, so
+    // that in-flight picks stop resolving to endpoints the resolver has retracted.
     List<EquivalentAddressGroup> endpoints = resolvedAddresses.getAddresses();
-    if (endpoints.isEmpty()) {
+    endpointMap.updateEndpoints(endpoints, resolvedAddresses.getAttributes());
+
+    // Each failure below rejects the rest of the update: the next update is compared against the
+    // configuration still in use, so a changed key or target is still acted on then, and a failed
+    // channel is retried.
+    if (endpointMap.size() == 0) {
       return failPermanently("autosharding: name resolver returned no endpoints");
     }
 
@@ -216,11 +220,9 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     }
     config = newConfig;
 
-    endpointMap.updateEndpoints(endpoints, resolvedAddresses.getAttributes());
-    locality = sharedLocality(endpoints);
-
     // The locality comes from the endpoints, so the target can change even when the config did
     // not.
+    locality = sharedLocality(endpoints);
     maybeRecreateClient(
         shardingChannel != previousChannel,
         resolveTarget(newConfig.autoshardingTarget, locality),
@@ -378,12 +380,18 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Substitutes the optional {@code %s} token in the configured target with the locality, or with
+   * Substitutes the first {@code %s} token in the configured target with the locality, or with
    * the empty string when there is none. gRFC A119 says the token is not meant to be used when
    * this policy does its own locality picking, which is the case that has no locality.
    */
   private static String resolveTarget(String configuredTarget, @Nullable String locality) {
-    return configuredTarget.replace("%s", locality == null ? "" : locality);
+    int token = configuredTarget.indexOf("%s");
+    if (token == -1) {
+      return configuredTarget;
+    }
+    return configuredTarget.substring(0, token)
+        + (locality == null ? "" : locality)
+        + configuredTarget.substring(token + 2);
   }
 
   private void shutdownClient() {
@@ -479,6 +487,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
 
   private void publishPicker() {
     if (shutdown || config == null) {
+      return;
+    }
+    if (endpointMap.size() == 0) {
+      // acceptResolvedAddresses already reported TRANSIENT_FAILURE for this case.
       return;
     }
     ConnectivityState state = endpointMap.aggregateConnectivityState();

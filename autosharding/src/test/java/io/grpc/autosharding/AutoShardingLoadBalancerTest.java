@@ -358,7 +358,7 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void endpointsRetracted_keepsTheChildren() throws Exception {
+  public void endpointsRetracted_shutsDownTheChildren() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
     deliverAssignment(1, slice("", "a"));
     reportReady("a");
@@ -367,8 +367,41 @@ public class AutoShardingLoadBalancerTest {
 
     assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(childProvider.children).hasSize(1);
-    assertThat(childProvider.children.get(0).shutdown).isFalse();
+    assertThat(childForHost("a").shutdown).isTrue();
+  }
+
+  @Test
+  public void endpointsRetracted_newAssignment_staysFailed() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    deliverAssignment(1, slice("", "a"));
+
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true));
+    deliverAssignment(2, slice("", "a"));
+
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no endpoints");
+  }
+
+  @Test
+  public void missingChannelFactory_stillUpdatesTheEndpoints() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    reportReady("a");
+
+    Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "b");
+
+    assertThat(status.isOk()).isFalse();
+    assertThat(childForHost("a").shutdown).isTrue();
+  }
+
+  @Test
+  public void channelFactoryFailure_stillUpdatesTheEndpoints() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    reportReady("a");
+
+    Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "b");
+
+    assertThat(status.isOk()).isFalse();
+    assertThat(childForHost("a").shutdown).isTrue();
   }
 
   @Test
@@ -494,6 +527,14 @@ public class AutoShardingLoadBalancerTest {
 
     assertThat(takeRequest().getInitialClientConfig().getTarget())
         .isEqualTo("target/us-central1-a");
+  }
+
+  @Test
+  public void targetWithTwoLocalityTokens_substitutesOnlyTheFirst() throws Exception {
+    deliverEndpoints(retargetedConfig("target/%s/%s"), endpointInLocality("a", "us-central1-a"));
+
+    assertThat(takeRequest().getInitialClientConfig().getTarget())
+        .isEqualTo("target/us-central1-a/%s");
   }
 
   @Test
