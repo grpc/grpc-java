@@ -26,7 +26,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.xds.internal.security.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -144,12 +143,10 @@ public abstract class CertificateProvider implements Closeable {
 
     @Override
     public void onError(Status errorStatus) {
-      List<Watcher> watchers;
       synchronized (this) {
-        watchers = new ArrayList<>(downstreamWatchers);
-      }
-      for (Watcher watcher : watchers) {
-        syncContext.executeLater(() -> watcher.onError(errorStatus));
+        for (Watcher watcher : downstreamWatchers) {
+          syncContext.executeLater(() -> watcher.onError(errorStatus));
+        }
       }
       syncContext.drain();
     }
