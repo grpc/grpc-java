@@ -7,6 +7,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * A service used to obtain stats for verifying LB behavior.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class LoadBalancerStatsServiceGrpc {
 

@@ -7,6 +7,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * Test service that supports all call types.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @javax.annotation.Generated(
     value = "by gRPC proto compiler (version 1.86.0-SNAPSHOT)",
     comments = "Source: grpc/testing/compiler/test.proto")

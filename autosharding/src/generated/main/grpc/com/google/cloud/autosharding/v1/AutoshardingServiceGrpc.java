@@ -21,6 +21,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * * CPU cost of processing requests
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class AutoshardingServiceGrpc {
 

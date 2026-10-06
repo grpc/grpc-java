@@ -7,6 +7,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * A service to dynamically update the configuration of an xDS test client.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class XdsUpdateClientConfigureServiceGrpc {
 

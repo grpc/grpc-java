@@ -14,6 +14,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * a new call to change backend reporting frequency.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class OpenRcaServiceGrpc {
 

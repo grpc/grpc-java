@@ -4,6 +4,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 
 /**
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class ReflectableServiceGrpc {
 

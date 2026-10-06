@@ -7,6 +7,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * A service used to control reconnect server.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class ReconnectServiceGrpc {
 

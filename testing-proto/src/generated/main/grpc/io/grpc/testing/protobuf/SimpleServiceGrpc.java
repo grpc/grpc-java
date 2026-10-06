@@ -7,6 +7,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * A simple service for test.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class SimpleServiceGrpc {
 

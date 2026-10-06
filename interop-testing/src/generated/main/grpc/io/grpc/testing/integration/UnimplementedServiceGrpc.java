@@ -8,6 +8,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * that case.
  * </pre>
  */
+@java.lang.SuppressWarnings("all")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class UnimplementedServiceGrpc {
 
