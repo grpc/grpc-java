@@ -17,6 +17,7 @@
 package io.grpc.binder.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 
 import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
@@ -198,6 +199,42 @@ public final class BlockInputStreamTest {
     byte[] data = baos.toByteArray();
     assertThat(data).hasLength(10);
     assertBytes(data, 0, 10, 1);
+  }
+
+  @Test
+  public void testBulkRead_zeroLength() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[] {1})) {
+      assertThat(bis.read(buff, 0, 0)).isEqualTo(0);
+      assertThat(bis.read(buff, 0, 1)).isEqualTo(1);
+      assertThat(bis.read(buff, 0, 0)).isEqualTo(0);
+    }
+  }
+
+  @Test
+  public void testBulkRead_nullArray() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[0])) {
+      assertThrows(NullPointerException.class, () -> bis.read(null, 0, 0));
+    }
+  }
+
+  @Test
+  public void testBulkRead_invalidBounds() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[] {1, 2})) {
+      assertThrows(IndexOutOfBoundsException.class, () -> bis.read(buff, -1, 1));
+      assertThrows(IndexOutOfBoundsException.class, () -> bis.read(buff, 0, -1));
+      assertThrows(IndexOutOfBoundsException.class, () -> bis.read(buff, buff.length, 1));
+      assertThrows(IndexOutOfBoundsException.class, () -> bis.read(buff, 0, buff.length + 1));
+      assertThrows(IndexOutOfBoundsException.class, () -> bis.read(buff, 1, Integer.MAX_VALUE));
+    }
+  }
+
+  @Test
+  public void testBulkRead_invalidBoundsAtEof() throws Exception {
+    try (BlockInputStream bis = new BlockInputStream(new byte[0])) {
+      assertThrows(IndexOutOfBoundsException.class, () -> bis.read(buff, -1, 1));
+      assertThrows(IndexOutOfBoundsException.class, () -> bis.read(buff, 0, -1));
+      assertThrows(IndexOutOfBoundsException.class, () -> bis.read(buff, 0, buff.length + 1));
+    }
   }
 
   private static byte[] getBytes(int size, int val) {

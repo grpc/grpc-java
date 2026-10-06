@@ -16,6 +16,8 @@
 
 package io.grpc.binder.internal;
 
+import static com.google.common.base.Preconditions.checkPositionIndexes;
+
 import com.google.common.primitives.Ints;
 import io.grpc.Drainable;
 import io.grpc.KnownLength;
@@ -91,7 +93,11 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
 
   @Override
   public int read(byte[] data, int off, int len) throws IOException {
-    int stillToRead = len;
+    checkPositionIndexes(off, off + len, data.length);
+    if (len == 0) {
+      return 0;
+    }
+    int stillToRead = len; // Guaranteed > 0.
     while (currentBlock != null) { // Implies available > 0 and an unread byte at blockOffset.
       int n = Ints.min(stillToRead, currentBlock.length - blockOffset, available);
       System.arraycopy(currentBlock, blockOffset, data, off, n);
@@ -109,7 +115,7 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
       }
     }
     int bytesRead = len - stillToRead;
-    if (bytesRead > 0 || available > 0) {
+    if (bytesRead > 0) {
       return bytesRead;
     }
     return -1;
