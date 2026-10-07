@@ -230,6 +230,7 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void pickAfterStateChange() throws Exception {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     InOrder inOrder = inOrder(mockHelper);
     Status addressesAcceptanceStatus =
         acceptAddresses(Arrays.asList(servers.get(0)), Attributes.EMPTY);
@@ -256,6 +257,42 @@ public class RoundRobinLoadBalancerTest {
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(mockHelper).refreshNameResolution();
+    inOrder.verify(mockHelper, never())
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+
+    verify(subchannel, atLeastOnce()).requestConnection();
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
+  }
+
+  @Test
+  public void pickAfterStateChange_newPickFirst() throws Exception {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    InOrder inOrder = inOrder(mockHelper);
+    Status addressesAcceptanceStatus =
+        acceptAddresses(Arrays.asList(servers.get(0)), Attributes.EMPTY);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
+    inOrder.verify(mockHelper).createSubchannel(any(CreateSubchannelArgs.class));
+
+    // TODO figure out if this method testing the right things
+
+    assertThat(subchannels).hasSize(1);
+    Subchannel subchannel = subchannels.values().iterator().next();
+
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
+
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue()).isInstanceOf(ReadyPicker.class);
+
+    Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
+    deliverSubchannelState(subchannel,
+        ConnectivityStateInfo.forTransientFailure(error));
+    AbstractTestHelper.refreshInvokedAndUpdateBS(
+        inOrder, TRANSIENT_FAILURE, mockHelper, pickerCaptor);
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus()).isEqualTo(error);
+
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
     inOrder.verify(mockHelper, never())
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
