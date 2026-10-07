@@ -44,22 +44,31 @@ class StatefulFilter implements Filter {
   private final AtomicBoolean shutdown = new AtomicBoolean();
 
   final int idx;
-  private final boolean requiresPayloadAccess;
+  private final boolean requiresRequestPayloadAccess;
+  private final boolean requiresResponsePayloadAccess;
   @Nullable volatile String lastCfg = null;
 
   public StatefulFilter(int idx) {
-    this(idx, false);
+    this(idx, false, false);
   }
 
-  public StatefulFilter(int idx, boolean requiresPayloadAccess) {
+  public StatefulFilter(
+      int idx, boolean requiresRequestPayloadAccess, boolean requiresResponsePayloadAccess) {
     this.idx = idx;
-    this.requiresPayloadAccess = requiresPayloadAccess;
+    this.requiresRequestPayloadAccess = requiresRequestPayloadAccess;
+    this.requiresResponsePayloadAccess = requiresResponsePayloadAccess;
   }
 
   @Override
-  public boolean requiresPayloadAccess(
+  public boolean requiresRequestPayloadAccess(
       FilterConfig config, @Nullable FilterConfig overrideConfig) {
-    return requiresPayloadAccess;
+    return requiresRequestPayloadAccess;
+  }
+
+  @Override
+  public boolean requiresResponsePayloadAccess(
+      FilterConfig config, @Nullable FilterConfig overrideConfig) {
+    return requiresResponsePayloadAccess;
   }
 
   public boolean isShutdown() {
@@ -113,26 +122,31 @@ class StatefulFilter implements Filter {
   static final class Provider implements Filter.Provider {
 
     private final String typeUrl;
-    private final boolean requiresPayloadAccess;
+    private final boolean requiresRequestPayloadAccess;
+    private final boolean requiresResponsePayloadAccess;
     private final ConcurrentMap<Integer, StatefulFilter> instances = new ConcurrentHashMap<>();
 
     volatile int counter;
 
     Provider() {
-      this(DEFAULT_TYPE_URL, false);
+      this(DEFAULT_TYPE_URL, false, false);
     }
 
-    Provider(boolean requiresPayloadAccess) {
-      this(DEFAULT_TYPE_URL, requiresPayloadAccess);
+    Provider(boolean requiresRequestPayloadAccess, boolean requiresResponsePayloadAccess) {
+      this(DEFAULT_TYPE_URL, requiresRequestPayloadAccess, requiresResponsePayloadAccess);
     }
 
     Provider(String typeUrl) {
-      this(typeUrl, false);
+      this(typeUrl, false, false);
     }
 
-    Provider(String typeUrl, boolean requiresPayloadAccess) {
+    Provider(
+        String typeUrl,
+        boolean requiresRequestPayloadAccess,
+        boolean requiresResponsePayloadAccess) {
       this.typeUrl = typeUrl;
-      this.requiresPayloadAccess = requiresPayloadAccess;
+      this.requiresRequestPayloadAccess = requiresRequestPayloadAccess;
+      this.requiresResponsePayloadAccess = requiresResponsePayloadAccess;
     }
 
     @Override
@@ -152,7 +166,8 @@ class StatefulFilter implements Filter {
 
     @Override
     public synchronized StatefulFilter newInstance(FilterContext context) {
-      StatefulFilter filter = new StatefulFilter(counter++, requiresPayloadAccess);
+      StatefulFilter filter = new StatefulFilter(
+          counter++, requiresRequestPayloadAccess, requiresResponsePayloadAccess);
       instances.put(filter.idx, filter);
       return filter;
     }

@@ -135,7 +135,20 @@ public class ExternalProcessorFilter implements Filter {
   }
 
   @Override
-  public boolean requiresPayloadAccess(
+  public boolean requiresRequestPayloadAccess(
+      FilterConfig filterConfig, @Nullable FilterConfig overrideConfig) {
+    ProcessingMode mode = getProcessingMode(filterConfig, overrideConfig);
+    return mode.getRequestBodyMode() != ProcessingMode.BodySendMode.NONE;
+  }
+
+  @Override
+  public boolean requiresResponsePayloadAccess(
+      FilterConfig filterConfig, @Nullable FilterConfig overrideConfig) {
+    ProcessingMode mode = getProcessingMode(filterConfig, overrideConfig);
+    return mode.getResponseBodyMode() != ProcessingMode.BodySendMode.NONE;
+  }
+
+  private static ProcessingMode getProcessingMode(
       FilterConfig filterConfig, @Nullable FilterConfig overrideConfig) {
     ExternalProcessorFilterConfig extProcFilterConfig =
         (ExternalProcessorFilterConfig) filterConfig;
@@ -143,9 +156,7 @@ public class ExternalProcessorFilter implements Filter {
       extProcFilterConfig = mergeConfigs(extProcFilterConfig,
           (ExternalProcessorFilterOverrideConfig) overrideConfig);
     }
-    ProcessingMode mode = extProcFilterConfig.getExternalProcessor().getProcessingMode();
-    return mode.getRequestBodyMode() != ProcessingMode.BodySendMode.NONE
-        || mode.getResponseBodyMode() != ProcessingMode.BodySendMode.NONE;
+    return extProcFilterConfig.getExternalProcessor().getProcessingMode();
   }
 
   private static ExternalProcessorFilterConfig mergeConfigs(

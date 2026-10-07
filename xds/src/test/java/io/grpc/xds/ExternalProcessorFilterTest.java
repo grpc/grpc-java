@@ -351,7 +351,8 @@ public class ExternalProcessorFilterTest {
 
     try (ExternalProcessorFilter filter = provider.newInstance(
         Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
-      assertThat(filter.requiresPayloadAccess(config, null)).isFalse();
+      assertThat(filter.requiresRequestPayloadAccess(config, null)).isFalse();
+      assertThat(filter.requiresResponsePayloadAccess(config, null)).isFalse();
     }
   }
 
@@ -368,12 +369,13 @@ public class ExternalProcessorFilterTest {
 
     try (ExternalProcessorFilter filter = provider.newInstance(
         Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
-      assertThat(filter.requiresPayloadAccess(config, null)).isFalse();
+      assertThat(filter.requiresRequestPayloadAccess(config, null)).isFalse();
+      assertThat(filter.requiresResponsePayloadAccess(config, null)).isFalse();
     }
   }
 
   @Test
-  public void requiresPayloadAccess_requestBodyGrpc_returnsTrue() throws Exception {
+  public void requiresPayloadAccess_requestBodyGrpc() throws Exception {
     ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -384,12 +386,13 @@ public class ExternalProcessorFilterTest {
 
     try (ExternalProcessorFilter filter = provider.newInstance(
         Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
-      assertThat(filter.requiresPayloadAccess(config, null)).isTrue();
+      assertThat(filter.requiresRequestPayloadAccess(config, null)).isTrue();
+      assertThat(filter.requiresResponsePayloadAccess(config, null)).isFalse();
     }
   }
 
   @Test
-  public void requiresPayloadAccess_responseBodyGrpc_returnsTrue() throws Exception {
+  public void requiresPayloadAccess_responseBodyGrpc() throws Exception {
     ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -401,12 +404,13 @@ public class ExternalProcessorFilterTest {
 
     try (ExternalProcessorFilter filter = provider.newInstance(
         Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
-      assertThat(filter.requiresPayloadAccess(config, null)).isTrue();
+      assertThat(filter.requiresRequestPayloadAccess(config, null)).isFalse();
+      assertThat(filter.requiresResponsePayloadAccess(config, null)).isTrue();
     }
   }
 
   @Test
-  public void requiresPayloadAccess_overrideTurnsOnPayloadAccess_returnsTrue() throws Exception {
+  public void requiresPayloadAccess_overrideTurnsOnPayloadAccess() throws Exception {
     ExternalProcessor proto = createBaseProto(extProcServerName).build();
     ExternalProcessorFilterConfig config =
         provider.parseFilterConfig(Any.pack(proto), filterContext).config;
@@ -423,12 +427,13 @@ public class ExternalProcessorFilterTest {
 
     try (ExternalProcessorFilter filter = provider.newInstance(
         Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
-      assertThat(filter.requiresPayloadAccess(config, overrideConfig)).isTrue();
+      assertThat(filter.requiresRequestPayloadAccess(config, overrideConfig)).isTrue();
+      assertThat(filter.requiresResponsePayloadAccess(config, overrideConfig)).isFalse();
     }
   }
 
   @Test
-  public void requiresPayloadAccess_overrideTurnsOffPayloadAccess_returnsFalse() throws Exception {
+  public void requiresPayloadAccess_overrideTurnsOffPayloadAccess() throws Exception {
     ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -450,7 +455,8 @@ public class ExternalProcessorFilterTest {
 
     try (ExternalProcessorFilter filter = provider.newInstance(
         Filter.FilterContext.create("test-filter", new MetricRecorder() {}))) {
-      assertThat(filter.requiresPayloadAccess(config, overrideConfig)).isFalse();
+      assertThat(filter.requiresRequestPayloadAccess(config, overrideConfig)).isFalse();
+      assertThat(filter.requiresResponsePayloadAccess(config, overrideConfig)).isFalse();
     }
   }
 }

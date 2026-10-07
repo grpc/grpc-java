@@ -549,6 +549,15 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               }
               expectedResponseResponse = null;
             } else if (response.hasRequestBody()) {
+              if (currentProcessingMode.getRequestBodyMode()
+                  != ProcessingMode.BodySendMode.GRPC) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received unexpected request_body response when"
+                            + " request_body_mode is not GRPC.")
+                    .asRuntimeException());
+                return;
+              }
               EventType expected = expectedRequestResponse;
               if (expected == EventType.REQUEST_HEADERS) {
                 internalOnError(Status.UNAVAILABLE
@@ -558,6 +567,15 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 return;
               }
             } else if (response.hasResponseBody()) {
+              if (currentProcessingMode.getResponseBodyMode()
+                  != ProcessingMode.BodySendMode.GRPC) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received unexpected response_body response when"
+                            + " response_body_mode is not GRPC.")
+                    .asRuntimeException());
+                return;
+              }
               EventType expected = expectedResponseResponse;
               if (expected == EventType.RESPONSE_HEADERS) {
                 internalOnError(Status.UNAVAILABLE
@@ -999,7 +1017,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             return;
           }
           try {
-            ByteString copiedBody = ByteString.readFrom((InputStream) message);
+            ByteString copiedBody = outboundStreamToByteString((InputStream) message);
             pendingDrainingMessages.add((ReqT) new KnownLengthInputStream(copiedBody));
           } catch (IOException e) {
             cancelDownstream("Failed to copy outbound message for buffering", e);
@@ -1539,39 +1557,29 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           return;
         }
 
-        if (dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
-            != ProcessingMode.BodySendMode.GRPC) {
-          if (savedHeaders != null) {
-            savedMessages.add(message);
-            return;
-          }
-          if (dataPlaneClientCall.getPassThroughMode().get()
-              || dataPlaneClientCall.getExtProcStreamState().get().isCompleted()) {
-            dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
-            return;
-          }
-          dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
-          return;
-        }
-
-        boolean checkDrain = dataPlaneClientCall.getExtProcStreamState().get().isDraining();
+        boolean checkDrain = dataPlaneClientCall.getExtProcStreamState().get().isDraining()
+            && dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
+                == ProcessingMode.BodySendMode.GRPC;
 
         if (savedHeaders != null || checkDrain) {
-          try {
-            ByteString copiedBody = ByteString.readFrom((InputStream) message);
-            savedMessages.add((RespT) new KnownLengthInputStream(copiedBody));
-          } catch (IOException e) {
-            dataPlaneClientCall.cancelDownstream("Failed to copy inbound message for buffering", e);
+          if (message instanceof InputStream) {
+            try {
+              ByteString copiedBody = ByteString.readFrom((InputStream) message);
+              savedMessages.add((RespT) new KnownLengthInputStream(copiedBody));
+            } catch (IOException e) {
+              dataPlaneClientCall.cancelDownstream(
+                  "Failed to copy inbound message for buffering", e);
+            }
+          } else {
+            savedMessages.add(message);
           }
           return;
         }
 
-        if (dataPlaneClientCall.getPassThroughMode().get()) {
-          dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
-          return;
-        }
-
-        if (dataPlaneClientCall.getExtProcStreamState().get().isCompleted()) {
+        if (dataPlaneClientCall.getPassThroughMode().get()
+            || dataPlaneClientCall.getExtProcStreamState().get().isCompleted()
+            || dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
+                != ProcessingMode.BodySendMode.GRPC) {
           dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
           return;
         }
@@ -1602,6 +1610,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     void drainSavedMessages() {
       synchronized (dataPlaneClientCall.streamLock) {
+        if (dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
+            != ProcessingMode.BodySendMode.GRPC) {
+          return;
+        }
         while (dataPlaneClientCall.isSidecarReady()
             && dataPlaneClientCall.upstreamToSidestreamWindow > 0
             && !savedMessages.isEmpty()) {

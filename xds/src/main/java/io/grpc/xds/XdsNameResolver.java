@@ -36,7 +36,6 @@ import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
-import io.grpc.Drainable;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalConfigSelector;
@@ -71,6 +70,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.extproc.ExternalProcessorUtil;
 import io.grpc.xds.internal.extproc.KnownLengthInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -893,7 +893,8 @@ final class XdsNameResolver extends NameResolver {
         selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
       }
 
-      boolean anyFilterRequiresPayload = false;
+      boolean anyFilterRequiresRequestPayload = false;
+      boolean anyFilterRequiresResponsePayload = false;
       ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
       for (NamedFilterConfig namedFilter : filterConfigs) {
         String name = namedFilter.name;
@@ -908,15 +909,19 @@ final class XdsNameResolver extends NameResolver {
 
         if (interceptor != null) {
           filterInterceptors.add(interceptor);
-          if (filter.requiresPayloadAccess(config, overrideConfig)) {
-            anyFilterRequiresPayload = true;
+          if (filter.requiresRequestPayloadAccess(config, overrideConfig)) {
+            anyFilterRequiresRequestPayload = true;
+          }
+          if (filter.requiresResponsePayloadAccess(config, overrideConfig)) {
+            anyFilterRequiresResponsePayload = true;
           }
         }
       }
 
       ImmutableList.Builder<ClientInterceptor> withRawMessage = ImmutableList.builder();
-      if (anyFilterRequiresPayload) {
-        withRawMessage.add(new RawMessageClientInterceptor());
+      if (anyFilterRequiresRequestPayload || anyFilterRequiresResponsePayload) {
+        withRawMessage.add(new RawMessageClientInterceptor(
+            anyFilterRequiresRequestPayload, anyFilterRequiresResponsePayload));
       }
       withRawMessage.addAll(filterInterceptors.build());
       return combineInterceptors(withRawMessage.build());
@@ -1157,97 +1162,186 @@ final class XdsNameResolver extends NameResolver {
           }
         };
 
+    private final boolean interceptRequest;
+    private final boolean interceptResponse;
+
+    RawMessageClientInterceptor() {
+      this(true, true);
+    }
+
+    RawMessageClientInterceptor(boolean interceptRequest, boolean interceptResponse) {
+      this.interceptRequest = interceptRequest;
+      this.interceptResponse = interceptResponse;
+    }
+
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+        final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      if (interceptRequest && interceptResponse) {
+        return interceptBoth(method, callOptions, next);
+      } else if (interceptRequest) {
+        return interceptRequestOnly(method, callOptions, next);
+      } else if (interceptResponse) {
+        return interceptResponseOnly(method, callOptions, next);
+      } else {
+        return next.newCall(method, callOptions);
+      }
+    }
+
+    private static <ReqT, RespT> ClientCall<ReqT, RespT> interceptBoth(
         final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
       MethodDescriptor<InputStream, InputStream> rawMethod =
           method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
       final ClientCall<InputStream, InputStream> rawCall = next.newCall(rawMethod, callOptions);
-      return new ClientCall<ReqT, RespT>() {
+      return new PartialForwardingClientCall<ReqT, RespT>() {
         @Override
-        public void start(final Listener<RespT> responseListener, Metadata headers) {
-          rawCall.start(new Listener<InputStream>() {
-            @Override
-            public void onHeaders(Metadata headers) {
-              responseListener.onHeaders(headers);
-            }
-
-            @Override
-            public void onMessage(InputStream message) {
-              responseListener.onMessage(method.getResponseMarshaller().parse(message));
-            }
-
-            @Override
-            public void onClose(Status status, Metadata trailers) {
-              responseListener.onClose(status, trailers);
-            }
-
-            @Override
-            public void onReady() {
-              responseListener.onReady();
-            }
-          }, headers);
+        protected ClientCall<?, ?> delegate() {
+          return rawCall;
         }
 
         @Override
-        public void request(int numMessages) {
-          rawCall.request(numMessages);
-        }
-
-        @Override
-        public void cancel(@Nullable String message, @Nullable Throwable cause) {
-          rawCall.cancel(message, cause);
-        }
-
-        @Override
-        public void halfClose() {
-          rawCall.halfClose();
+        public void start(Listener<RespT> responseListener, Metadata headers) {
+          rawCall.start(createRawListener(method, responseListener), headers);
         }
 
         @Override
         public void sendMessage(ReqT message) {
-          InputStream stream = method.getRequestMarshaller().stream(message);
-          ByteString byteString;
-          try {
-            if (stream instanceof Drainable) {
-              int size = stream.available();
-              ByteString.Output output =
-                  size > 0 ? ByteString.newOutput(size) : ByteString.newOutput();
-              ((Drainable) stream).drainTo(output);
-              byteString = output.toByteString();
-            } else {
-              byteString = ByteString.readFrom(stream);
-            }
-          } catch (IOException e) {
-            throw Status.INTERNAL
-                .withDescription("Failed to read message for raw message interceptor")
-                .withCause(e)
-                .asRuntimeException();
-          } finally {
-            try {
-              stream.close();
-            } catch (IOException ignored) {
-              // ignore
-            }
-          }
-          rawCall.sendMessage(new KnownLengthInputStream(byteString));
-        }
-
-        @Override
-        public boolean isReady() {
-          return rawCall.isReady();
-        }
-
-        @Override
-        public void setMessageCompression(boolean enabled) {
-          rawCall.setMessageCompression(enabled);
-        }
-
-        @Override
-        public Attributes getAttributes() {
-          return rawCall.getAttributes();
+          sendSerializedMessage(rawCall, method, message);
         }
       };
+    }
+
+    private static <ReqT, RespT> ClientCall<ReqT, RespT> interceptRequestOnly(
+        final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      MethodDescriptor<InputStream, RespT> rawReqMethod =
+          method.toBuilder(RAW_MARSHALLER, method.getResponseMarshaller()).build();
+      final ClientCall<InputStream, RespT> rawCall = next.newCall(rawReqMethod, callOptions);
+      return new PartialForwardingClientCall<ReqT, RespT>() {
+        @Override
+        protected ClientCall<?, ?> delegate() {
+          return rawCall;
+        }
+
+        @Override
+        public void start(Listener<RespT> responseListener, Metadata headers) {
+          rawCall.start(responseListener, headers);
+        }
+
+        @Override
+        public void sendMessage(ReqT message) {
+          sendSerializedMessage(rawCall, method, message);
+        }
+      };
+    }
+
+    private static <ReqT, RespT> ClientCall<ReqT, RespT> interceptResponseOnly(
+        final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      MethodDescriptor<ReqT, InputStream> rawRespMethod =
+          method.toBuilder(method.getRequestMarshaller(), RAW_MARSHALLER).build();
+      final ClientCall<ReqT, InputStream> rawCall = next.newCall(rawRespMethod, callOptions);
+      return new PartialForwardingClientCall<ReqT, RespT>() {
+        @Override
+        protected ClientCall<?, ?> delegate() {
+          return rawCall;
+        }
+
+        @Override
+        public void start(Listener<RespT> responseListener, Metadata headers) {
+          rawCall.start(createRawListener(method, responseListener), headers);
+        }
+
+        @Override
+        public void sendMessage(ReqT message) {
+          rawCall.sendMessage(message);
+        }
+      };
+    }
+
+    private static <RespT> ClientCall.Listener<InputStream> createRawListener(
+        final MethodDescriptor<?, RespT> method,
+        final ClientCall.Listener<RespT> responseListener) {
+      return new ClientCall.Listener<InputStream>() {
+        @Override
+        public void onHeaders(Metadata headers) {
+          responseListener.onHeaders(headers);
+        }
+
+        @Override
+        public void onMessage(InputStream message) {
+          responseListener.onMessage(method.getResponseMarshaller().parse(message));
+        }
+
+        @Override
+        public void onClose(Status status, Metadata trailers) {
+          responseListener.onClose(status, trailers);
+        }
+
+        @Override
+        public void onReady() {
+          responseListener.onReady();
+        }
+      };
+    }
+
+    private static <ReqT> void sendSerializedMessage(
+        ClientCall<InputStream, ?> rawCall,
+        MethodDescriptor<ReqT, ?> method,
+        ReqT message) {
+      ByteString byteString;
+      try {
+        InputStream stream = method.getRequestMarshaller().stream(message);
+        try {
+          byteString = ExternalProcessorUtil.outboundStreamToByteString(stream);
+        } finally {
+          try {
+            stream.close();
+          } catch (IOException ignored) {
+            // ignore
+          }
+        }
+      } catch (IOException | RuntimeException e) {
+        rawCall.cancel("Failed to read message for raw message interceptor", e);
+        return;
+      } catch (Error e) {
+        rawCall.cancel("Client sendMessage() failed with Error", e);
+        throw e;
+      }
+      rawCall.sendMessage(new KnownLengthInputStream(byteString));
+    }
+
+    private abstract static class PartialForwardingClientCall<ReqT, RespT>
+        extends ClientCall<ReqT, RespT> {
+      protected abstract ClientCall<?, ?> delegate();
+
+      @Override
+      public void request(int numMessages) {
+        delegate().request(numMessages);
+      }
+
+      @Override
+      public void cancel(@Nullable String message, @Nullable Throwable cause) {
+        delegate().cancel(message, cause);
+      }
+
+      @Override
+      public void halfClose() {
+        delegate().halfClose();
+      }
+
+      @Override
+      public boolean isReady() {
+        return delegate().isReady();
+      }
+
+      @Override
+      public void setMessageCompression(boolean enabled) {
+        delegate().setMessageCompression(enabled);
+      }
+
+      @Override
+      public Attributes getAttributes() {
+        return delegate().getAttributes();
+      }
     }
   }
 }
