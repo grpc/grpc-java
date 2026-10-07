@@ -7756,18 +7756,19 @@ public class ExternalProcessorClientInterceptorTest {
         };
       }
     };
+    ScheduledExecutorService realScheduler = Executors.newSingleThreadScheduledExecutor();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
         .addService(extProcImpl)
-        .executor(scheduler)
+        .directExecutor()
         .build().start());
 
     CachedChannelManager channelManager = new CachedChannelManager(config -> {
       return grpcCleanup.register(
-          InProcessChannelBuilder.forName(uniqueExtProcServerName).executor(scheduler).build());
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
     });
 
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
-        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+        filterConfig, channelManager, realScheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -7806,49 +7807,24 @@ public class ExternalProcessorClientInterceptorTest {
     ClientCall<String, String> proxyCall =
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
-    for (int i = 0; i < 10; i++) {
-      fakeClock.forwardTime(1, TimeUnit.SECONDS);
-    }
-    proxyCall.request(1);
-    for (int i = 0; i < 10; i++) {
-      fakeClock.forwardTime(1, TimeUnit.SECONDS);
-    }
-
     // Wait for sidecar to send drain and test to observe it
     assertThat(sidecarOnNextLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    for (int i = 0; i < 10; i++) {
-      fakeClock.forwardTime(1, TimeUnit.SECONDS);
-    }
+    proxyCall.request(1);
     assertThat(proxyCall.isReady()).isFalse();
 
     // Now let sidecar complete
     sidecarFinishLatch.countDown();
-    for (int i = 0; i < 10; i++) {
-      fakeClock.forwardTime(1, TimeUnit.SECONDS);
-    }
+    assertThat(sidecarOnCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     dataPlaneFinishLatch.countDown();
-    for (int i = 0; i < 10; i++) {
-      fakeClock.forwardTime(1, TimeUnit.SECONDS);
-    }
-
-    assertThat(sidecarOnCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    for (int i = 0; i < 10; i++) {
-      fakeClock.forwardTime(1, TimeUnit.SECONDS);
-    }
 
     // After sidecar stream completes, it should trigger onReady and become ready
     assertThat(onReadyLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(proxyCall.isReady()).isTrue();
 
     proxyCall.cancel("Cleanup", null);
-    for (int i = 0; i < 10; i++) {
-      fakeClock.forwardTime(1, TimeUnit.SECONDS);
-    }
     channelManager.close();
-    for (int i = 0; i < 10; i++) {
-      fakeClock.forwardTime(1, TimeUnit.SECONDS);
-    }
+    realScheduler.shutdown();
   }
 
   @Test
