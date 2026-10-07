@@ -101,6 +101,16 @@ public class NettyServerBuilderTest {
   }
 
   @Test
+  public void hpackDynamicTableSizeAllowsZeroAndIsFluent() {
+    assertThat(builder.hpackDynamicTableSize(0)).isSameInstanceAs(builder);
+  }
+
+  @Test
+  public void hpackDynamicTableSizeRejectsNegative() {
+    assertThrows(IllegalArgumentException.class, () -> builder.hpackDynamicTableSize(-1));
+  }
+
+  @Test
   public void addMultipleListenAddresses() {
     builder.addListenAddress(new InetSocketAddress(8081));
     NettyServer server = builder.buildTransportServers(

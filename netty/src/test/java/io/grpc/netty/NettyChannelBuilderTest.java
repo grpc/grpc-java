@@ -118,6 +118,20 @@ public class NettyChannelBuilderTest {
     assertThat((Set<?>) field.get(builder)).isEmpty();
   }
 
+  @Test
+  public void hpackDynamicTableSizeAllowsZeroAndIsFluent() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+
+    assertThat(builder.hpackDynamicTableSize(0)).isSameInstanceAs(builder);
+  }
+
+  @Test
+  public void hpackDynamicTableSizeRejectsNegative() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+
+    assertThrows(IllegalArgumentException.class, () -> builder.hpackDynamicTableSize(-1));
+  }
+
   private void shutdown(ManagedChannel mc) throws Exception {
     mc.shutdownNow();
     assertTrue(mc.awaitTermination(1, TimeUnit.SECONDS));

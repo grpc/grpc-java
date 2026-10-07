@@ -111,6 +111,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   private boolean autoFlowControl = true;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private final Set<AsciiString> neverIndexedMetadataKeys = new HashSet<>();
+  private int hpackDynamicTableSize = GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE;
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private int softLimitHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
@@ -484,6 +485,21 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   }
 
   /**
+   * Sets the maximum HPACK dynamic table size, in bytes, for both directions of a connection.
+   * The peer may advertise a smaller maximum for headers encoded by this endpoint. A value of
+   * zero disables the dynamic table while retaining HPACK static-table references and Huffman
+   * encoding. By default, HTTP/2's standard 4 KiB capacity is used.
+   *
+   * @throws IllegalArgumentException if {@code bytes} is negative
+   */
+  @CanIgnoreReturnValue
+  public NettyServerBuilder hpackDynamicTableSize(int bytes) {
+    checkArgument(bytes >= 0, "hpackDynamicTableSize must not be negative: %s", bytes);
+    hpackDynamicTableSize = bytes;
+    return this;
+  }
+
+  /**
    * Sets the maximum message size allowed to be received on the server. If not called,
    * defaults to 4 MiB. The default provides protection to services who haven't considered the
    * possibility of receiving large messages while trying to be large enough to not be hit in normal
@@ -773,6 +789,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
         autoFlowControl,
         flowControlWindow,
         neverIndexedMetadataKeys,
+        hpackDynamicTableSize,
         maxMessageSize,
         maxHeaderListSize,
         softLimitHeaderListSize,
