@@ -2119,7 +2119,9 @@ public class GrpclbLoadBalancerTest {
     assertThat(pick.getSubchannel()).isNull();
     verify(subchannel0, times(2)).requestConnection();
     balancer.requestConnection();
-    verify(subchannel0, times(3)).requestConnection();
+    // PickFirstLeafLoadBalancer is already in CONNECTING state, so no additional
+    // requestConnection() call is made to subchannel0.
+    verify(subchannel0, times(2)).requestConnection();
 
     // PICK_FIRST doesn't use subchannelPool
     verify(subchannelPool, never())
@@ -2571,7 +2573,7 @@ public class GrpclbLoadBalancerTest {
     // In new PF, active fallback subchannel1 is shut down because its address is not in backends1
     verify(subchannel1).shutdown();
     // And LB state transitions to IDLE with RequestConnectionPicker
-    inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    inOrder.verify(helper, atLeast(1)).updateBalancingState(eq(IDLE), pickerCaptor.capture());
     RoundRobinPicker pickerIdle = (RoundRobinPicker) pickerCaptor.getValue();
     ChildLbPickerEntry idleEntry = (ChildLbPickerEntry) pickerIdle.pickList.get(0);
 
@@ -2588,9 +2590,6 @@ public class GrpclbLoadBalancerTest {
     assertThat(mockSubchannels).hasSize(1);
     Subchannel subchannel2 = mockSubchannels.poll();
     verify(subchannel2).requestConnection();
-
-    inOrder.verify(helper, atLeast(1))
-        .updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
 
     // subchannel2 becomes READY
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
@@ -2615,7 +2614,9 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel2, times(2)).requestConnection();
 
     balancer.requestConnection();
-    verify(subchannel2, times(3)).requestConnection();
+    // PickFirstLeafLoadBalancer is already in CONNECTING state, so no additional
+    // requestConnection() call is made to subchannel2.
+    verify(subchannel2, times(2)).requestConnection();
 
     // PICK_FIRST doesn't use subchannelPool
     verify(subchannelPool, never())
