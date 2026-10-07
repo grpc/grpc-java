@@ -533,6 +533,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void pickWithRandomHash_firstSubchannelInTransientFailure_remainingSubchannelsIdle() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3, "dummy-random-hash");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
@@ -553,6 +554,31 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getDelayType()).isEqualTo("connecting");
     assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
     verifyConnection(1);
+  }
+
+  @Test
+  public void
+      pickWithRandomHash_firstSubchannelInTransientFailure_remainingSubchannelsIdle_newPickFirst() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "dummy-random-hash");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    initializeLbSubchannels(config, servers);
+
+    // Bring one subchannel to TRANSIENT_FAILURE.
+    deliverSubchannelUnreachable(getSubChannel(servers.get(0)));
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verifyConnection(1);
+
+    SubchannelPicker picker = pickerCaptor.getValue();
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    PickResult result = picker.pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel()).isNull(); // buffer request
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
+    int expected = connectionRequestedQueue.isEmpty() ? 0 : 1;
+    verifyConnection(expected);
   }
 
   private Subchannel getSubChannel(EquivalentAddressGroup eag) {
@@ -631,6 +657,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void skipFailingHosts_firstTwoHostsFailed_pickNextFirstReady() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
@@ -658,8 +685,73 @@ public class RingHashLoadBalancerTest {
     verifyConnection(2);
     PickResult result = pickerCaptor.getValue().pickSubchannel(args); // activate last subchannel
     assertThat(result.getStatus().isOk()).isTrue();
-    int expectedCount = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 0 : 1;
-    verifyConnection(expectedCount);
+    verifyConnection(1);
+
+    deliverSubchannelState(
+        getSubchannel(servers, 0),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.PERMISSION_DENIED.withDescription("permission denied again")));
+    verify(helper, times(2)).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
+    assertThat(result.getStatus().getCode())
+        .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
+    assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
+
+    // Now connecting to server1.
+    deliverSubchannelState(getSubchannel(servers, 1), CSI_CONNECTING);
+
+    reset(helper);
+
+    result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
+    assertThat(result.getStatus().getCode())
+        .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
+    assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
+
+    // Simulate server1 becomes READY.
+    deliverSubchannelState(getSubchannel(servers, 1), CSI_READY);
+    verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+
+    SubchannelPicker picker = pickerCaptor.getValue();
+    result = picker.pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();  // succeed
+    assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(1));  // with server1
+    assertThat(picker.pickSubchannel(getDefaultPickSubchannelArgsForServer(0))).isEqualTo(result);
+    assertThat(picker.pickSubchannel(getDefaultPickSubchannelArgsForServer(2))).isEqualTo(result);
+  }
+
+  @Test
+  public void skipFailingHosts_firstTwoHostsFailed_pickNextFirstReady_newPickFirst() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+
+    initializeLbSubchannels(config, servers);
+
+    // ring:
+    //   "FakeSocketAddress-server0_0"
+    //   "FakeSocketAddress-server1_0"
+    //   "FakeSocketAddress-server2_0"
+
+    long rpcHash = hashFunc.hashAsciiString("FakeSocketAddress-server1_0");
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(rpcHash);
+
+    // Bring down server0 and server2 to force trying server1.
+    deliverSubchannelState(
+        getSubchannel(servers, 1),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("unreachable")));
+    deliverSubchannelState(
+        getSubchannel(servers, 2),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.PERMISSION_DENIED.withDescription("permission denied")));
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verifyConnection(1);
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args); // activate last subchannel
+    assertThat(result.getStatus().isOk()).isTrue();
+    verifyConnection(0);
 
     deliverSubchannelState(
         getSubchannel(servers, 0),
@@ -714,6 +806,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void allSubchannelsInTransientFailure() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
@@ -728,6 +821,34 @@ public class RingHashLoadBalancerTest {
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     verifyConnection(2);
+
+    // Picking subchannel triggers connection. RPC hash hits server0.
+    PickSubchannelArgs args = getDefaultPickSubchannelArgsForServer(0);
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("[FakeSocketAddress-server0] unreachable");
+    verifyConnection(0); // TF has already started taking care of this, pick doesn't need to
+  }
+
+  @Test
+  public void allSubchannelsInTransientFailure_newPickFirst() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    initializeLbSubchannels(config, servers);
+
+    // Bring all subchannels to TRANSIENT_FAILURE.
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
+          Status.UNAVAILABLE.withDescription(
+              subchannel.getAddresses().getAddresses() + " unreachable")));
+    }
+    verify(helper, atLeastOnce())
+        .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verifyConnection(1);
 
     // Picking subchannel triggers connection. RPC hash hits server0.
     PickSubchannelArgs args = getDefaultPickSubchannelArgsForServer(0);
@@ -787,6 +908,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void firstSubchannelFailure() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
@@ -817,7 +939,39 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
+  public void firstSubchannelFailure_newPickFirst() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+
+    List<Subchannel> subchannelList =
+        initializeLbSubchannels(config, servers, RESET_SUBCHANNEL_MOCKS);
+
+    // ring:
+    //   "FakeSocketAddress-server1_0"
+    //   "FakeSocketAddress-server0_0"
+    //   "FakeSocketAddress-server2_0"
+
+    deliverSubchannelState(subchannelList.get(0),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("unreachable")));
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verifyConnection(1);
+
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    SubchannelPicker picker1 = pickerCaptor.getValue();
+    PickResult result = picker1.pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel()).isNull();
+    verify(subchannelList.get(0), never()).requestConnection();
+    verify(subchannelList.get(1), never()).requestConnection();
+    verify(subchannelList.get(2), never()).requestConnection();
+  }
+
+  @Test
   public void secondSubchannelConnecting() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
@@ -848,7 +1002,40 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
+  public void secondSubchannelConnecting_newPickFirst() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+
+    initializeLbSubchannels(config, servers);
+
+    // ring:
+    //   "FakeSocketAddress-server1_0"
+    //   "FakeSocketAddress-server0_0"
+    //   "FakeSocketAddress-server2_0"
+
+    Subchannel firstSubchannel = getSubchannel(servers, 0);
+    deliverSubchannelUnreachable(firstSubchannel);
+    verifyConnection(1);
+
+    deliverSubchannelState(getSubchannel(servers, 2), CSI_CONNECTING);
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verifyConnection(0);
+
+    // Picking subchannel when idle triggers connection.
+    deliverSubchannelState(getSubchannel(servers, 2),
+        ConnectivityStateInfo.forNonError(IDLE));
+    verifyConnection(0);
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    verifyConnection(0);
+  }
+
+  @Test
   public void secondSubchannelFailure() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
@@ -875,7 +1062,36 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
+  public void secondSubchannelFailure_newPickFirst() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+
+    initializeLbSubchannels(config, servers);
+
+    // ring:
+    //   "FakeSocketAddress-server1_0"
+    //   "FakeSocketAddress-server0_0"
+    //   "FakeSocketAddress-server2_0"
+
+    Subchannel firstSubchannel = getSubchannel(servers, 0);
+    deliverSubchannelUnreachable(firstSubchannel);
+    deliverSubchannelUnreachable(getSubchannel(servers, 2));
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verifyConnection(1);
+
+    // Picking subchannel triggers connection.
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(getSubchannel(servers, 1), never()).requestConnection();
+    verifyConnection(0);
+  }
+
+  @Test
   public void thirdSubchannelConnecting() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
@@ -904,7 +1120,38 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
+  public void thirdSubchannelConnecting_newPickFirst() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+
+    initializeLbSubchannels(config, servers);
+
+    // ring:
+    //   "FakeSocketAddress-server1_0"
+    //   "FakeSocketAddress-server0_0"
+    //   "FakeSocketAddress-server2_0"
+
+    Subchannel firstSubchannel = getSubchannel(servers, 0);
+
+    deliverSubchannelUnreachable(firstSubchannel);
+    deliverSubchannelUnreachable(getSubchannel(servers, 2));
+    deliverSubchannelState(getSubchannel(servers, 1), CSI_CONNECTING);
+    verify(helper, atLeastOnce())
+        .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verifyConnection(1);
+
+    // Picking subchannel should not trigger connection per gRFC A61.
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    verifyConnection(0);
+  }
+
+  @Test
   public void stickyTransientFailure() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
@@ -923,13 +1170,44 @@ public class RingHashLoadBalancerTest {
     // Should not have called updateBalancingState on the helper again because PickFirst is
     // shielding the higher level from the state change.
     verify(helper, never()).updateBalancingState(any(), any());
-    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 0 : 1);
+    verifyConnection(1);
 
     // Picking subchannel triggers connection on second address. RPC hash hits server0.
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     verify(getSubchannel(servers, 1)).requestConnection();
+    verify(getSubchannel(servers, 2), never()).requestConnection();
+  }
+
+  @Test
+  public void stickyTransientFailure_newPickFirst() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+
+    initializeLbSubchannels(config, servers);
+
+    // Bring one subchannel to TRANSIENT_FAILURE.
+    Subchannel firstSubchannel = getSubchannel(servers, 0);
+    deliverSubchannelUnreachable(firstSubchannel);
+
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verifyConnection(1);
+
+    reset(helper);
+    deliverSubchannelState(firstSubchannel, ConnectivityStateInfo.forNonError(IDLE));
+    // Should not have called updateBalancingState on the helper again because PickFirst is
+    // shielding the higher level from the state change.
+    verify(helper, never()).updateBalancingState(any(), any());
+    verifyConnection(0);
+
+    // Picking subchannel triggers connection on second address. RPC hash hits server0.
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(getSubchannel(servers, 1), never()).requestConnection();
     verify(getSubchannel(servers, 2), never()).requestConnection();
   }
 
