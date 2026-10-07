@@ -511,28 +511,17 @@ public class MessageDeframer implements Closeable, Deframer {
 
     @Override
     public synchronized void mark(int readlimit) {
-      try {
-        ensureInitialized();
-        super.mark(readlimit);
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
+      // Mark is not supported
     }
 
     @Override
     public synchronized void reset() throws IOException {
-      ensureInitialized();
-      super.reset();
+      throw new IOException("Mark not supported");
     }
 
     @Override
     public boolean markSupported() {
-      try {
-        ensureInitialized();
-        return super.markSupported();
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
+      return false;
     }
   }
 

@@ -593,6 +593,9 @@ public class MessageDeframerTest {
       LazyDecompressingInputStream stream = new LazyDecompressingInputStream(
           in, 100, statsTraceCtx, countingDecompressor);
 
+      assertFalse(stream.markSupported());
+      stream.mark(10);
+      assertThrows(IOException.class, () -> stream.reset());
       assertFalse(decompressCalled.get());
       byte[] buf = new byte[5];
       int read = stream.read(buf);
