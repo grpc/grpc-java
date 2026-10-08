@@ -1491,7 +1491,9 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     private void handleImmediateResponse(ImmediateResponse immediate)
         throws HeaderMutationDisallowedException {
-      Status status = Status.fromCodeValue(immediate.getGrpcStatus().getStatus());
+      Status status = immediate.hasGrpcStatus()
+          ? Status.fromCodeValue(immediate.getGrpcStatus().getStatus())
+          : Status.UNKNOWN;
       if (!immediate.getDetails().isEmpty()) {
         status = status.withDescription(immediate.getDetails());
       }
