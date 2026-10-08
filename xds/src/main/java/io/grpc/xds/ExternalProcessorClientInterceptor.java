@@ -28,6 +28,7 @@ import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.toHeaderMap;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.math.LongMath;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
@@ -495,8 +496,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               boolean wasReady;
               synchronized (streamLock) {
                 wasReady = isReady();
-                downstreamToSidestreamWindow += update.getWindowIncrementDownstreamToSidestream();
-                upstreamToSidestreamWindow += update.getWindowIncrementUpstreamToSidestream();
+                downstreamToSidestreamWindow = LongMath.saturatedAdd(
+                    downstreamToSidestreamWindow, update.getWindowIncrementDownstreamToSidestream());
+                upstreamToSidestreamWindow = LongMath.saturatedAdd(
+                    upstreamToSidestreamWindow, update.getWindowIncrementUpstreamToSidestream());
                 drainPendingRequestBodyMessages();
                 drainPendingRequests();
                 if (wrappedListener != null) {
@@ -779,8 +782,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 .build());
         accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
         accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
-        sidestreamToUpstreamWindow += incrementUpstream;
-        sidestreamToDownstreamWindow += incrementDownstream;
+        sidestreamToUpstreamWindow = LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
+        sidestreamToDownstreamWindow = LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
       }
     }
 
@@ -803,8 +806,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (shouldSend) {
           accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
           accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
-          sidestreamToUpstreamWindow += incrementUpstream;
-          sidestreamToDownstreamWindow += incrementDownstream;
+          sidestreamToUpstreamWindow = LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
+          sidestreamToDownstreamWindow = LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
 
           sendToExtProc(ProcessingRequest.newBuilder()
               .setClientWindowUpdate(ProcessingRequest.ClientWindowUpdate.newBuilder()
