@@ -23,6 +23,8 @@ import io.grpc.ChannelLogger;
 import io.grpc.Internal;
 import io.grpc.InternalChannelz;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.AdaptiveCumulator;
+import io.netty.handler.codec.ByteToMessageDecoder.Cumulator;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
@@ -34,6 +36,10 @@ import javax.annotation.Nullable;
  */
 @Internal
 public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler {
+  static final int ADAPTIVE_CUMULATOR_COMPOSE_MIN_SIZE_DEFAULT = 1024;
+  static final Cumulator ADAPTIVE_CUMULATOR =
+      new AdaptiveCumulator(ADAPTIVE_CUMULATOR_COMPOSE_MIN_SIZE_DEFAULT);
+
   @Nullable
   protected final ChannelPromise channelUnused;
   private final ChannelLogger negotiationLogger;
@@ -48,6 +54,7 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
     super(decoder, encoder, initialSettings);
     this.channelUnused = channelUnused;
     this.negotiationLogger = negotiationLogger;
+    setCumulator(ADAPTIVE_CUMULATOR);
   }
 
   /**
