@@ -219,6 +219,9 @@ public class ExternalProcessorFilter implements Filter {
 
     static ConfigOrError<ExternalProcessorFilterConfig> create(
         ExternalProcessor externalProcessor, FilterConfigParseContext context) {
+      if (!externalProcessor.hasProcessingMode()) {
+        return ConfigOrError.fromError("Missing required field: processing_mode");
+      }
       ProcessingMode mode = externalProcessor.getProcessingMode();
       GrpcService grpcService = externalProcessor.getGrpcService();
       HeaderMutationRulesConfig mutationRulesConfig = null;

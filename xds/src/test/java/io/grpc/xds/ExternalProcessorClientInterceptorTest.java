@@ -274,7 +274,8 @@ public class ExternalProcessorClientInterceptorTest {
                 + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
-            .build());
+            .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance());
   }
 
   // --- Category 1: Configuration Override ---
@@ -644,6 +645,7 @@ public class ExternalProcessorClientInterceptorTest {
                     .build())
                 .build())
             .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -739,6 +741,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .setTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(5).build())
             .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -6066,6 +6069,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setObservabilityMode(true)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -6188,6 +6192,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setObservabilityMode(true)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -6312,6 +6317,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setObservabilityMode(false)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -6425,6 +6431,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setObservabilityMode(true)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7605,6 +7612,7 @@ public class ExternalProcessorClientInterceptorTest {
                     .build())
                 .build())
             .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7705,6 +7713,7 @@ public class ExternalProcessorClientInterceptorTest {
                     .build())
                 .build())
             .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7866,6 +7875,7 @@ public class ExternalProcessorClientInterceptorTest {
                     .build())
                 .build())
             .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -9523,6 +9533,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setObservabilityMode(true)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -9795,6 +9806,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setObservabilityMode(true)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -9939,6 +9951,7 @@ public class ExternalProcessorClientInterceptorTest {
                     .build())
                 .build())
             .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -9948,30 +9961,30 @@ public class ExternalProcessorClientInterceptorTest {
     // External Processor Server completes normally without sending request_drain = true
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
         new ExternalProcessorGrpc.ExternalProcessorImplBase() {
-      @Override
-      @SuppressWarnings("unchecked")
-      public StreamObserver<ProcessingRequest> process(
-          final StreamObserver<ProcessingResponse> responseObserver) {
-        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
-        return new StreamObserver<ProcessingRequest>() {
           @Override
-          public void onNext(ProcessingRequest request) {
-            if (request.hasRequestHeaders()) {
-              // Immediately complete the stream from server side without drain
-              responseObserver.onCompleted();
-            }
-          }
+          @SuppressWarnings("unchecked")
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  // Immediately complete the stream from server side without drain
+                  responseObserver.onCompleted();
+                }
+              }
 
-          @Override
-          public void onError(Throwable t) {
-          }
+              @Override
+              public void onError(Throwable t) {
+              }
 
-          @Override
-          public void onCompleted() {
+              @Override
+              public void onCompleted() {
+              }
+            };
           }
         };
-      }
-    };
     grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
         .addService(extProcImpl)
         .directExecutor()
@@ -10393,6 +10406,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setFailureModeAllow(false) // Fail Closed
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -10484,6 +10498,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setFailureModeAllow(true) // Fail Open
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -10621,6 +10636,7 @@ public class ExternalProcessorClientInterceptorTest {
         .setObservabilityMode(true)
         .setDeferredCloseTimeout(
             com.google.protobuf.Duration.newBuilder().setSeconds(10).build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -11198,6 +11214,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setObservabilityMode(true)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -11325,6 +11342,7 @@ public class ExternalProcessorClientInterceptorTest {
                     .build())
                 .build())
             .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -11436,6 +11454,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setObservabilityMode(true)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -11547,6 +11566,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setDisableImmediateResponse(true)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -11657,6 +11677,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setDisableImmediateResponse(true)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -11948,6 +11969,7 @@ public class ExternalProcessorClientInterceptorTest {
                     .build())
                 .build())
             .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -12045,6 +12067,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build())
         .setObservabilityMode(false)
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -12815,7 +12838,8 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(bodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(receivedRequests.size()).isAtLeast(2);
     assertThat(receivedRequests.get(1).hasRequestBody()).isTrue();
-    assertThat(receivedRequests.get(1).getRequestBody().getBody().toStringUtf8()).isEqualTo("hello");
+    assertThat(receivedRequests.get(1).getRequestBody().getBody().toStringUtf8())
+        .isEqualTo("hello");
 
     proxyCall.cancel("Cleanup", null);
     channelManager.close();
@@ -12951,7 +12975,8 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(responseBodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(receivedRequests.size()).isAtLeast(2);
     assertThat(receivedRequests.get(1).hasResponseBody()).isTrue();
-    assertThat(receivedRequests.get(1).getResponseBody().getBody().toStringUtf8()).isEqualTo("server message");
+    assertThat(receivedRequests.get(1).getResponseBody().getBody().toStringUtf8())
+        .isEqualTo("server message");
 
     proxyCall.cancel("Cleanup", null);
     channelManager.close();

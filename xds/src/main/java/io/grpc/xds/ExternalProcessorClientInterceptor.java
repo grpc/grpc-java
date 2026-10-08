@@ -497,9 +497,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               synchronized (streamLock) {
                 wasReady = isReady();
                 downstreamToSidestreamWindow = LongMath.saturatedAdd(
-                    downstreamToSidestreamWindow, update.getWindowIncrementDownstreamToSidestream());
+                    downstreamToSidestreamWindow,
+                    update.getWindowIncrementDownstreamToSidestream());
                 upstreamToSidestreamWindow = LongMath.saturatedAdd(
-                    upstreamToSidestreamWindow, update.getWindowIncrementUpstreamToSidestream());
+                    upstreamToSidestreamWindow,
+                    update.getWindowIncrementUpstreamToSidestream());
                 drainPendingRequestBodyMessages();
                 drainPendingRequests();
                 if (wrappedListener != null) {
@@ -782,8 +784,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 .build());
         accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
         accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
-        sidestreamToUpstreamWindow = LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
-        sidestreamToDownstreamWindow = LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
+        sidestreamToUpstreamWindow =
+            LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
+        sidestreamToDownstreamWindow =
+            LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
       }
     }
 
@@ -806,8 +810,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (shouldSend) {
           accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
           accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
-          sidestreamToUpstreamWindow = LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
-          sidestreamToDownstreamWindow = LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
+          sidestreamToUpstreamWindow =
+              LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
+          sidestreamToDownstreamWindow =
+              LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
 
           sendToExtProc(ProcessingRequest.newBuilder()
               .setClientWindowUpdate(ProcessingRequest.ClientWindowUpdate.newBuilder()
