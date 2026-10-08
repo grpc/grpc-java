@@ -46,6 +46,7 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
 import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -66,6 +67,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
   private CallTracer serverCallTracer;
+  // Ensures the call end is reported to serverCallTracer exactly once. Both the application
+  // (via close()) and the transport (via ServerStreamListener.closed()) may report it.
+  private final AtomicBoolean callEndReported = new AtomicBoolean();
 
   // state
   private volatile boolean cancelled;
@@ -226,7 +230,13 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
       stream.close(status, trailers);
     } finally {
-      serverCallTracer.reportCallEnded(status.isOk());
+      reportCallEnded(status.isOk());
+    }
+  }
+
+  private void reportCallEnded(boolean success) {
+    if (callEndReported.compareAndSet(false, true)) {
+      serverCallTracer.reportCallEnded(success);
     }
   }
 
@@ -284,7 +294,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         : Status.INTERNAL.withCause(internalError)
             .withDescription("Internal error so cancelling stream.");
     stream.cancel(status);
-    serverCallTracer.reportCallEnded(false); // error so always false
+    reportCallEnded(false); // error so always false
   }
 
   /**
@@ -406,6 +416,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         GrpcUtil.closeQuietly(delayedMessage);
         delayedMessage = null;
       }
+      // The application may never call close() if the call was cancelled, e.g. by the client or
+      // the transport, so report the end of the call here too.
+      call.reportCallEnded(status.isOk());
       Throwable cancelCause = null;
       try {
         if (status.isOk()) {
