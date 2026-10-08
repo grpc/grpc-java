@@ -459,14 +459,7 @@ public class CertProviderServerSslContextProviderTest {
 
     TestCallback testCallback = new TestCallback(MoreExecutors.directExecutor());
     provider.addCallback(testCallback);
-    try {
-      watcherCaptor[0].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
-      fail("exception expected");
-    } catch (RuntimeException expected) {
-      assertThat(expected)
-          .hasMessageThat()
-          .contains("only static certificateValidationContext expected");
-    }
+    watcherCaptor[0].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
     assertThat(testCallback.updatedThrowable).isNotNull();
     assertThat(testCallback.updatedThrowable)
         .hasCauseThat()
