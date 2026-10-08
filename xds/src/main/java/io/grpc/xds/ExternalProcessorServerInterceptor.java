@@ -876,7 +876,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     void handleExtProcCompleted() {
       ExtProcStreamState state = extProcStreamState.get();
-      if (state == ExtProcStreamState.DRAINING) {
+      if (state == ExtProcStreamState.DRAINING || config.getObservabilityMode()) {
         if (markExtProcStreamCompleted(extProcStreamState)) {
           handleFailOpen();
         }
