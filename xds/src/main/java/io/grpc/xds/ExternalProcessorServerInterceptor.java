@@ -28,6 +28,7 @@ import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.toHeaderMap;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.math.LongMath;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
@@ -603,8 +604,8 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
                 .build());
         accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
         accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
-        sidestreamToUpstreamWindow += incrementUpstream;
-        sidestreamToDownstreamWindow += incrementDownstream;
+        sidestreamToUpstreamWindow = LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
+        sidestreamToDownstreamWindow = LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
       }
     }
 
@@ -724,8 +725,10 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         if (response.hasServerWindowUpdate()) {
           ProcessingResponse.ServerWindowUpdate update = response.getServerWindowUpdate();
           synchronized (streamLock) {
-            downstreamToSidestreamWindow += update.getWindowIncrementDownstreamToSidestream();
-            upstreamToSidestreamWindow += update.getWindowIncrementUpstreamToSidestream();
+            downstreamToSidestreamWindow = LongMath.saturatedAdd(
+                downstreamToSidestreamWindow, update.getWindowIncrementDownstreamToSidestream());
+            upstreamToSidestreamWindow = LongMath.saturatedAdd(
+                upstreamToSidestreamWindow, update.getWindowIncrementUpstreamToSidestream());
           }
           if (wrappedListener != null) {
             wrappedListener.drainPendingRequestBodyMessages();
