@@ -669,11 +669,18 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         @Override
         public void onCompleted() {
-          if (markExtProcStreamCompleted(extProcStreamState)) {
-            synchronized (streamLock) {
-              extProcClientCallRequestObserver = null;
+          ExtProcStreamState state = extProcStreamState.get();
+          if (state == ExtProcStreamState.DRAINING || config.getObservabilityMode()) {
+            if (markExtProcStreamCompleted(extProcStreamState)) {
+              synchronized (streamLock) {
+                extProcClientCallRequestObserver = null;
+              }
+              handleFailOpen(wrappedListener);
             }
-            handleFailOpen(wrappedListener);
+          } else if (state == ExtProcStreamState.ACTIVE) {
+            internalOnError(Status.UNAVAILABLE
+                .withDescription("External processor stream completed without drain")
+                .asRuntimeException());
           }
         }
       });
@@ -849,7 +856,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (markExtProcStreamFailed(extProcStreamState)) {
         synchronized (streamLock) {
           if (extProcClientCallRequestObserver != null) {
-            extProcClientCallRequestObserver.onError(t);
+            try {
+              extProcClientCallRequestObserver.onError(t);
+            } catch (Throwable ignored) {
+              // Ignore exception if observer is already closed/completed
+            }
             extProcClientCallRequestObserver = null;
           }
         }
