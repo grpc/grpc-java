@@ -138,7 +138,8 @@ public class ExternalProcessorFilterTest {
                 + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
-            .build());
+            .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance());
   }
 
   // --- Category 1: Filter Provider registration based on flag ---
@@ -215,8 +216,29 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
+  public void givenMissingProcessingMode_whenParsed_thenReturnsError() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                        + "channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).contains("Missing required field: processing_mode");
+  }
+
+  @Test
   public void givenNonGoogleGrpcService_whenParsed_thenReturnsError() throws Exception {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .setGrpcService(GrpcService.newBuilder().build()) // Invalid: no GoogleGrpc
         .build();
 
@@ -229,6 +251,7 @@ public class ExternalProcessorFilterTest {
   @Test
   public void givenInvalidGrpcService_whenParsed_thenReturnsError() throws Exception {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .setGrpcService(GrpcService.newBuilder()
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)

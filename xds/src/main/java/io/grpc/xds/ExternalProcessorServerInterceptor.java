@@ -604,8 +604,10 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
                 .build());
         accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
         accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
-        sidestreamToUpstreamWindow = LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
-        sidestreamToDownstreamWindow = LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
+        sidestreamToUpstreamWindow =
+            LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
+        sidestreamToDownstreamWindow =
+            LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
       }
     }
 

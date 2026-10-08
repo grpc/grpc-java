@@ -374,7 +374,8 @@ public class ExternalProcessorServerInterceptorTest {
                                         + "channel_credentials.insecure.v3.InsecureCredentials")
                                 .build())
                         .build())
-                .build());
+                .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance());
   }
 
   // ============================================================================
@@ -488,6 +489,7 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -607,6 +609,7 @@ public class ExternalProcessorServerInterceptorTest {
                             .build())
                     .setTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(5).build())
                     .build())
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -6614,6 +6617,7 @@ public class ExternalProcessorServerInterceptorTest {
                             .build())
                     .build())
             .setObservabilityMode(true)
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -6757,6 +6761,7 @@ public class ExternalProcessorServerInterceptorTest {
                             .build())
                     .build())
             .setObservabilityMode(true)
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -6876,6 +6881,7 @@ public class ExternalProcessorServerInterceptorTest {
                             .build())
                     .build())
             .setObservabilityMode(false)
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7001,6 +7007,7 @@ public class ExternalProcessorServerInterceptorTest {
                             .build())
                     .build())
             .setObservabilityMode(true)
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7136,6 +7143,7 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7240,6 +7248,7 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7385,6 +7394,7 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -8511,7 +8521,8 @@ public class ExternalProcessorServerInterceptorTest {
   }
 
   @Test
-  public void givenObservabilityMode_whenExtProcStreamCompletesNormallyWithoutDrain_thenCallSucceeds()
+  public void
+      givenObservabilityMode_whenExtProcStreamCompletesNormallyWithoutDrain_thenCallSucceeds()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     ExternalProcessor proto =
@@ -8633,6 +8644,7 @@ public class ExternalProcessorServerInterceptorTest {
                             .build())
                     .build())
             .setObservabilityMode(true)
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -8803,6 +8815,7 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -12006,6 +12019,7 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -12102,6 +12116,7 @@ public class ExternalProcessorServerInterceptorTest {
                             .build())
                     .build())
             .setObservabilityMode(false)
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -12261,6 +12276,7 @@ public class ExternalProcessorServerInterceptorTest {
                             .build())
                     .build())
             .setObservabilityMode(false)
+            .setProcessingMode(ProcessingMode.getDefaultInstance())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -16279,7 +16295,8 @@ public class ExternalProcessorServerInterceptorTest {
     assertThat(bodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(receivedRequests.size()).isAtLeast(2);
     assertThat(receivedRequests.get(1).hasRequestBody()).isTrue();
-    assertThat(receivedRequests.get(1).getRequestBody().getBody().toStringUtf8()).isEqualTo("hello");
+    assertThat(receivedRequests.get(1).getRequestBody().getBody().toStringUtf8())
+        .isEqualTo("hello");
 
     clientCall.cancel("Cleanup", null);
     channelManager.close();
@@ -16361,7 +16378,8 @@ public class ExternalProcessorServerInterceptorTest {
     dataPlaneHandler = new DataPlaneServiceHandler() {
       @Override
       public void sayHello(InputStream request, StreamObserver<InputStream> responseObserver) {
-        responseObserver.onNext(new ByteArrayInputStream("server message".getBytes(StandardCharsets.UTF_8)));
+        responseObserver.onNext(
+            new ByteArrayInputStream("server message".getBytes(StandardCharsets.UTF_8)));
         responseObserver.onCompleted();
       }
     };
@@ -16373,14 +16391,16 @@ public class ExternalProcessorServerInterceptorTest {
 
     clientCall.start(new io.grpc.ClientCall.Listener<InputStream>() {}, new Metadata());
     clientCall.request(1);
-    clientCall.sendMessage(new ByteArrayInputStream("client request".getBytes(StandardCharsets.UTF_8)));
+    clientCall.sendMessage(
+        new ByteArrayInputStream("client request".getBytes(StandardCharsets.UTF_8)));
     clientCall.halfClose();
 
     // Verify response body reached ext_proc without being blocked by negative overflow
     assertThat(responseBodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(receivedRequests.size()).isAtLeast(2);
     assertThat(receivedRequests.get(1).hasResponseBody()).isTrue();
-    assertThat(receivedRequests.get(1).getResponseBody().getBody().toStringUtf8()).isEqualTo("server message");
+    assertThat(receivedRequests.get(1).getResponseBody().getBody().toStringUtf8())
+        .isEqualTo("server message");
 
     clientCall.cancel("Cleanup", null);
     channelManager.close();
