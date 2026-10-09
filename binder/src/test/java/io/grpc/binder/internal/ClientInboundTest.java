@@ -303,29 +303,7 @@ public final class ClientInboundTest {
   }
 
   @Test
-  public void outOfOrderMessageDeliveredBeforePrefix() throws Exception {
-    // Deliver message (Tx 1) BEFORE prefix (Tx 0)
-    newStreamTxnToClientBuilder(1).withMessage(utf8("some message")).dispatchTo(inbound);
-
-    // Deliver prefix (Tx 0)
-    newStreamTxnToClientBuilder(0).withPrefix(new Metadata()).dispatchTo(inbound);
-
-    // Request message after prefix has arrived
-    clientStream.request(1);
-
-    // Deliver suffix (Tx 2)
-    newStreamTxnToClientBuilder(2).withSuffix(Status.OK, new Metadata()).dispatchTo(inbound);
-
-    drainExecutors();
-    // Verify message and suffix are delivered
-    assertThat(listener.getReadMessages()).containsExactly("some message");
-    assertThat(listener.isClosed()).isTrue();
-    assertThat(listener.getClosedStatus()).isOk();
-    assertThat(listener.getClosedTrailers().keys()).isEmpty();
-  }
-
-  @Test
-  public void sequenceGapCausesBufferingUntilMissingTransactionArrives() throws Exception {
+  public void sequenceGapFailFastAbort() throws Exception {
     newStreamTxnToClientBuilder(0).withPrefix(new Metadata()).dispatchTo(inbound);
     clientStream.request(2);
 
@@ -333,16 +311,18 @@ public final class ClientInboundTest {
     newStreamTxnToClientBuilder(2).withMessage(utf8("gap-message-2")).dispatchTo(inbound);
 
     drainExecutors();
+    assertThat(transport.getOngoingCalls()).isEmpty();
+    assertThat(listener.isClosed()).isTrue();
+    assertThat(listener.getClosedStatus()).hasCode(Status.Code.UNAVAILABLE);
+    assertThat(listener.getClosedStatus().getDescription())
+        .contains("Out-of-sequence transaction received: got 2, expected 1");
     assertThat(listener.getReadMessages()).isEmpty();
 
-    // Now send index 1
-    newStreamTxnToClientBuilder(1).withMessage(utf8("gap-message-1")).dispatchTo(inbound);
-
+    // Late arrival of skipped transaction index 1 does not revive the stream
+    newStreamTxnToClientBuilder(1).withMessage(utf8("late-message-1")).dispatchTo(inbound);
     drainExecutors();
-    // Both messages delivered in order
-    assertThat(listener.getReadMessages())
-        .containsExactly("gap-message-1", "gap-message-2")
-        .inOrder();
+    assertThat(transport.getOngoingCalls()).isEmpty();
+    assertThat(listener.getReadMessages()).isEmpty();
   }
 
   @Test
@@ -504,6 +484,54 @@ public final class ClientInboundTest {
 
     drainExecutors();
     assertThat(transport.getOngoingCalls()).doesNotContainKey(unstartedInbound.callId);
+  }
+
+  @Test
+  public void suffixDuringPartialMessageReassemblyAbortsStream() throws Exception {
+    newStreamTxnToClientBuilder(nextTxIndex++).withPrefix(new Metadata()).dispatchTo(inbound);
+    clientStream.request(1);
+
+    newStreamTxnToClientBuilder(nextTxIndex++)
+        .withMessageFragment(utf8("partial-data"))
+        .dispatchTo(inbound);
+    newStreamTxnToClientBuilder(nextTxIndex++)
+        .withSuffix(Status.OK, new Metadata())
+        .dispatchTo(inbound);
+
+    drainExecutors();
+    assertThat(listener.isClosed()).isTrue();
+    assertThat(listener.getClosedStatus()).hasCode(Status.Code.INTERNAL);
+    assertThat(listener.getClosedStatus().getDescription())
+        .contains("Inbound stream closed with partial message");
+    assertThat(listener.getReadMessages()).isEmpty();
+    assertThat(transport.getOngoingCalls()).isEmpty();
+  }
+
+  @Test
+  public void consecutiveMultiPacketMessagesReassembleIndependently() throws Exception {
+    newStreamTxnToClientBuilder(nextTxIndex++).withPrefix(new Metadata()).dispatchTo(inbound);
+    clientStream.request(2);
+
+    newStreamTxnToClientBuilder(nextTxIndex++)
+        .withMessageFragment(utf8("part1-"))
+        .dispatchTo(inbound);
+    newStreamTxnToClientBuilder(nextTxIndex++)
+        .withFinalMessageFragment(utf8("part2"))
+        .dispatchTo(inbound);
+    newStreamTxnToClientBuilder(nextTxIndex++)
+        .withMessageFragment(utf8("part3-"))
+        .dispatchTo(inbound);
+    newStreamTxnToClientBuilder(nextTxIndex++)
+        .withFinalMessageFragment(utf8("part4"))
+        .dispatchTo(inbound);
+    newStreamTxnToClientBuilder(nextTxIndex++)
+        .withSuffix(Status.OK, new Metadata())
+        .dispatchTo(inbound);
+
+    drainExecutors();
+    assertThat(listener.getReadMessages()).containsExactly("part1-part2", "part3-part4").inOrder();
+    assertThat(listener.isClosed()).isTrue();
+    assertThat(listener.getClosedStatus()).isOk();
   }
 
   private static final class DummyClientTransportBuilder {
