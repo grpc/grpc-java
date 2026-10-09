@@ -51,7 +51,6 @@ import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
 import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import org.junit.Before;
@@ -85,23 +84,7 @@ public class ServerCallImplTest {
 
   private static final MethodDescriptor<Long, Long> CLIENT_STREAMING_METHOD =
       MethodDescriptor.<Long, Long>newBuilder()
-          .setType(MethodType.CLIENT_STREAMING)
-          .setFullMethodName("service/method")
-          .setRequestMarshaller(new LongMarshaller())
-          .setResponseMarshaller(new LongMarshaller())
-          .build();
-
-  private static final MethodDescriptor<Long, Long> BIDI_STREAMING_METHOD =
-      MethodDescriptor.<Long, Long>newBuilder()
-          .setType(MethodType.BIDI_STREAMING)
-          .setFullMethodName("service/method")
-          .setRequestMarshaller(new LongMarshaller())
-          .setResponseMarshaller(new LongMarshaller())
-          .build();
-
-  private static final MethodDescriptor<Long, Long> SERVER_STREAMING_METHOD =
-      MethodDescriptor.<Long, Long>newBuilder()
-          .setType(MethodType.SERVER_STREAMING)
+          .setType(MethodType.UNARY)
           .setFullMethodName("service/method")
           .setRequestMarshaller(new LongMarshaller())
           .setResponseMarshaller(new LongMarshaller())
@@ -473,153 +456,41 @@ public class ServerCallImplTest {
   }
 
   @Test
-  public void streamListener_messageRead_unary_delayed() {
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-    FakeCloseTrackerInputStream messageStream =
-        new FakeCloseTrackerInputStream(UNARY_METHOD.streamRequest(1234L), false);
-    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
-
-    // Message should not be delivered or closed yet
-    verify(callListener, never()).onMessage(any(Long.class));
-    assertFalse(messageStream.closed);
-
-    streamListener.halfClosed();
-
-    // Now it should be delivered and closed
-    verify(callListener).onMessage(1234L);
-    verify(callListener).onHalfClose();
-    assertTrue(messageStream.closed);
-  }
-
-  @Test
-  public void streamListener_messageRead_serverStreaming_delayed() {
-    call = new ServerCallImpl<>(stream, SERVER_STREAMING_METHOD, requestHeaders, context,
-        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
-        serverCallTracer, PerfMark.createTag());
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-    FakeCloseTrackerInputStream messageStream =
-        new FakeCloseTrackerInputStream(
-            SERVER_STREAMING_METHOD.streamRequest(1234L), false);
-    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
-
-    // Message should not be delivered or closed yet
-    verify(callListener, never()).onMessage(any(Long.class));
-    assertFalse(messageStream.closed);
-
-    streamListener.halfClosed();
-
-    // Now it should be delivered and closed
-    verify(callListener).onMessage(1234L);
-    verify(callListener).onHalfClose();
-    assertTrue(messageStream.closed);
-  }
-
-  @Test
-  public void streamListener_messageRead_bidi_notDelayed() {
-    call = new ServerCallImpl<>(stream, BIDI_STREAMING_METHOD, requestHeaders, context,
-        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
-        serverCallTracer, PerfMark.createTag());
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-    streamListener.messagesAvailable(
-        new SingleMessageProducer(BIDI_STREAMING_METHOD.streamRequest(1234L)));
-
-    // Message should be delivered immediately
-    verify(callListener).onMessage(1234L);
-    verify(callListener, never()).onHalfClose();
-  }
-
-  @Test
-  public void streamListener_messageRead_unary_tooManyRequests() {
+  public void streamListener_messageRead() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
     streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
 
-    // Sending second message should fail
-    streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(5678L)));
-
-    verify(stream).cancel(any(Status.class));
-    verify(callListener, never()).onMessage(any(Long.class));
-    assertTrue(call.isCancelled());
-
-    // Subsequent halfClosed should be ignored because call is cancelled
-    streamListener.halfClosed();
-    verify(callListener, never()).onHalfClose();
-
-    // When transport closes, onCancel is called once
-    streamListener.closed(Status.CANCELLED);
-    verify(callListener).onCancel();
-    assertTrue(context.isCancelled());
+    verify(callListener).onMessage(1234L);
   }
 
   @Test
-  public void streamListener_messageRead_onlyOnce_unary() {
+  public void streamListener_messageRead_onlyOnce() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-    FakeCloseTrackerInputStream messageStream =
-        new FakeCloseTrackerInputStream(UNARY_METHOD.streamRequest(1234L), false);
-    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
-
-    assertFalse(messageStream.closed);
-
-    // canceling the call should clean up and prevent delivery
+    streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
+    // canceling the call should short circuit future halfClosed() calls.
     streamListener.closed(Status.CANCELLED);
 
-    streamListener.halfClosed();
+    streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
 
-    verify(callListener, never()).onMessage(any(Long.class));
-    assertTrue(messageStream.closed);
+    verify(callListener).onMessage(1234L);
   }
 
   @Test
-  public void streamListener_unexpectedRuntimeException_unary() {
+  public void streamListener_unexpectedRuntimeException() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
     doThrow(new RuntimeException("unexpected exception"))
         .when(callListener)
         .onMessage(any(Long.class));
 
-    FakeCloseTrackerInputStream messageStream =
-        new FakeCloseTrackerInputStream(UNARY_METHOD.streamRequest(1234L), false);
+    InputStream inputStream = UNARY_METHOD.streamRequest(1234L);
 
-    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
-
-    // Exception should not be thrown yet because deserialization/delivery is delayed
-    verify(callListener, never()).onMessage(any(Long.class));
-    assertFalse(messageStream.closed);
-
-    // It should be thrown during halfClosed
+    SingleMessageProducer producer = new SingleMessageProducer(inputStream);
     RuntimeException e = assertThrows(RuntimeException.class,
-        () -> streamListener.halfClosed());
+        () -> streamListener.messagesAvailable(producer));
     assertThat(e).hasMessageThat().isEqualTo("unexpected exception");
-
-    // The stream should have been closed in the catch block
-    assertTrue(messageStream.closed);
-  }
-
-  @Test
-  public void streamListener_halfClosed_closeException() {
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
-
-    FakeCloseTrackerInputStream messageStream =
-        new FakeCloseTrackerInputStream(UNARY_METHOD.streamRequest(1234L), true);
-
-    streamListener.messagesAvailable(new SingleMessageProducer(messageStream));
-
-    // Message should not be delivered yet
-    verify(callListener, never()).onMessage(any(Long.class));
-    assertFalse(messageStream.closed);
-
-    // halfClosed should not throw because we use closeQuietly
-    streamListener.halfClosed();
-
-    // The message was delivered and halfClosed completed
-    verify(callListener).onMessage(1234L);
-    verify(callListener).onHalfClose();
-    assertTrue(messageStream.closed);
   }
 
   @Test
@@ -670,31 +541,6 @@ public class ServerCallImplTest {
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
-    }
-  }
-
-  private static class FakeCloseTrackerInputStream extends InputStream {
-    boolean closed = false;
-    private final InputStream delegate;
-    private final boolean throwOnClose;
-
-    FakeCloseTrackerInputStream(InputStream delegate, boolean throwOnClose) {
-      this.delegate = delegate;
-      this.throwOnClose = throwOnClose;
-    }
-
-    @Override
-    public int read() throws IOException {
-      return delegate.read();
-    }
-
-    @Override
-    public void close() throws IOException {
-      closed = true;
-      if (throwOnClose) {
-        throw new IOException("close failed");
-      }
-      delegate.close();
     }
   }
 }
