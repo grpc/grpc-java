@@ -28,6 +28,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.InvalidMarkException;
 import org.junit.After;
 import org.junit.Before;
@@ -334,6 +335,33 @@ public class CompositeReadableBufferTest {
     // The 500 small frames should be coalesced into 1, followed by the 1 large frame
     assertEquals(2, composite.getBufferCount());
     assertEquals(1524, composite.readableBytes());
+  }
+
+  @Test
+  public void coalesceBeforeLargeBufferKeepsByteBufferSupport() {
+    composite = new CompositeReadableBuffer();
+    // Small frames that support getByteBuffer(), as Netty's do
+    composite.addBuffer(ReadableBuffers.wrap(ByteBuffer.wrap("hello ".getBytes(UTF_8))));
+    composite.addBuffer(ReadableBuffers.wrap(ByteBuffer.wrap("world".getBytes(UTF_8))));
+    composite.addBuffer(ReadableBuffers.wrap(ByteBuffer.wrap(new byte[1024])));
+    assertEquals(2, composite.getBufferCount());
+
+    assertTrue(composite.byteBufferSupported());
+    assertEquals(ByteBuffer.wrap("hello world".getBytes(UTF_8)), composite.getByteBuffer());
+  }
+
+  @Test
+  public void coalesceOnMaxSmallBuffersKeepsByteBufferSupport() {
+    composite = new CompositeReadableBuffer();
+    byte[] expected = new byte[1000];
+    for (int i = 0; i < 1000; i++) {
+      expected[i] = (byte) i;
+      composite.addBuffer(ReadableBuffers.wrap(ByteBuffer.wrap(new byte[] {(byte) i})));
+    }
+    assertEquals(1, composite.getBufferCount());
+
+    assertTrue(composite.byteBufferSupported());
+    assertEquals(ByteBuffer.wrap(expected), composite.getByteBuffer());
   }
 
   @Test
