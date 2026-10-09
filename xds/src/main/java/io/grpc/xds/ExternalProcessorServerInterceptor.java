@@ -307,8 +307,6 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     @GuardedBy("streamLock")
     private final Queue<ByteString> pendingResponseBodyMessages = new ConcurrentLinkedQueue<>();
     @GuardedBy("streamLock")
-    private int outstandingResponseBodyRequests = 0;
-    @GuardedBy("streamLock")
     private final AtomicBoolean pendingClose = new AtomicBoolean(false);
 
     // Path 4 flow control: Buffered mutated response bodies from ext_proc to send to
@@ -582,9 +580,6 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           expectedResponses.add(EventType.RESPONSE_HEADERS);
         } else if (requestToSend.hasResponseTrailers()) {
           expectedResponses.add(EventType.RESPONSE_TRAILERS);
-        }
-        if (requestToSend.hasResponseBody()) {
-          outstandingResponseBodyRequests++;
         }
 
         extProcClientCallRequestObserver.onNext(requestToSend);
@@ -1035,9 +1030,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         Metadata trailersForHandshake = null;
         synchronized (streamLock) {
           if (savedStatus != null) {
-            if (!config.getObservabilityMode()
-                && (!pendingResponseBodyMessages.isEmpty()
-                    || outstandingResponseBodyRequests > 0)) {
+            if (!config.getObservabilityMode() && !pendingResponseBodyMessages.isEmpty()) {
               pendingClose.set(true);
             } else {
               triggerHandshake = true;
@@ -1145,8 +1138,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           this.savedStatus = status;
           this.savedTrailers = trailers;
 
-          if (!config.getObservabilityMode()
-              && (!pendingResponseBodyMessages.isEmpty() || outstandingResponseBodyRequests > 0)) {
+          if (!config.getObservabilityMode() && !pendingResponseBodyMessages.isEmpty()) {
             pendingClose.set(true);
             return;
           }
@@ -1324,9 +1316,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
             request = prepareResponseBodyRequest(body);
           }
           if (request == null) {
-            if (pendingResponseBodyMessages.isEmpty()
-                && pendingClose.get()
-                && outstandingResponseBodyRequests == 0) {
+            if (pendingResponseBodyMessages.isEmpty() && pendingClose.get()) {
               triggerClose = true;
               pendingClose.set(false);
             }
@@ -1429,22 +1419,6 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           deliverResponseBodyToClient(body);
           trySendAccumulatedWindowUpdates();
         }
-      }
-
-      boolean triggerClose = false;
-      Metadata trailersForHandshake = null;
-      synchronized (streamLock) {
-        outstandingResponseBodyRequests--;
-        if (pendingClose.get()
-            && pendingResponseBodyMessages.isEmpty()
-            && outstandingResponseBodyRequests == 0) {
-          pendingClose.set(false);
-          triggerClose = true;
-          trailersForHandshake = savedTrailers;
-        }
-      }
-      if (triggerClose) {
-        triggerCloseHandshake(trailersForHandshake);
       }
     }
 

@@ -16940,8 +16940,8 @@ public class ExternalProcessorServerInterceptorTest {
     assertThat(receivedRequests.get(1).hasResponseBody()).isTrue();
     assertThat(receivedRequests.get(1).getResponseBody().getBody())
         .isEqualTo(ByteString.copyFrom(smallMessageBytes));
-    assertThat(receivedRequests.get(2).hasClientWindowUpdate()).isTrue();
-    assertThat(receivedRequests.get(3).hasResponseTrailers()).isTrue();
+    assertThat(receivedRequests.get(2).hasResponseTrailers()).isTrue();
+    assertThat(receivedRequests.get(3).hasClientWindowUpdate()).isTrue();
 
     assertThat(receivedMessages).hasSize(2);
     assertThat(receivedMessages.get(0)).isEqualTo(ByteString.copyFrom(largeMessageBytes));
