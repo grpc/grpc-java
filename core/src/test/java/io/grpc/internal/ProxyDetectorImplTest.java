@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -224,9 +225,7 @@ public class ProxyDetectorImplTest {
     IOException exception =
         assertThrows(IOException.class, () -> proxyDetector.proxyFor(destination));
 
-    assertEquals(cause, exception.getCause());
-    assertTrue(
-        exception.getMessage(),
-        exception.getMessage().contains(proxySelector.getClass().getName()));
+    assertSame(cause, exception.getCause());
+    assertEquals("Failed when selecting a proxy", exception.getMessage());
   }
 }
