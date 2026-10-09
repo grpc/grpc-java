@@ -62,7 +62,7 @@ dependencies {
             project(':grpc-testing-proto'),
             project(':grpc-testing'),
             libraries.truth
-    shadow project(':grpc-netty').configurations.runtimeClasspath.allDependencies.matching {
+    shadow project.project(':grpc-netty').configurations.runtimeClasspath.allDependencies.matching {
         it.group != 'io.netty'
     }
     signature (libraries.signature.java) {
