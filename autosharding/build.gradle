@@ -60,6 +60,9 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/autosharding/*Provider.java'
     exclude 'io/grpc/autosharding/internal/**'
     exclude 'io/grpc/autosharding/Internal*'
+    // @Internal types, published only so that the xDS integration can inject them.
+    exclude 'io/grpc/autosharding/AutoShardingAttributes.java'
+    exclude 'io/grpc/autosharding/ChannelFactory*'
 }
 
 tasks.named("jacocoTestReport").configure {
