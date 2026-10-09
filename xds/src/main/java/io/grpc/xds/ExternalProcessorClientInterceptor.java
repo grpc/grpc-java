@@ -573,18 +573,18 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     .asRuntimeException());
                 return;
               }
-              if (clientHeadersReceived) {
-                internalOnError(Status.UNAVAILABLE
-                    .withDescription("Protocol error: received response out of order. "
-                        + "Duplicate request_headers response.")
-                    .asRuntimeException());
-                return;
-              }
               if (clientEndOfStreamReceived) {
                 internalOnError(Status.UNAVAILABLE
                     .withDescription("Protocol error: received response out of order. "
                         + "Received request_headers after end-of-stream in "
                         + "client-to-server direction.")
+                    .asRuntimeException());
+                return;
+              }
+              if (clientHeadersReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Duplicate request_headers response.")
                     .asRuntimeException());
                 return;
               }
@@ -604,17 +604,17 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     .asRuntimeException());
                 return;
               }
-              if (serverHeadersReceived) {
-                internalOnError(Status.UNAVAILABLE
-                    .withDescription("Protocol error: received response out of order. "
-                        + "Duplicate response_headers response.")
-                    .asRuntimeException());
-                return;
-              }
               if (serverTrailersReceived || serverEndOfStreamReceived) {
                 internalOnError(Status.UNAVAILABLE
                     .withDescription("Protocol error: received response out of order. "
                         + "Received response_headers after trailers or end-of-stream.")
+                    .asRuntimeException());
+                return;
+              }
+              if (serverHeadersReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Duplicate response_headers response.")
                     .asRuntimeException());
                 return;
               }
