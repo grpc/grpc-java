@@ -129,6 +129,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -1712,7 +1713,13 @@ public class XdsNameResolverTest {
   }
 
   private StatefulFilter.Provider filterStateTestSetupResolver() {
-    StatefulFilter.Provider statefulFilterProvider = new StatefulFilter.Provider();
+    return filterStateTestSetupResolver(false, false);
+  }
+
+  private StatefulFilter.Provider filterStateTestSetupResolver(
+      boolean requiresRequestPayloadAccess, boolean requiresResponsePayloadAccess) {
+    StatefulFilter.Provider statefulFilterProvider =
+        new StatefulFilter.Provider(requiresRequestPayloadAccess, requiresResponsePayloadAccess);
     FilterRegistry filterRegistry = FilterRegistry.newRegistry()
         .register(statefulFilterProvider, ROUTER_FILTER_PROVIDER);
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
@@ -3090,90 +3097,206 @@ public class XdsNameResolverTest {
         .build()
         .start());
 
+    for (boolean interceptReq : new boolean[] {true, false}) {
+      for (boolean interceptResp : new boolean[] {true, false}) {
+        Channel channel = grpcCleanup.register(InProcessChannelBuilder.forName(serverName)
+            .directExecutor()
+            .intercept(new XdsNameResolver.RawMessageClientInterceptor(interceptReq, interceptResp))
+            .build());
+
+        String response = ClientCalls.blockingUnaryCall(
+            channel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
+        assertThat(response).isEqualTo("Hello World");
+      }
+    }
+  }
+
+  @Test
+  public void rawMessageClientInterceptor_retriesPreservePayload() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    AtomicInteger attempts = new AtomicInteger();
+    List<String> receivedMessages = new ArrayList<>();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, new ServerCallHandler<String, String>() {
+          @Override
+          public ServerCall.Listener<String> startCall(
+              ServerCall<String, String> call, Metadata headers) {
+            call.request(1);
+            return new ServerCall.Listener<String>() {
+              @Override
+              public void onMessage(String message) {
+                receivedMessages.add(message);
+                if (attempts.incrementAndGet() == 1) {
+                  call.close(Status.UNAVAILABLE.withDescription("transient error"), new Metadata());
+                } else {
+                  call.sendHeaders(new Metadata());
+                  call.sendMessage("Hello " + message);
+                  call.close(Status.OK, new Metadata());
+                }
+              }
+            };
+          }
+        }).build();
+
+    grpcCleanup.register(InProcessServerBuilder.forName(serverName)
+        .directExecutor()
+        .addService(serviceDef)
+        .build()
+        .start());
+
+    Map<String, Object> retryPolicy = new HashMap<>();
+    retryPolicy.put("maxAttempts", 2D);
+    retryPolicy.put("initialBackoff", "0.01s");
+    retryPolicy.put("maxBackoff", "0.1s");
+    retryPolicy.put("backoffMultiplier", 1D);
+    retryPolicy.put("retryableStatusCodes", ImmutableList.of("UNAVAILABLE"));
+
+    Map<String, Object> methodConfig = new HashMap<>();
+    Map<String, Object> name = new HashMap<>();
+    name.put("service", "test.TestService");
+    methodConfig.put("name", ImmutableList.of(name));
+    methodConfig.put("retryPolicy", retryPolicy);
+
+    Map<String, Object> serviceConfig = new HashMap<>();
+    serviceConfig.put("methodConfig", ImmutableList.of(methodConfig));
+
     Channel channel = grpcCleanup.register(InProcessChannelBuilder.forName(serverName)
         .directExecutor()
+        .enableRetry()
+        .defaultServiceConfig(serviceConfig)
         .intercept(new XdsNameResolver.RawMessageClientInterceptor())
         .build());
 
     String response = ClientCalls.blockingUnaryCall(
         channel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
     assertThat(response).isEqualTo("Hello World");
+    assertThat(attempts.get()).isEqualTo(2);
+    assertThat(receivedMessages).containsExactly("World", "World");
   }
 
   @Test
-  public void rawMessageClientInterceptor_flagFalse() {
-    String origClientProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
-    String origServerProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER");
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", "false");
-    try {
-      filterStateTestSetupResolver();
-      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-      VirtualHost vhost = filterStateTestVhost();
+  public void rawMessageClientInterceptor_sendMessageIoException_cancelsCall() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, new ServerCallHandler<String, String>() {
+          @Override
+          public ServerCall.Listener<String> startCall(
+              ServerCall<String, String> call, Metadata headers) {
+            call.request(1);
+            return new ServerCall.Listener<String>() {};
+          }
+        }).build();
 
-      xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
-      createAndDeliverClusterUpdates(xdsClient, cluster1);
+    grpcCleanup.register(InProcessServerBuilder.forName(serverName)
+        .directExecutor()
+        .addService(serviceDef)
+        .build()
+        .start());
 
-      // When flags are false, RawMessageClientInterceptor is not added.
-      assertClusterResolutionResult(call1, cluster1);
-      assertThat(testCall.methodDescriptor).isSameInstanceAs(call1.methodDescriptor);
-    } finally {
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", origClientProp);
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", origServerProp);
+    IOException ioException = new IOException("Simulated stream read error");
+    MethodDescriptor<String, String> failingRequestMethod =
+        METHOD_SAY_HELLO.toBuilder(
+            new MethodDescriptor.Marshaller<String>() {
+              @Override
+              public InputStream stream(String value) {
+                return new InputStream() {
+                  @Override
+                  public int read() throws IOException {
+                    throw ioException;
+                  }
+                };
+              }
+
+              @Override
+              public String parse(InputStream stream) {
+                return new StringMarshaller().parse(stream);
+              }
+            },
+            new StringMarshaller())
+        .build();
+
+    for (boolean interceptResp : new boolean[] {true, false}) {
+      Channel interceptedChannel = grpcCleanup.register(InProcessChannelBuilder.forName(serverName)
+          .directExecutor()
+          .intercept(new XdsNameResolver.RawMessageClientInterceptor(true, interceptResp))
+          .build());
+
+      ClientCall<String, String> call =
+          interceptedChannel.newCall(failingRequestMethod, CallOptions.DEFAULT);
+      @SuppressWarnings("unchecked")
+      ClientCall.Listener<String> listener = mock(ClientCall.Listener.class);
+      call.start(listener, new Metadata());
+      call.sendMessage("World");
+
+      ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+      verify(listener).onClose(statusCaptor.capture(), any(Metadata.class));
+      Status status = statusCaptor.getValue();
+      assertThat(status.getCode()).isEqualTo(Status.Code.CANCELLED);
+      assertThat(status.getDescription())
+          .isEqualTo("Failed to read message for raw message interceptor");
+      assertThat(status.getCause()).isSameInstanceAs(ioException);
     }
   }
 
   @Test
-  public void rawMessageClientInterceptor_flagTrue() {
-    String origClientProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
-    String origServerProp = System.getProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER");
+  public void rawMessageClientInterceptor_filterDoesNotRequirePayloadAccess() {
+    filterStateTestSetupResolver(false, false);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
 
-    // When GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT is true, RawMessageClientInterceptor is added.
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "true");
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", "false");
-    try {
-      filterStateTestSetupResolver();
-      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-      VirtualHost vhost = filterStateTestVhost();
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
 
-      xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
-      createAndDeliverClusterUpdates(xdsClient, cluster1);
-
-      assertClusterResolutionResult(call1, cluster1);
-      assertThat(testCall.methodDescriptor).isNotSameInstanceAs(call1.methodDescriptor);
-    } finally {
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", origClientProp);
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", origServerProp);
-    }
-
-    resolver.shutdown();
-    reset(mockListener);
-    when(mockListener.onResult2(any())).thenReturn(Status.OK);
-
-    // When GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER is true, RawMessageClientInterceptor is added.
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", "true");
-    try {
-      filterStateTestSetupResolver();
-      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-      VirtualHost vhost = filterStateTestVhost();
-
-      xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
-      createAndDeliverClusterUpdates(xdsClient, cluster1);
-
-      assertClusterResolutionResult(call1, cluster1);
-      assertThat(testCall.methodDescriptor).isNotSameInstanceAs(call1.methodDescriptor);
-    } finally {
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", origClientProp);
-      restoreProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_SERVER", origServerProp);
-    }
+    // When filter does not require payload access, RawMessageClientInterceptor is not added.
+    assertClusterResolutionResult(call1, cluster1);
+    assertThat(testCall.methodDescriptor).isSameInstanceAs(call1.methodDescriptor);
   }
 
-  private static void restoreProperty(String key, @Nullable String value) {
-    if (value == null) {
-      System.clearProperty(key);
-    } else {
-      System.setProperty(key, value);
-    }
+  @Test
+  public void rawMessageClientInterceptor_filterRequiresRequestPayloadAccessOnly() {
+    filterStateTestSetupResolver(true, false);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
+
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+
+    assertClusterResolutionResult(call1, cluster1);
+    assertThat(testCall.methodDescriptor.getRequestMarshaller())
+        .isNotSameInstanceAs(call1.methodDescriptor.getRequestMarshaller());
+    assertThat(testCall.methodDescriptor.getResponseMarshaller())
+        .isSameInstanceAs(call1.methodDescriptor.getResponseMarshaller());
+  }
+
+  @Test
+  public void rawMessageClientInterceptor_filterRequiresResponsePayloadAccessOnly() {
+    filterStateTestSetupResolver(false, true);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
+
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+
+    assertClusterResolutionResult(call1, cluster1);
+    assertThat(testCall.methodDescriptor.getRequestMarshaller())
+        .isSameInstanceAs(call1.methodDescriptor.getRequestMarshaller());
+    assertThat(testCall.methodDescriptor.getResponseMarshaller())
+        .isNotSameInstanceAs(call1.methodDescriptor.getResponseMarshaller());
+  }
+
+  @Test
+  public void rawMessageClientInterceptor_filterRequiresBothPayloadAccess() {
+    filterStateTestSetupResolver(true, true);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
+
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+
+    assertClusterResolutionResult(call1, cluster1);
+    assertThat(testCall.methodDescriptor.getRequestMarshaller())
+        .isNotSameInstanceAs(call1.methodDescriptor.getRequestMarshaller());
+    assertThat(testCall.methodDescriptor.getResponseMarshaller())
+        .isNotSameInstanceAs(call1.methodDescriptor.getResponseMarshaller());
   }
 }
