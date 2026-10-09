@@ -74,7 +74,6 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
-import io.grpc.internal.PickFirstLoadBalancerProviderAccessor;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
@@ -120,8 +119,6 @@ public class RlsLoadBalancerTest {
   public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-  private final boolean defaultNewPickFirst =
-      PickFirstLoadBalancerProvider.isEnabledNewPickFirst();
   private final RlsLoadBalancerProvider provider = new RlsLoadBalancerProvider();
   private final FakeClock fakeClock = new FakeClock();
   private final SynchronizationContext syncContext =
@@ -205,7 +202,6 @@ public class RlsLoadBalancerTest {
   @After
   public void tearDown() {
     rlsLb.shutdown();
-    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(defaultNewPickFirst);
   }
 
   @Test
@@ -252,7 +248,6 @@ public class RlsLoadBalancerTest {
 
   @Test
   public void lb_working_withDefaultTarget_rlsResponding() throws Exception {
-    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     helper.getSynchronizationContext().execute(() -> {
       try {
         deliverResolvedAddresses();
@@ -263,78 +258,9 @@ public class RlsLoadBalancerTest {
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-    // Warm-up pick; will be queued
-    PickResult res = picker.pickSubchannel(searchSubchannelArgs);
-    assertThat(res.getStatus().isOk()).isTrue();
-    assertThat(res.getSubchannel()).isNull();
-    assertThat(res.getDelayType()).isEqualTo("rls_lookup_pending");
-    assertThat(res.getDelayReason()).contains("Route Lookup Service query pending");
-    // Cache is warm, but still unconnected
-    res = picker.pickSubchannel(searchSubchannelArgs);
-    inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    inOrder.verify(helper, atLeast(0))
-        .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
-    inOrder.verify(helper, atLeast(0)).getSynchronizationContext();
-    inOrder.verify(helper, atLeast(0)).getScheduledExecutorService();
-    inOrder.verify(helper, atLeast(0)).getMetricRecorder();
-    inOrder.verify(helper, atLeast(0)).getChannelTarget();
-    inOrder.verifyNoMoreInteractions();
-
-    assertThat(res.getStatus().isOk()).isTrue();
-    assertThat(subchannels).hasSize(2); // includes fallback sub-channel
-    FakeSubchannel searchSubchannel = subchannels.getLast();
-    assertThat(subchannelIsReady(searchSubchannel)).isFalse();
-
-    searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
-    inOrder.verifyNoMoreInteractions();
-    res = picker.pickSubchannel(searchSubchannelArgs);
-    assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
-    assertThat(res.getSubchannel()).isSameInstanceAs(searchSubchannel);
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
-
-    // rescue should be pending status although the overall channel state is READY
-    res = picker.pickSubchannel(rescueSubchannelArgs);
-    inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    // other rls picker itself is ready due to first channel.
-    assertThat(res.getStatus().isOk()).isTrue();
-    assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
-    assertThat(subchannels).hasSize(3); // includes fallback sub-channel
-    FakeSubchannel rescueSubchannel = subchannels.getLast();
-
-    // search subchannel is down, rescue subchannel is connecting
-    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
-
-    rescueSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
-
-    // search again, verify that it doesn't use fallback, since RLS server responded, even though
-    // subchannel is in failure mode
-    res = picker.pickSubchannel(searchSubchannelArgs);
-    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "fail");
-  }
-
-  @Test
-  public void lb_working_withDefaultTarget_rlsResponding_newPickFirst() throws Exception {
-    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
-    helper.getSynchronizationContext().execute(() -> {
-      try {
-        deliverResolvedAddresses();
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    });
-    InOrder inOrder = inOrder(helper);
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
-    inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
+    }
     SubchannelPicker picker = pickerCaptor.getValue();
     // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(searchSubchannelArgs);

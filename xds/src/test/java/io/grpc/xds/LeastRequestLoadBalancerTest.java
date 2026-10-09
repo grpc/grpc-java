@@ -62,7 +62,6 @@ import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
-import io.grpc.internal.PickFirstLoadBalancerProviderAccessor;
 import io.grpc.util.AbstractTestHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
@@ -101,7 +100,6 @@ public class LeastRequestLoadBalancerTest {
   private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
   private final Attributes affinity =
       Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
-  private boolean defaultNewPickFirst = PickFirstLoadBalancerProvider.isEnabledNewPickFirst();
 
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
@@ -131,7 +129,6 @@ public class LeastRequestLoadBalancerTest {
 
   @After
   public void tearDown() throws Exception {
-    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(defaultNewPickFirst);
     verifyNoMoreInteractions(mockRandom);
     verifyNoMoreInteractions(mockArgs);
   }
@@ -234,7 +231,6 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void pickAfterStateChange() throws Exception {
-    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(false);
     InOrder inOrder = inOrder(helper);
     Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
@@ -261,49 +257,14 @@ public class LeastRequestLoadBalancerTest {
         .isEqualTo(PickResult.withNoResult());
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
-    inOrder.verify(helper).refreshNameResolution();
+    if (!PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).refreshNameResolution();
+    }
     assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
 
-    verify(subchannel, times(2)).requestConnection();
-    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
-  }
-
-  @Test
-  public void pickAfterStateChange_newPickFirst() throws Exception {
-    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
-    InOrder inOrder = inOrder(helper);
-    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
-            .build());
-    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
-    ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
-    Subchannel subchannel = getSubchannel(servers.get(0));
-
-    inOrder.verify(helper)
-        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
-    assertThat(childLbState.getCurrentState()).isEqualTo(CONNECTING);
-
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(pickerCaptor.getValue()).isInstanceOf(ReadyPicker.class);
-    assertThat(childLbState.getCurrentState()).isEqualTo(READY);
-
-    Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
-    assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
-    refreshInvokedAndUpdateBS(inOrder, CONNECTING);
-    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs))
-        .isEqualTo(PickResult.withNoResult());
-
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
-    inOrder.verify(helper, never()).refreshNameResolution();
-    assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
-
-    verify(subchannel, times(1)).requestConnection();
+    int expectedCount = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
+    verify(subchannel, times(expectedCount)).requestConnection();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
