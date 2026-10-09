@@ -38,7 +38,7 @@ for (subproject in subprojects) {
 evaluationDependsOn(':grpc-interop-testing')
 
 dependencies {
-    api subprojects.minus([project(':grpc-protobuf-lite')])
+    api subprojects.minus([project.project(':grpc-protobuf-lite')])
     implementation libraries.guava.jre // JRE required by transitive protobuf-java-util
 }
 
