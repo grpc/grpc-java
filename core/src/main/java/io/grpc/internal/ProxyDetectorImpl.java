@@ -206,7 +206,12 @@ class ProxyDetectorImpl implements ProxyDetector {
       return null;
     }
 
-    List<Proxy> proxies = proxySelector.select(uri);
+    List<Proxy> proxies;
+    try {
+      proxies = proxySelector.select(uri);
+    } catch (IllegalArgumentException e) {
+      throw new IOException("Failed when selecting a proxy", e);
+    }
     // ProxySelector.select(URI) is contractually required to return a non-null, non-empty list.
     // Surface the offending implementation's class name so a broken ProxySelector can be fixed.
     if (proxies == null || proxies.isEmpty()) {

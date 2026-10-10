@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -213,5 +214,18 @@ public class ProxyDetectorImplTest {
         assertThrows(IOException.class, () -> proxyDetector.proxyFor(destination));
     assertTrue(e.getMessage(), e.getMessage().contains("null"));
     assertTrue(e.getMessage(), e.getMessage().contains(proxySelector.getClass().getName()));
+  }
+
+  @Test
+  public void throwsWhenProxySelectorThrowsIllegalArgumentException() throws Exception {
+    IllegalArgumentException cause =
+        new IllegalArgumentException("port out of range: 899858473");
+    when(proxySelector.select(any(URI.class))).thenThrow(cause);
+
+    IOException exception =
+        assertThrows(IOException.class, () -> proxyDetector.proxyFor(destination));
+
+    assertSame(cause, exception.getCause());
+    assertEquals("Failed when selecting a proxy", exception.getMessage());
   }
 }
