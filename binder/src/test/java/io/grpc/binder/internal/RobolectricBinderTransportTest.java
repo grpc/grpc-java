@@ -669,6 +669,31 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     assertThat(methodDescriptor.parseResponse(msg)).isEqualTo(largeMessage);
   }
 
+  @Test
+  public void uncheckedSerializationFailureClosesClientStream() throws Exception {
+    // Unchecked serialization failures must close the call, same as IOException.
+    server.start(serverListener);
+    client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+
+    RuntimeException failure = new IllegalStateException("serialization");
+    ClientStreamListenerBase listener = new ClientStreamListenerBase();
+    ClientStream stream =
+        client.newStream(methodDescriptor, new Metadata(), CallOptions.DEFAULT, noopTracers);
+    stream.start(listener);
+    stream.writeMessage(
+        new InputStream() {
+          @Override
+          public int read() {
+            throw failure;
+          }
+        });
+
+    Status status = listener.awaitClose(TIMEOUT_MS, MILLISECONDS);
+    assertAbout(status()).that(status).hasCode(Status.Code.INTERNAL);
+    assertThat(status.getCause()).isSameInstanceAs(failure);
+  }
+
   private static OneWayBinderProxy takeNextBinder(
       BlockingBinderDecorator<OneWayBinderProxy> decorator) throws InterruptedException {
     OneWayBinderProxy proxy = decorator.takeNextRequest(TIMEOUT_MS, MILLISECONDS);
