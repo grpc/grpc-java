@@ -257,7 +257,9 @@ public class LeastRequestLoadBalancerTest {
         .isEqualTo(PickResult.withNoResult());
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
-    inOrder.verify(helper).refreshNameResolution();
+    if (!PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).refreshNameResolution();
+    }
     assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
 

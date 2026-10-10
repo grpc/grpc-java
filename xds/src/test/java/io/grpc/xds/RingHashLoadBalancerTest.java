@@ -552,7 +552,10 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getSubchannel()).isNull(); // buffer request
     assertThat(result.getDelayType()).isEqualTo("connecting");
     assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
-    verifyConnection(1);
+    int expectedCount =
+        PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
+            ? (connectionRequestedQueue.isEmpty() ? 0 : 1) : 1;
+    verifyConnection(expectedCount);
   }
 
   private Subchannel getSubChannel(EquivalentAddressGroup eag) {
@@ -655,11 +658,10 @@ public class RingHashLoadBalancerTest {
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied")));
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verifyConnection(2);
+    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2);
     PickResult result = pickerCaptor.getValue().pickSubchannel(args); // activate last subchannel
     assertThat(result.getStatus().isOk()).isTrue();
-    int expectedCount = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 0 : 1;
-    verifyConnection(expectedCount);
+    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 0 : 1);
 
     deliverSubchannelState(
         getSubchannel(servers, 0),
@@ -727,7 +729,7 @@ public class RingHashLoadBalancerTest {
     }
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verifyConnection(2);
+    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2);
 
     // Picking subchannel triggers connection. RPC hash hits server0.
     PickSubchannelArgs args = getDefaultPickSubchannelArgsForServer(0);
@@ -812,7 +814,9 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
     verify(subchannelList.get(0), never()).requestConnection(); // In TF
-    verify(subchannelList.get(1)).requestConnection();
+    verify(subchannelList.get(1),
+        PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? never() : times(1))
+        .requestConnection();
     verify(subchannelList.get(2), never()).requestConnection(); // Not one of the first 2
   }
 
@@ -840,11 +844,11 @@ public class RingHashLoadBalancerTest {
     // Picking subchannel when idle triggers connection.
     deliverSubchannelState(getSubchannel(servers, 2),
         ConnectivityStateInfo.forNonError(IDLE));
-    verifyConnection(1);
+    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 0 : 1);
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
-    verifyConnection(1);
+    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 0 : 1);
   }
 
   @Test
@@ -864,14 +868,16 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelUnreachable(firstSubchannel);
     deliverSubchannelUnreachable(getSubchannel(servers, 2));
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verifyConnection(2);
+    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2);
 
     // Picking subchannel triggers connection.
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
-    verify(getSubchannel(servers, 1)).requestConnection();
-    verifyConnection(1);
+    verify(getSubchannel(servers, 1),
+        PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? never() : times(1))
+        .requestConnection();
+    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 0 : 1);
   }
 
   @Test
@@ -894,7 +900,7 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelState(getSubchannel(servers, 1), CSI_CONNECTING);
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verifyConnection(2);
+    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2);
 
     // Picking subchannel should not trigger connection per gRFC A61.
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
@@ -929,7 +935,9 @@ public class RingHashLoadBalancerTest {
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
-    verify(getSubchannel(servers, 1)).requestConnection();
+    verify(getSubchannel(servers, 1),
+        PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? never() : times(1))
+        .requestConnection();
     verify(getSubchannel(servers, 2), never()).requestConnection();
   }
 

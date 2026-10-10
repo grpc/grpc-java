@@ -255,7 +255,11 @@ public class RoundRobinLoadBalancerTest {
     assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus()).isEqualTo(error);
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
-    inOrder.verify(mockHelper).refreshNameResolution();
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(mockHelper, never()).refreshNameResolution();
+    } else {
+      inOrder.verify(mockHelper).refreshNameResolution();
+    }
     inOrder.verify(mockHelper, never())
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
