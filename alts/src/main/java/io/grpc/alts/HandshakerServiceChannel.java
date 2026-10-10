@@ -142,7 +142,7 @@ final class HandshakerServiceChannel {
       try {
         terminated = delegate.awaitTermination(2, TimeUnit.SECONDS);
       } catch (InterruptedException ex) {
-        // terminated will be false
+        Thread.currentThread().interrupt();
       }
       // Try hard to shutdown abruptly so any bug is more likely to be noticed during testing.
       long quietPeriodSeconds = terminated ? 0 : 1;

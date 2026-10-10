@@ -194,6 +194,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       try {
         return retVal.get();
       } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
         throw new RuntimeException(ERROR_MSG, e);
       } catch (ExecutionException e) {
         throw new RuntimeException(ERROR_MSG, e);
@@ -212,6 +213,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       try {
         return retVal.get();
       } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
         throw new RuntimeException(ERROR_MSG, e);
       } catch (ExecutionException e) {
         throw new RuntimeException(ERROR_MSG, e);
@@ -261,6 +263,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       try {
         return retVal.get();
       } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
         throw new RuntimeException(ERROR_MSG, e);
       } catch (ExecutionException e) {
         throw new RuntimeException(ERROR_MSG, e);
@@ -280,6 +283,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       try {
         return retVal.get();
       } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
         throw new RuntimeException(ERROR_MSG, e);
       } catch (ExecutionException e) {
         throw new RuntimeException(ERROR_MSG, e);
