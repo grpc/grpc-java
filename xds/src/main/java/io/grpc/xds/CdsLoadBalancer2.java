@@ -61,7 +61,6 @@ import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
-import io.grpc.xds.internal.XdsInternalAttributes;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -417,7 +416,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                     .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT,
                         localityLbInfo.localityWeight())
                     .set(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT, weight)
-                    .set(XdsInternalAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
+                    .set(InternalEquivalentAddressGroup.ATTR_ADDRESS_NAME, endpoint.hostname())
                     .set(AddressFilter.PATH_CHAIN_KEY, pathChain)
                     .build();
             EquivalentAddressGroup eag;

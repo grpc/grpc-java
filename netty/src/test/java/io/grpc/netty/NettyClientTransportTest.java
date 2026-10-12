@@ -96,6 +96,7 @@ import io.netty.channel.local.LocalChannel;
 import io.netty.channel.socket.SocketChannelConfig;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.ssl.ClientAuth;
@@ -220,6 +221,111 @@ public class NettyClientTransportTest {
 
     Metadata headers = serverListener.streamListeners.get(0).headers;
     assertEquals(GrpcUtil.getGrpcUserAgent("netty", null), headers.get(USER_AGENT_KEY));
+  }
+
+  /**
+   * The server responds and closes the call before it has read the whole request, and then stops
+   * returning flow-control window. The client has already half-closed, so its END_STREAM frame is
+   * stuck in Netty's remote flow controller and can never be written. The client must reset the
+   * stream; otherwise the HTTP/2 stream stays open in the connection forever and keeps the whole
+   * call reachable.
+   */
+  @Test
+  public void earlyServerResponseBlockedEndOfStreamShouldNotLeakHttp2Stream() throws Exception {
+    // A server that answers every call immediately. It never requests any of the request stream,
+    // so it never returns window.
+    startServer(
+        new ServerListener() {
+          @Override
+          public ServerTransportListener transportCreated(ServerTransport transport) {
+            return new ServerTransportListener() {
+              @Override
+              public void streamCreated(ServerStream stream, String method, Metadata headers) {
+                stream.setListener(
+                    new ServerStreamListener() {
+                      @Override
+                      public void messagesAvailable(MessageProducer producer) {}
+
+                      @Override
+                      public void onReady() {}
+
+                      @Override
+                      public void halfClosed() {}
+
+                      @Override
+                      public void closed(Status status) {}
+
+                      @Override
+                      public void triggerEvent(Object event) {}
+                    });
+                stream.writeHeaders(new Metadata(), false);
+                stream.writeMessage(new ByteArrayInputStream(Rpc.MESSAGE.getBytes(UTF_8)));
+                stream.flush();
+                stream.close(Status.OK, new Metadata());
+              }
+
+              @Override
+              public Attributes transportReady(Attributes transportAttrs) {
+                return transportAttrs;
+              }
+
+              @Override
+              public void transportTerminated() {}
+            };
+          }
+
+          @Override
+          public void serverShutdown() {}
+        });
+    NettyClientTransport transport = newTransport(newNegotiator());
+    callMeMaybe(transport.start(clientTransportListener));
+
+    ClientStream stream =
+        transport.newStream(
+            Rpc.METHOD,
+            new Metadata(),
+            CallOptions.DEFAULT,
+            new ClientStreamTracer[] {new ClientStreamTracer() {}});
+    TestClientStreamListener listener = new TestClientStreamListener();
+    stream.start(listener);
+    stream.request(1);
+    // Larger than the initial stream window, so the tail of the request stays queued in Netty's
+    // remote flow controller.
+    stream.writeMessage(new ByteArrayInputStream(new byte[2 * DEFAULT_WINDOW_SIZE]));
+    stream.flush();
+    // Half-close while that tail is still queued, so END_STREAM is queued behind it. The server
+    // needs a round trip to answer, so this always happens before its trailers arrive.
+    stream.halfClose();
+
+    listener.responseFuture.get(10, TimeUnit.SECONDS);
+    listener.closedFuture.get(10, TimeUnit.SECONDS);
+
+    assertThat(activeStreams(transport)).isEmpty();
+  }
+
+  /** Describes the HTTP/2 streams still open in the client's connection. */
+  private static List<String> activeStreams(NettyClientTransport transport) throws Exception {
+    NettyClientHandler handler = transport.channel().pipeline().get(NettyClientHandler.class);
+    return transport
+        .channel()
+        .eventLoop()
+        .submit(
+            () -> {
+              List<String> descriptions = new ArrayList<>();
+              Http2Connection connection = handler.connection();
+              connection.forEachActiveStream(
+                  stream -> {
+                    descriptions.add(
+                        String.format(
+                            "stream %d is %s with remote flow control window %d",
+                            stream.id(),
+                            stream.state(),
+                            connection.remote().flowController().windowSize(stream)));
+                    return true;
+                  });
+              return descriptions;
+            })
+        .get(10, TimeUnit.SECONDS);
   }
 
   @Test

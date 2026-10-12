@@ -399,8 +399,19 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       return;
     }
 
+    // cancel() may have committed this stream before prestart() registered it. In that case the
+    // post-commit callback ran before registration and could not remove the stream. Run it again
+    // after registration so the channel's uncommitted stream registry cannot retain this stream.
+    boolean alreadyCommitted;
     synchronized (lock) {
-      state.buffer.add(new StartEntry());
+      alreadyCommitted = state.winningSubstream != null;
+      if (!alreadyCommitted) {
+        state.buffer.add(new StartEntry());
+      }
+    }
+    if (alreadyCommitted) {
+      postCommit();
+      return;
     }
 
     Substream substream = createSubstream(0, false, false);

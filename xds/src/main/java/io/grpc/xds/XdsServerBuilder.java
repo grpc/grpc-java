@@ -32,6 +32,8 @@ import io.grpc.Internal;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.InternalNettyServerCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
@@ -183,6 +185,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
         bootstrapOverride,
         ldsResourceNameResolver,
         filterRegistry,
+        SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE),
         this.channelConfigurator);
   }
 

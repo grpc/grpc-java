@@ -32,4 +32,10 @@ public final class InternalEquivalentAddressGroup {
    */
   public static final Attributes.Key<String> ATTR_BACKEND_SERVICE =
       EquivalentAddressGroup.ATTR_BACKEND_SERVICE;
+
+  /**
+   * Name associated with individual address, if available (e.g., DNS name).
+   */
+  public static final Attributes.Key<String> ATTR_ADDRESS_NAME =
+      EquivalentAddressGroup.ATTR_ADDRESS_NAME;
 }

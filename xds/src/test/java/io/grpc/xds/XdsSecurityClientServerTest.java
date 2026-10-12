@@ -43,6 +43,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
@@ -71,7 +72,6 @@ import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
-import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
@@ -843,7 +843,8 @@ public class XdsSecurityClientServerTest {
                 upstreamTlsContext, tlsContextManagerForClient))
         : Attributes.newBuilder();
     if (addrNameAttribute != null) {
-      sslContextAttributesBuilder.set(XdsInternalAttributes.ATTR_ADDRESS_NAME, addrNameAttribute);
+      sslContextAttributesBuilder.set(
+          InternalEquivalentAddressGroup.ATTR_ADDRESS_NAME, addrNameAttribute);
     }
     sslContextAttributes = sslContextAttributesBuilder.build();
     fakeNameResolverFactory.setServers(

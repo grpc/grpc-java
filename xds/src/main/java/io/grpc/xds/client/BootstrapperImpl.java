@@ -47,6 +47,8 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       "GRPC_EXPERIMENTAL_XDS_FALLBACK";
   public static final String GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING =
       "GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING";
+  public static final String GRPC_EXPERIMENTAL_XDS_ENDPOINT_FALLBACK =
+      "GRPC_EXPERIMENTAL_XDS_ENDPOINT_FALLBACK";
 
   // Client features.
   @VisibleForTesting
@@ -64,6 +66,10 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   @VisibleForTesting
   static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, true);
+
+  @VisibleForTesting
+  public static boolean enableEndpointFallback =
+      GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_ENDPOINT_FALLBACK, false);
 
   @VisibleForTesting
   public static boolean xdsDataErrorHandlingEnabled
@@ -235,8 +241,13 @@ public abstract class BootstrapperImpl extends Bootstrapper {
           }
           authorityServers = parseServerInfos(rawAuthorityServers, logger);
         }
+        // gRFC A95: fall back based solely on primary server reachability.
+        boolean fallbackOnReachabilityOnly = enableEndpointFallback
+            && Boolean.TRUE.equals(
+                JsonUtil.getBoolean(rawAuthority, "fallback_on_reachability_only"));
         authorityInfoMapBuilder.put(
-            authorityName, AuthorityInfo.create(clientListnerTemplate, authorityServers));
+            authorityName, AuthorityInfo.create(
+                clientListnerTemplate, authorityServers, fallbackOnReachabilityOnly));
       }
       builder.authorities(authorityInfoMapBuilder.buildOrThrow());
     }

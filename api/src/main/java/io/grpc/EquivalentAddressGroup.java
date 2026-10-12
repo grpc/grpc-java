@@ -69,6 +69,12 @@ public final class EquivalentAddressGroup {
   @Attr
   static final Attributes.Key<Long> ATTR_WEIGHT =
       Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_WEIGHT");
+  /**
+   * Name associated with individual address, if available (e.g., DNS name).
+   */
+  @Attr
+  static final Attributes.Key<String> ATTR_ADDRESS_NAME =
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_ADDRESS_NAME");
 
   private final List<SocketAddress> addrs;
   private final Attributes attrs;

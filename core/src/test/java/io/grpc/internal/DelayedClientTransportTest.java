@@ -42,6 +42,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -792,7 +793,7 @@ public class DelayedClientTransportTest {
     delayedTransport.reprocess(fakePicker(
         PickResult.withNoResult("rls_lookup_pending", "RLS request pending.")));
 
-    assertEquals(1, fakeTracer.delayEndedCount);
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.endedDelayTypes);
     assertEquals(Arrays.asList("connecting", "rls_lookup_pending"),
         fakeTracer.startedDelayTypes);
     assertEquals(Arrays.asList("pick_first: attempting to connect", "RLS request pending."),
@@ -800,7 +801,7 @@ public class DelayedClientTransportTest {
 
     delayedTransport.reprocess(mockPicker);
 
-    assertEquals(2, fakeTracer.delayEndedCount);
+    assertEquals(Arrays.asList("connecting", "rls_lookup_pending"), fakeTracer.endedDelayTypes);
   }
 
   @Test
@@ -876,8 +877,8 @@ public class DelayedClientTransportTest {
     FakeStreamTracer fakeTracer = new FakeStreamTracer();
     ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
 
-    io.grpc.LoadBalancer.Subchannel disconnectedSubchannel =
-        mock(io.grpc.LoadBalancer.Subchannel.class);
+    Subchannel disconnectedSubchannel =
+        mock(Subchannel.class);
     when(disconnectedSubchannel.getInternalSubchannel())
         .thenReturn(newTransportProvider(null));
 
@@ -896,14 +897,15 @@ public class DelayedClientTransportTest {
     FakeStreamTracer fakeTracer = new FakeStreamTracer();
     ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
 
-    delayedTransport.reprocess(fakePicker(PickResult.withError(Status.UNAVAILABLE)));
+    delayedTransport.reprocess(fakePicker(PickResult.withError(
+        Status.UNAVAILABLE.withDescription("io exception").withCause(new Exception("boom")))));
     CallOptions wfrOptions = callOptions.withWaitForReady();
     delayedTransport.newStream(method, headers, wfrOptions, customTracers);
 
     assertEquals(Collections.singletonList("picker_failing_with_wait_for_ready"),
         fakeTracer.startedDelayTypes);
     assertEquals(Collections.singletonList(
-        "wait_for_ready RPC failed with status: " + Status.UNAVAILABLE),
+        "wait_for_ready RPC failed with status: UNAVAILABLE: io exception"),
         fakeTracer.startedDelayReasons);
   }
 
@@ -911,21 +913,23 @@ public class DelayedClientTransportTest {
     final List<String> startedDelayTypes = new ArrayList<>();
     final List<String> startedDelayReasons = new ArrayList<>();
     final List<String> changedDelayReasons = new ArrayList<>();
+    final List<String> endedDelayTypes = new ArrayList<>();
     int delayEndedCount = 0;
 
     @Override
-    public void recordAttemptDelayStart(String delayType, String delayReason) {
+    public void recordDelayStart(String delayType, String delayReason) {
       startedDelayTypes.add(delayType);
       startedDelayReasons.add(delayReason);
     }
 
     @Override
-    public void recordAttemptDelayReasonChanged(String delayReason) {
+    public void recordDelayReasonChanged(String delayType, String delayReason) {
       changedDelayReasons.add(delayReason);
     }
 
     @Override
-    public void recordAttemptDelayEnd() {
+    public void recordDelayEnd(String delayType) {
+      endedDelayTypes.add(delayType);
       delayEndedCount++;
     }
   }
