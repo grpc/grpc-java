@@ -1,22 +1,22 @@
 package io.grpc.binder.internal;
 
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Metadata;
+import io.grpc.NoopServerCall;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.Status;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -29,10 +29,9 @@ public final class PendingAuthListenerTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock ServerCallHandler<Object, Object> next;
-  @Mock ServerCall<Object, Object> call;
   @Mock ServerCall.Listener<Object> delegate;
-  @Captor ArgumentCaptor<Status> statusCaptor;
 
+  private final ServerCall<Object, Object> call = new NoopServerCall<>();
   private final Metadata headers = new Metadata();
   private final PendingAuthListener<Object, Object> listener = new PendingAuthListener<>();
 
@@ -93,13 +92,24 @@ public final class PendingAuthListenerTest {
   public void whenStartCallFails_closesTheCallWithInternalStatus() {
     IllegalStateException exception = new IllegalStateException("oops");
     when(next.startCall(any(), any())).thenThrow(exception);
+    FakeServerCall fakeCall = new FakeServerCall();
 
     listener.onReady();
-    listener.startCall(call, headers, next);
+    listener.startCall(fakeCall, headers, next);
 
-    verify(call).close(statusCaptor.capture(), any());
-    Status status = statusCaptor.getValue();
+    Status status = fakeCall.closeStatus;
+    assertThat(status).isNotNull();
     assertThat(status.getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(status.getCause()).isSameInstanceAs(exception);
+  }
+
+  private static final class FakeServerCall extends NoopServerCall<Object, Object> {
+    @Nullable Status closeStatus;
+
+    @Override
+    public void close(Status status, Metadata trailers) {
+      checkState(closeStatus == null, "call already closed");
+      closeStatus = status;
+    }
   }
 }
