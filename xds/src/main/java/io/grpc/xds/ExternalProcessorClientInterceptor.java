@@ -322,8 +322,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean responseDrainComplete = new AtomicBoolean(false);
     final AtomicBoolean requestEosSent = new AtomicBoolean(false);
     final AtomicBoolean responseTrailersSent = new AtomicBoolean(false);
-    final AtomicBoolean requestBodySentToExtProc = new AtomicBoolean(false);
-    final AtomicBoolean responseBodySentToExtProc = new AtomicBoolean(false);
 
     protected DataPlaneClientCall(
         DataPlaneDelayedCall<InputStream, InputStream> delayedCall,
@@ -491,43 +489,55 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               }
               expectedResponseResponse = null;
             } else if (response.hasRequestBody()) {
-              EventType expected = expectedRequestResponse;
-              if (expected == EventType.REQUEST_HEADERS) {
-                internalOnError(Status.UNAVAILABLE
-                    .withDescription(
-                        "Protocol error: received request_body before request_headers response.")
-                    .asRuntimeException());
-                return;
+              if (!isDrainComplete(response.getRequestBody())) {
+                EventType expected = expectedRequestResponse;
+                if (expected == EventType.REQUEST_HEADERS) {
+                  internalOnError(Status.UNAVAILABLE
+                      .withDescription(
+                          "Protocol error: received request_body before request_headers response.")
+                      .asRuntimeException());
+                  return;
+                }
               }
             } else if (response.hasResponseBody()) {
-              EventType expected = expectedResponseResponse;
-              if (expected == EventType.RESPONSE_HEADERS) {
-                internalOnError(Status.UNAVAILABLE
-                    .withDescription(
-                        "Protocol error: received response_body before headers response.")
-                    .asRuntimeException());
-                return;
+              if (!isDrainComplete(response.getResponseBody())) {
+                EventType expected = expectedResponseResponse;
+                if (expected == EventType.RESPONSE_HEADERS) {
+                  internalOnError(Status.UNAVAILABLE
+                      .withDescription(
+                          "Protocol error: received response_body before headers response.")
+                      .asRuntimeException());
+                  return;
+                }
               }
             }
 
             if (response.getRequestDrainRequests()) {
-              if (!requestEosSent.get() && requestDraining.compareAndSet(false, true)) {
-                activateCall();
-                sendToExtProc(ProcessingRequest.newBuilder()
-                    .setRequestBody(HttpBody.newBuilder()
-                        .setDrainComplete(true)
-                        .build())
-                    .build());
+              if (!requestEosSent.get()) {
+                if (requestDraining.compareAndSet(false, true)) {
+                  activateCall();
+                  sendToExtProc(ProcessingRequest.newBuilder()
+                      .setRequestBody(HttpBody.newBuilder()
+                          .setDrainComplete(true)
+                          .build())
+                      .build());
+                }
+              } else {
+                requestDrainComplete.set(true);
               }
             }
             if (response.getRequestDrainResponses()) {
-              if (!responseTrailersSent.get() && responseDraining.compareAndSet(false, true)) {
-                activateCall();
-                sendToExtProc(ProcessingRequest.newBuilder()
-                    .setResponseBody(HttpBody.newBuilder()
-                        .setDrainComplete(true)
-                        .build())
-                    .build());
+              if (!responseTrailersSent.get()) {
+                if (responseDraining.compareAndSet(false, true)) {
+                  activateCall();
+                  sendToExtProc(ProcessingRequest.newBuilder()
+                      .setResponseBody(HttpBody.newBuilder()
+                          .setDrainComplete(true)
+                          .build())
+                      .build());
+                }
+              } else {
+                responseDrainComplete.set(true);
               }
             }
 
@@ -622,35 +632,32 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         @Override
         public void onCompleted() {
-          boolean requestDrainRequired =
-              currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC
-                  && requestBodySentToExtProc.get()
-                  && !requestDrainComplete.get()
-                  && !requestEosSent.get();
-
-          boolean responseDrainRequired =
-              currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
-                  && responseBodySentToExtProc.get()
-                  && !responseDrainComplete.get()
-                  && !responseTrailersSent.get();
-
-          if (!config.getObservabilityMode() && (requestDrainRequired || responseDrainRequired)) {
-            if (markExtProcStreamFailed(extProcStreamState)) {
-              synchronized (streamLock) {
-                extProcClientCallRequestObserver = null;
+          ExtProcStreamState state = extProcStreamState.get();
+          if (state == ExtProcStreamState.ACTIVE) {
+            boolean requestDrainRequired =
+                currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC
+                    && !requestDrainComplete.get()
+                    && !requestEosSent.get();
+            boolean responseDrainRequired =
+                currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
+                    && !responseDrainComplete.get()
+                    && !responseTrailersSent.get();
+            boolean drained =
+                (requestDrainComplete.get() || responseDrainComplete.get())
+                    && !requestDrainRequired
+                    && !responseDrainRequired;
+            if (config.getObservabilityMode() || drained) {
+              if (markExtProcStreamCompleted(extProcStreamState)) {
+                synchronized (streamLock) {
+                  extProcClientCallRequestObserver = null;
+                }
+                handleFailOpen(wrappedListener);
               }
-              cancelDownstream(
-                  "External processor stream completed without drain",
-                  Status.INTERNAL
-                      .withDescription("External processor stream completed without drain")
-                      .asRuntimeException());
-              wrappedListener.proceedWithClose();
+            } else {
+              internalOnError(Status.UNAVAILABLE
+                  .withDescription("External processor stream completed without drain")
+                  .asRuntimeException());
             }
-            return;
-          }
-
-          if (markExtProcStreamCompleted(extProcStreamState)) {
-            handleFailOpen(wrappedListener);
           }
         }
       });
@@ -894,7 +901,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 .setEndOfStream(false)
                 .build())
             .build());
-        requestBodySentToExtProc.set(true);
         bodyMessageSentToExtProc.set(true);
 
         if (config.getObservabilityMode()) {
@@ -964,12 +970,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
 
         // Mode is GRPC
+        requestEosSent.set(true);
         sendToExtProc(ProcessingRequest.newBuilder()
             .setRequestBody(HttpBody.newBuilder()
                 .setEndOfStreamWithoutMessage(true)
                 .build())
             .build());
-        requestEosSent.set(true);
       }
     }
 
@@ -991,6 +997,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
       }
       cancelDownstream(message, cause);
+    }
+
+    private static boolean isDrainComplete(BodyResponse bodyResponse) {
+      return bodyResponse.hasResponse()
+          && bodyResponse.getResponse().hasBodyMutation()
+          && bodyResponse.getResponse().getBodyMutation().hasStreamedResponse()
+          && bodyResponse.getResponse().getBodyMutation().getStreamedResponse().getDrainComplete();
     }
 
     private void handleRequestBodyResponse(BodyResponse bodyResponse) {
@@ -1271,7 +1284,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       try {
         ByteString bodyByteString = ByteString.readFrom(message);
         sendResponseBodyToExtProc(bodyByteString, false);
-        dataPlaneClientCall.responseBodySentToExtProc.set(true);
         dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
 
         if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
@@ -1452,6 +1464,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         if (trailersOnly.get()) {
           if (sendResponseHeaders) {
+            dataPlaneClientCall.responseTrailersSent.set(true);
             dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
                 .setResponseHeaders(HttpHeaders.newBuilder()
                     .setHeaders(
@@ -1461,12 +1474,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     .setEndOfStream(true)
                     .build())
                 .build());
-            dataPlaneClientCall.responseTrailersSent.set(true);
           } else {
             closeNow = true;
           }
         } else if (sendResponseTrailers) {
           dataPlaneClientCall.getIsProcessingTrailers().set(true);
+          dataPlaneClientCall.responseTrailersSent.set(true);
           dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
               .setResponseTrailers(HttpTrailers.newBuilder()
                   .setTrailers(
@@ -1475,7 +1488,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                           dataPlaneClientCall.getConfig().getForwardRulesConfig()))
                   .build())
               .build());
-          dataPlaneClientCall.responseTrailersSent.set(true);
         } else {
           closeNow = true;
         }
