@@ -2189,32 +2189,43 @@ public class ExternalProcessorServerInterceptorTest {
           }
         };
 
-    @SuppressWarnings("unchecked")
-    ServerCall.Listener<InputStream> serverListener =
-        (ServerCall.Listener<InputStream>)
-            (ServerCall.Listener<?>)
-                interceptor.interceptCall(dummyCall, new Metadata(), dummyNext);
+    try {
+      @SuppressWarnings("unchecked")
+      ServerCall.Listener<InputStream> serverListener =
+          (ServerCall.Listener<InputStream>)
+              (ServerCall.Listener<?>)
+                  interceptor.interceptCall(dummyCall, new Metadata(), dummyNext);
 
-    // Invocate onMessage() while the call is IDLE (headers response has not been sent)
-    byte[] messageBytes = "hello".getBytes(StandardCharsets.UTF_8);
-    serverListener.onMessage(new ByteArrayInputStream(messageBytes));
+      // Invocate onMessage() while the call is IDLE (headers response has not been sent)
+      byte[] messageBytes = "hello".getBytes(StandardCharsets.UTF_8);
+      serverListener.onMessage(new ByteArrayInputStream(messageBytes));
 
-    boolean receivedInTime = requestLatch.await(5, TimeUnit.SECONDS);
-    assertThat(receivedInTime).isTrue();
+      boolean receivedInTime = requestLatch.await(5, TimeUnit.SECONDS);
+      assertThat(receivedInTime).isTrue();
 
-    // Assert that the data plane call was not started yet
-    assertThat(startCallCalled.get()).isFalse();
+      // Assert that the data plane call was not started yet
+      assertThat(startCallCalled.get()).isFalse();
 
-    // Clean up control stream by completing it, which triggers fallback activation on the data
-    // plane call
-    StreamObserver<ProcessingResponse> responseObserver = responseObserverRef.get();
-    assertThat(responseObserver).isNotNull();
-    responseObserver.onNext(
-        ProcessingResponse.newBuilder().setRequestDrain(true).build());
-    responseObserver.onCompleted();
+      // Activate call by responding to request headers
+      StreamObserver<ProcessingResponse> responseObserver = responseObserverRef.get();
+      assertThat(responseObserver).isNotNull();
+      responseObserver.onNext(
+          ProcessingResponse.newBuilder()
+              .setRequestHeaders(HeadersResponse.getDefaultInstance())
+              .build());
 
-    // Verify that the call is now activated
-    assertThat(startCallCalled.get()).isTrue();
+      // Verify that the call is now activated
+      assertThat(startCallCalled.get()).isTrue();
+    } finally {
+      if (responseObserverRef.get() != null) {
+        try {
+          responseObserverRef.get().onCompleted();
+        } catch (IllegalStateException ignored) {
+          // Ignore if already closed
+        }
+      }
+      channelManager.close();
+    }
   }
 
   @Test
@@ -7143,7 +7154,11 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
-            .setProcessingMode(ProcessingMode.getDefaultInstance())
+            .setProcessingMode(
+                ProcessingMode.newBuilder()
+                    .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+                    .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+                    .build())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7166,7 +7181,12 @@ public class ExternalProcessorServerInterceptorTest {
               public void onNext(ProcessingRequest request) {
                 if (request.hasRequestHeaders()) {
                   responseObserver.onNext(
-                      ProcessingResponse.newBuilder().setRequestDrain(true).build());
+                      ProcessingResponse.newBuilder()
+                          .setRequestHeaders(HeadersResponse.getDefaultInstance())
+                          .setRequestDrainResponses(true)
+                          .build());
+                } else if (request.hasResponseBody()
+                    && request.getResponseBody().getDrainComplete()) {
                   drainLatch.countDown();
                 }
               }
@@ -7248,7 +7268,11 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
-            .setProcessingMode(ProcessingMode.getDefaultInstance())
+            .setProcessingMode(
+                ProcessingMode.newBuilder()
+                    .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+                    .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+                    .build())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7272,13 +7296,35 @@ public class ExternalProcessorServerInterceptorTest {
               @Override
               public void onNext(ProcessingRequest request) {
                 if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setRequestHeaders(HeadersResponse.getDefaultInstance())
+                          .setRequestDrainResponses(true)
+                          .build());
+                } else if (request.hasResponseBody()
+                    && request.getResponseBody().getDrainComplete()) {
+                  sidecarOnNextLatch.countDown();
                   new Thread(
                           () -> {
-                            responseObserver.onNext(
-                                ProcessingResponse.newBuilder().setRequestDrain(true).build());
-                            sidecarOnNextLatch.countDown();
                             try {
                               if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                                responseObserver.onNext(
+                                    ProcessingResponse.newBuilder()
+                                        .setResponseBody(
+                                            BodyResponse.newBuilder()
+                                                .setResponse(
+                                                    CommonResponse.newBuilder()
+                                                        .setBodyMutation(
+                                                            BodyMutation.newBuilder()
+                                                                .setStreamedResponse(
+                                                                    StreamedBodyResponse
+                                                                        .newBuilder()
+                                                                        .setDrainComplete(true)
+                                                                        .build())
+                                                                .build())
+                                                        .build())
+                                                .build())
+                                        .build());
                                 sidecarOnCompletedLatch.countDown();
                                 responseObserver.onCompleted();
                               }
@@ -7394,7 +7440,12 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
-            .setProcessingMode(ProcessingMode.getDefaultInstance())
+            .setProcessingMode(
+                ProcessingMode.newBuilder()
+                    .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+                    .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+                    .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+                    .build())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7403,6 +7454,7 @@ public class ExternalProcessorServerInterceptorTest {
 
     // External Processor Server
     final CountDownLatch sidecarFinishLatch = new CountDownLatch(1);
+    final CountDownLatch bothDrainsReceivedLatch = new CountDownLatch(2);
     final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
         new AtomicReference<>();
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
@@ -7417,12 +7469,51 @@ public class ExternalProcessorServerInterceptorTest {
               @Override
               public void onNext(ProcessingRequest request) {
                 if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setRequestHeaders(HeadersResponse.getDefaultInstance())
+                          .setRequestDrainRequests(true)
+                          .setRequestDrainResponses(true)
+                          .build());
                   new Thread(
                           () -> {
-                            responseObserver.onNext(
-                                ProcessingResponse.newBuilder().setRequestDrain(true).build());
                             try {
-                              if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                              if (bothDrainsReceivedLatch.await(5, TimeUnit.SECONDS)
+                                  && sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                                responseObserver.onNext(
+                                    ProcessingResponse.newBuilder()
+                                        .setRequestBody(
+                                            BodyResponse.newBuilder()
+                                                .setResponse(
+                                                    CommonResponse.newBuilder()
+                                                        .setBodyMutation(
+                                                            BodyMutation.newBuilder()
+                                                                .setStreamedResponse(
+                                                                    StreamedBodyResponse
+                                                                        .newBuilder()
+                                                                        .setDrainComplete(true)
+                                                                        .build())
+                                                                .build())
+                                                        .build())
+                                                .build())
+                                        .build());
+                                responseObserver.onNext(
+                                    ProcessingResponse.newBuilder()
+                                        .setResponseBody(
+                                            BodyResponse.newBuilder()
+                                                .setResponse(
+                                                    CommonResponse.newBuilder()
+                                                        .setBodyMutation(
+                                                            BodyMutation.newBuilder()
+                                                                .setStreamedResponse(
+                                                                    StreamedBodyResponse
+                                                                        .newBuilder()
+                                                                        .setDrainComplete(true)
+                                                                        .build())
+                                                                .build())
+                                                        .build())
+                                                .build())
+                                        .build());
                                 responseObserver.onCompleted();
                               }
                             } catch (InterruptedException e) {
@@ -7430,6 +7521,12 @@ public class ExternalProcessorServerInterceptorTest {
                             }
                           })
                       .start();
+                } else if (request.hasRequestBody()
+                    && request.getRequestBody().getDrainComplete()) {
+                  bothDrainsReceivedLatch.countDown();
+                } else if (request.hasResponseBody()
+                    && request.getResponseBody().getDrainComplete()) {
+                  bothDrainsReceivedLatch.countDown();
                 }
               }
 
@@ -7504,6 +7601,7 @@ public class ExternalProcessorServerInterceptorTest {
               });
 
       // Wait for drain to be processed
+      assertThat(bothDrainsReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
       long start = System.currentTimeMillis();
       while ((interceptedCallRef.get() == null || interceptedCallRef.get().isReady())
           && System.currentTimeMillis() - start < 5000) {
@@ -7597,21 +7695,45 @@ public class ExternalProcessorServerInterceptorTest {
               @Override
               public void onNext(ProcessingRequest request) {
                 if (request.hasRequestHeaders()) {
-                  new Thread(
-                          () -> {
-                            responseObserver.onNext(
-                                ProcessingResponse.newBuilder().setRequestDrain(true).build());
-                            try {
-                              if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
-                                responseObserver.onCompleted();
-                              }
-                            } catch (InterruptedException e) {
-                              Thread.currentThread().interrupt();
-                            }
-                          })
-                      .start();
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setRequestHeaders(HeadersResponse.getDefaultInstance())
+                          .setRequestDrainResponses(true)
+                          .build());
                 } else if (request.hasResponseBody()) {
-                  extProcReceivedBodyCount.incrementAndGet();
+                  if (request.getResponseBody().getDrainComplete()) {
+                    drainCompletedLatch.countDown();
+                    new Thread(
+                            () -> {
+                              try {
+                                if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                                  responseObserver.onNext(
+                                      ProcessingResponse.newBuilder()
+                                          .setResponseBody(
+                                              BodyResponse.newBuilder()
+                                                  .setResponse(
+                                                      CommonResponse.newBuilder()
+                                                          .setBodyMutation(
+                                                              BodyMutation.newBuilder()
+                                                                  .setStreamedResponse(
+                                                                      StreamedBodyResponse
+                                                                          .newBuilder()
+                                                                          .setDrainComplete(true)
+                                                                          .build())
+                                                                  .build())
+                                                          .build())
+                                                  .build())
+                                          .build());
+                                  responseObserver.onCompleted();
+                                }
+                              } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                              }
+                            })
+                        .start();
+                  } else {
+                    extProcReceivedBodyCount.incrementAndGet();
+                  }
                 }
               }
 
@@ -7619,9 +7741,7 @@ public class ExternalProcessorServerInterceptorTest {
               public void onError(Throwable t) {}
 
               @Override
-              public void onCompleted() {
-                drainCompletedLatch.countDown();
-              }
+              public void onCompleted() {}
             };
           }
         };
@@ -7798,52 +7918,29 @@ public class ExternalProcessorServerInterceptorTest {
                           .setResponseHeaders(HeadersResponse.newBuilder().build())
                           .build());
                 } else if (request.hasResponseBody()) {
-                  int bodyIdx = extProcReceivedBodyCount.incrementAndGet();
-                  if (bodyIdx == 1) {
-                    // Send mutated response body for the first original message
-                    responseObserver.onNext(
-                        ProcessingResponse.newBuilder()
-                            .setResponseBody(
-                                BodyResponse.newBuilder()
-                                    .setResponse(
-                                        CommonResponse.newBuilder()
-                                            .setBodyMutation(
-                                                BodyMutation.newBuilder()
-                                                    .setStreamedResponse(
-                                                        StreamedBodyResponse.newBuilder()
-                                                            .setBody(
-                                                                ByteString.copyFromUtf8(
-                                                                    "mutated-msg-1"))
-                                                            .build())
-                                                    .build())
-                                            .build())
-                                    .build())
-                            .build());
-                  } else if (bodyIdx == 2) {
-                    // Send mutated response body for second original message and trigger draining
+                  if (request.getResponseBody().getDrainComplete()) {
+                    drainCompletedLatch.countDown();
                     new Thread(
                             () -> {
-                              responseObserver.onNext(
-                                  ProcessingResponse.newBuilder()
-                                      .setResponseBody(
-                                          BodyResponse.newBuilder()
-                                              .setResponse(
-                                                  CommonResponse.newBuilder()
-                                                      .setBodyMutation(
-                                                          BodyMutation.newBuilder()
-                                                              .setStreamedResponse(
-                                                                  StreamedBodyResponse.newBuilder()
-                                                                      .setBody(
-                                                                          ByteString.copyFromUtf8(
-                                                                              "mutated-msg-2"))
-                                                                      .build())
-                                                              .build())
-                                                      .build())
-                                              .build())
-                                      .setRequestDrain(true)
-                                      .build());
                               try {
                                 if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                                  responseObserver.onNext(
+                                      ProcessingResponse.newBuilder()
+                                          .setResponseBody(
+                                              BodyResponse.newBuilder()
+                                                  .setResponse(
+                                                      CommonResponse.newBuilder()
+                                                          .setBodyMutation(
+                                                              BodyMutation.newBuilder()
+                                                                  .setStreamedResponse(
+                                                                      StreamedBodyResponse
+                                                                          .newBuilder()
+                                                                          .setDrainComplete(true)
+                                                                          .build())
+                                                                  .build())
+                                                          .build())
+                                                  .build())
+                                          .build());
                                   responseObserver.onCompleted();
                                 }
                               } catch (InterruptedException e) {
@@ -7851,6 +7948,50 @@ public class ExternalProcessorServerInterceptorTest {
                               }
                             })
                         .start();
+                  } else {
+                    int bodyIdx = extProcReceivedBodyCount.incrementAndGet();
+                    if (bodyIdx == 1) {
+                      // Send mutated response body for the first original message
+                      responseObserver.onNext(
+                          ProcessingResponse.newBuilder()
+                              .setResponseBody(
+                                  BodyResponse.newBuilder()
+                                      .setResponse(
+                                          CommonResponse.newBuilder()
+                                              .setBodyMutation(
+                                                  BodyMutation.newBuilder()
+                                                      .setStreamedResponse(
+                                                          StreamedBodyResponse.newBuilder()
+                                                              .setBody(
+                                                                  ByteString.copyFromUtf8(
+                                                                      "mutated-msg-1"))
+                                                              .build())
+                                                      .build())
+                                              .build())
+                                      .build())
+                              .build());
+                    } else if (bodyIdx == 2) {
+                      // Send mutated response body for second original message and trigger draining
+                      responseObserver.onNext(
+                          ProcessingResponse.newBuilder()
+                              .setResponseBody(
+                                  BodyResponse.newBuilder()
+                                      .setResponse(
+                                          CommonResponse.newBuilder()
+                                              .setBodyMutation(
+                                                  BodyMutation.newBuilder()
+                                                      .setStreamedResponse(
+                                                          StreamedBodyResponse.newBuilder()
+                                                              .setBody(
+                                                                  ByteString.copyFromUtf8(
+                                                                      "mutated-msg-2"))
+                                                              .build())
+                                                      .build())
+                                              .build())
+                                      .build())
+                              .setRequestDrainResponses(true)
+                              .build());
+                    }
                   }
                 }
               }
@@ -7859,9 +8000,7 @@ public class ExternalProcessorServerInterceptorTest {
               public void onError(Throwable t) {}
 
               @Override
-              public void onCompleted() {
-                drainCompletedLatch.countDown();
-              }
+              public void onCompleted() {}
             };
           }
         };
@@ -7951,6 +8090,7 @@ public class ExternalProcessorServerInterceptorTest {
           new ByteArrayInputStream("original-msg-2".getBytes(StandardCharsets.UTF_8)));
 
       // Wait for 2nd mutated message to be received by client, and wait for drain to be active
+      assertThat(drainCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
       startTime = System.currentTimeMillis();
       while ((rawSentMessages.size() < 2 || interceptedCall.isReady())
           && System.currentTimeMillis() - startTime < 5000) {
@@ -8057,12 +8197,35 @@ public class ExternalProcessorServerInterceptorTest {
               @Override
               public void onNext(ProcessingRequest request) {
                 if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setRequestHeaders(HeadersResponse.getDefaultInstance())
+                          .setRequestDrainRequests(true)
+                          .build());
+                } else if (request.hasRequestBody()
+                    && request.getRequestBody().getDrainComplete()) {
+                  drainCompletedLatch.countDown();
                   new Thread(
                           () -> {
-                            responseObserver.onNext(
-                                ProcessingResponse.newBuilder().setRequestDrain(true).build());
                             try {
                               if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                                responseObserver.onNext(
+                                    ProcessingResponse.newBuilder()
+                                        .setRequestBody(
+                                            BodyResponse.newBuilder()
+                                                .setResponse(
+                                                    CommonResponse.newBuilder()
+                                                        .setBodyMutation(
+                                                            BodyMutation.newBuilder()
+                                                                .setStreamedResponse(
+                                                                    StreamedBodyResponse
+                                                                        .newBuilder()
+                                                                        .setDrainComplete(true)
+                                                                        .build())
+                                                                .build())
+                                                        .build())
+                                                .build())
+                                        .build());
                                 responseObserver.onCompleted();
                               }
                             } catch (InterruptedException e) {
@@ -8077,9 +8240,7 @@ public class ExternalProcessorServerInterceptorTest {
               public void onError(Throwable t) {}
 
               @Override
-              public void onCompleted() {
-                drainCompletedLatch.countDown();
-              }
+              public void onCompleted() {}
             };
           }
         };
@@ -8139,7 +8300,8 @@ public class ExternalProcessorServerInterceptorTest {
 
       // Wait for drain to be processed
       assertThat(drainCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-      assertThat(interceptedCallRef.get().isReady()).isFalse();
+      // Only request side is draining, so response side isReady() remains true
+      assertThat(interceptedCallRef.get().isReady()).isTrue();
 
       // Client sends request message during drain state
       interceptedListener.onMessage(
@@ -8150,13 +8312,6 @@ public class ExternalProcessorServerInterceptorTest {
 
       // Now let sidecar complete
       sidecarFinishLatch.countDown();
-
-      // Wait for it to become ready again
-      long startTime = System.currentTimeMillis();
-      while (!interceptedCallRef.get().isReady() && System.currentTimeMillis() - startTime < 5000) {
-        Thread.sleep(10);
-      }
-      assertThat(interceptedCallRef.get().isReady()).isTrue();
 
       // Verify that the buffered client request message is now delivered to the app
       assertThat(appMessageLatch.await(5, TimeUnit.SECONDS)).isTrue();
@@ -8229,50 +8384,29 @@ public class ExternalProcessorServerInterceptorTest {
                           .setRequestHeaders(HeadersResponse.newBuilder().build())
                           .build());
                 } else if (request.hasRequestBody()) {
-                  int bodyIdx = extProcReceivedBodyCount.incrementAndGet();
-                  if (bodyIdx == 1) {
-                    responseObserver.onNext(
-                        ProcessingResponse.newBuilder()
-                            .setRequestBody(
-                                BodyResponse.newBuilder()
-                                    .setResponse(
-                                        CommonResponse.newBuilder()
-                                            .setBodyMutation(
-                                                BodyMutation.newBuilder()
-                                                    .setStreamedResponse(
-                                                        StreamedBodyResponse.newBuilder()
-                                                            .setBody(
-                                                                ByteString.copyFromUtf8(
-                                                                    "mutated-msg-1"))
-                                                            .build())
-                                                    .build())
-                                            .build())
-                                    .build())
-                            .build());
-                  } else if (bodyIdx == 2) {
+                  if (request.getRequestBody().getDrainComplete()) {
+                    drainCompletedLatch.countDown();
                     new Thread(
                             () -> {
-                              responseObserver.onNext(
-                                  ProcessingResponse.newBuilder()
-                                      .setRequestBody(
-                                          BodyResponse.newBuilder()
-                                              .setResponse(
-                                                  CommonResponse.newBuilder()
-                                                      .setBodyMutation(
-                                                          BodyMutation.newBuilder()
-                                                              .setStreamedResponse(
-                                                                  StreamedBodyResponse.newBuilder()
-                                                                      .setBody(
-                                                                          ByteString.copyFromUtf8(
-                                                                              "mutated-msg-2"))
-                                                                      .build())
-                                                              .build())
-                                                      .build())
-                                              .build())
-                                      .setRequestDrain(true)
-                                      .build());
                               try {
                                 if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                                  responseObserver.onNext(
+                                      ProcessingResponse.newBuilder()
+                                          .setRequestBody(
+                                              BodyResponse.newBuilder()
+                                                  .setResponse(
+                                                      CommonResponse.newBuilder()
+                                                          .setBodyMutation(
+                                                              BodyMutation.newBuilder()
+                                                                  .setStreamedResponse(
+                                                                      StreamedBodyResponse
+                                                                          .newBuilder()
+                                                                          .setDrainComplete(true)
+                                                                          .build())
+                                                                  .build())
+                                                          .build())
+                                                  .build())
+                                          .build());
                                   responseObserver.onCompleted();
                                 }
                               } catch (InterruptedException e) {
@@ -8280,6 +8414,48 @@ public class ExternalProcessorServerInterceptorTest {
                               }
                             })
                         .start();
+                  } else {
+                    int bodyIdx = extProcReceivedBodyCount.incrementAndGet();
+                    if (bodyIdx == 1) {
+                      responseObserver.onNext(
+                          ProcessingResponse.newBuilder()
+                              .setRequestBody(
+                                  BodyResponse.newBuilder()
+                                      .setResponse(
+                                          CommonResponse.newBuilder()
+                                              .setBodyMutation(
+                                                  BodyMutation.newBuilder()
+                                                      .setStreamedResponse(
+                                                          StreamedBodyResponse.newBuilder()
+                                                              .setBody(
+                                                                  ByteString.copyFromUtf8(
+                                                                      "mutated-msg-1"))
+                                                              .build())
+                                                      .build())
+                                              .build())
+                                      .build())
+                              .build());
+                    } else if (bodyIdx == 2) {
+                      responseObserver.onNext(
+                          ProcessingResponse.newBuilder()
+                              .setRequestBody(
+                                  BodyResponse.newBuilder()
+                                      .setResponse(
+                                          CommonResponse.newBuilder()
+                                              .setBodyMutation(
+                                                  BodyMutation.newBuilder()
+                                                      .setStreamedResponse(
+                                                          StreamedBodyResponse.newBuilder()
+                                                              .setBody(
+                                                                  ByteString.copyFromUtf8(
+                                                                      "mutated-msg-2"))
+                                                              .build())
+                                                      .build())
+                                              .build())
+                                      .build())
+                              .setRequestDrainRequests(true)
+                              .build());
+                    }
                   }
                 }
               }
@@ -8288,9 +8464,7 @@ public class ExternalProcessorServerInterceptorTest {
               public void onError(Throwable t) {}
 
               @Override
-              public void onCompleted() {
-                drainCompletedLatch.countDown();
-              }
+              public void onCompleted() {}
             };
           }
         };
@@ -8377,15 +8551,16 @@ public class ExternalProcessorServerInterceptorTest {
       interceptedListener.onMessage(
           new ByteArrayInputStream("original-msg-2".getBytes(StandardCharsets.UTF_8)));
       // Wait for 2nd mutated message to be received by app, and wait for drain to be active
+      assertThat(drainCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
       startTime = System.currentTimeMillis();
-      while ((serverReceivedMessages.size() < 2 || interceptedCall.isReady())
-          && System.currentTimeMillis() - startTime < 5000) {
+      while (serverReceivedMessages.size() < 2 && System.currentTimeMillis() - startTime < 5000) {
         Thread.sleep(10);
       }
       assertThat(serverReceivedMessages)
           .containsExactly("mutated-msg-1", "mutated-msg-2")
           .inOrder();
-      assertThat(interceptedCall.isReady()).isFalse();
+      // Only request side is draining, so response side isReady() remains true
+      assertThat(interceptedCall.isReady()).isTrue();
 
       // Client concurrently sends message and half-closes during active drain
       final CountDownLatch clientActionLatch = new CountDownLatch(1);
@@ -8423,6 +8598,263 @@ public class ExternalProcessorServerInterceptorTest {
           // ignore
         }
       }
+      channelManager.close();
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void drainIgnored_whenRequestEosSent() throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    ExternalProcessor proto =
+        createBaseProto(uniqueExtProcServerName)
+            .setProcessingMode(
+                ProcessingMode.newBuilder()
+                    .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+                    .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+                    .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+                    .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+                    .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
+                    .build())
+            .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final AtomicBoolean drainCompleteReceived = new AtomicBoolean(false);
+    final CountDownLatch eosReceivedLatch = new CountDownLatch(1);
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            responseObserverRef.set(responseObserver);
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setRequestHeaders(HeadersResponse.getDefaultInstance())
+                          .build());
+                } else if (request.hasRequestBody()) {
+                  if (request.getRequestBody().getDrainComplete()) {
+                    drainCompleteReceived.set(true);
+                  } else if (request.getRequestBody().getEndOfStream()) {
+                    eosReceivedLatch.countDown();
+                    responseObserver.onNext(
+                        ProcessingResponse.newBuilder()
+                            .setRequestBody(
+                                BodyResponse.newBuilder()
+                                    .setResponse(
+                                        CommonResponse.newBuilder()
+                                            .setBodyMutation(
+                                                BodyMutation.newBuilder()
+                                                    .setStreamedResponse(
+                                                        StreamedBodyResponse.newBuilder()
+                                                            .setEndOfStream(true)
+                                                            .setEndOfStreamWithoutMessage(true)
+                                                            .build())
+                                                    .build())
+                                            .build())
+                                    .build())
+                            .setRequestDrainRequests(true)
+                            .build());
+                    responseObserver.onCompleted();
+                  }
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+    grpcCleanup.register(
+        InProcessServerBuilder.forName(uniqueExtProcServerName)
+            .addService(extProcImpl)
+            .directExecutor()
+            .build()
+            .start());
+
+    CachedChannelManager channelManager =
+        new CachedChannelManager(
+            config ->
+                grpcCleanup.register(
+                    InProcessChannelBuilder.forName(uniqueExtProcServerName)
+                        .directExecutor()
+                        .build()));
+
+    ExternalProcessorServerInterceptor interceptor =
+        new ExternalProcessorServerInterceptor(filterConfig, channelManager, FAKE_CONTEXT);
+
+    final CountDownLatch appHalfCloseLatch = new CountDownLatch(1);
+    ServerCall.Listener<InputStream> appListener =
+        new ServerCall.Listener<InputStream>() {
+          @Override
+          public void onHalfClose() {
+            appHalfCloseLatch.countDown();
+          }
+        };
+
+    final AtomicReference<ServerCall<InputStream, InputStream>> interceptedCallRef =
+        new AtomicReference<>();
+    ServerCall<InputStream, InputStream> rawCall = new SimpleServerCall(METHOD_SAY_HELLO_RAW);
+
+    try {
+      ServerCall.Listener<InputStream> interceptedListener =
+          interceptor.interceptCall(
+              rawCall,
+              new Metadata(),
+              (call, headers) -> {
+                interceptedCallRef.set(call);
+                return appListener;
+              });
+
+      long startTime = System.currentTimeMillis();
+      while (interceptedCallRef.get() == null && System.currentTimeMillis() - startTime < 5000) {
+        Thread.sleep(10);
+      }
+      assertThat(interceptedCallRef.get()).isNotNull();
+
+      interceptedListener.onHalfClose();
+
+      assertThat(eosReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(appHalfCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(drainCompleteReceived.get()).isFalse();
+    } finally {
+      channelManager.close();
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void drainIgnored_whenResponseTrailersSent() throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    ExternalProcessor proto =
+        createBaseProto(uniqueExtProcServerName)
+            .setProcessingMode(
+                ProcessingMode.newBuilder()
+                    .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+                    .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+                    .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+                    .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+                    .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+                    .build())
+            .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final AtomicBoolean drainCompleteReceived = new AtomicBoolean(false);
+    final CountDownLatch trailersReceivedLatch = new CountDownLatch(1);
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setRequestHeaders(HeadersResponse.getDefaultInstance())
+                          .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setResponseHeaders(HeadersResponse.getDefaultInstance())
+                          .build());
+                } else if (request.hasResponseBody()) {
+                  if (request.getResponseBody().getDrainComplete()) {
+                    drainCompleteReceived.set(true);
+                  }
+                } else if (request.hasResponseTrailers()) {
+                  trailersReceivedLatch.countDown();
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setResponseTrailers(TrailersResponse.getDefaultInstance())
+                          .setRequestDrainResponses(true)
+                          .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+    grpcCleanup.register(
+        InProcessServerBuilder.forName(uniqueExtProcServerName)
+            .addService(extProcImpl)
+            .directExecutor()
+            .build()
+            .start());
+
+    CachedChannelManager channelManager =
+        new CachedChannelManager(
+            config ->
+                grpcCleanup.register(
+                    InProcessChannelBuilder.forName(uniqueExtProcServerName)
+                        .directExecutor()
+                        .build()));
+
+    ExternalProcessorServerInterceptor interceptor =
+        new ExternalProcessorServerInterceptor(filterConfig, channelManager, FAKE_CONTEXT);
+
+    final AtomicReference<ServerCall<InputStream, InputStream>> interceptedCallRef =
+        new AtomicReference<>();
+    final AtomicReference<Status> rawSentStatus = new AtomicReference<>();
+    final CountDownLatch rawCloseLatch = new CountDownLatch(1);
+    ServerCall<InputStream, InputStream> rawCall =
+        new SimpleServerCall(METHOD_SAY_HELLO_RAW) {
+          @Override
+          public void close(Status status, Metadata trailers) {
+            rawSentStatus.set(status);
+            rawCloseLatch.countDown();
+          }
+        };
+
+    try {
+      interceptor.interceptCall(
+          rawCall,
+          new Metadata(),
+          (call, headers) -> {
+            interceptedCallRef.set(call);
+            return new ServerCall.Listener<InputStream>() {};
+          });
+
+      long startTime = System.currentTimeMillis();
+      while (interceptedCallRef.get() == null && System.currentTimeMillis() - startTime < 5000) {
+        Thread.sleep(10);
+      }
+      assertThat(interceptedCallRef.get()).isNotNull();
+
+      interceptedCallRef.get().sendHeaders(new Metadata());
+      interceptedCallRef.get().close(Status.OK, new Metadata());
+
+      assertThat(trailersReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(rawCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(rawSentStatus.get().isOk()).isTrue();
+      assertThat(drainCompleteReceived.get()).isFalse();
+    } finally {
       channelManager.close();
     }
   }
@@ -8815,7 +9247,10 @@ public class ExternalProcessorServerInterceptorTest {
                                     .build())
                             .build())
                     .build())
-            .setProcessingMode(ProcessingMode.getDefaultInstance())
+            .setProcessingMode(
+                ProcessingMode.newBuilder()
+                    .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+                    .build())
             .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -8838,7 +9273,12 @@ public class ExternalProcessorServerInterceptorTest {
               public void onNext(ProcessingRequest request) {
                 if (request.hasRequestHeaders()) {
                   responseObserver.onNext(
-                      ProcessingResponse.newBuilder().setRequestDrain(true).build());
+                      ProcessingResponse.newBuilder()
+                          .setRequestHeaders(HeadersResponse.getDefaultInstance())
+                          .setRequestDrainRequests(true)
+                          .build());
+                } else if (request.hasRequestBody()
+                    && request.getRequestBody().getDrainComplete()) {
                   drainLatch.countDown();
                 }
               }
@@ -8890,30 +9330,187 @@ public class ExternalProcessorServerInterceptorTest {
       interceptor.interceptCall(rawCall, new Metadata(), nextHandler);
 
       assertThat(drainLatch.await(5, TimeUnit.SECONDS)).isTrue();
-
-      // Wait for interceptedCallRef to become ready first (it will transition to activated, then
-      // draining)
-      long start = System.currentTimeMillis();
-      while (interceptedCallRef.get() == null && System.currentTimeMillis() - start < 5000) {
-        Thread.sleep(10);
-      }
       assertThat(interceptedCallRef.get()).isNotNull();
 
-      // isReady() must return false during drain.
-      start = System.currentTimeMillis();
-      while (interceptedCallRef.get().isReady() && System.currentTimeMillis() - start < 2000) {
-        Thread.sleep(10);
-      }
-      assertThat(interceptedCallRef.get().isReady()).isFalse();
+      // Response-side isReady() must remain true during request-only drain.
+      assertThat(interceptedCallRef.get().isReady()).isTrue();
 
-      // App requests more messages
+      // App requests more messages during request drain
       interceptedCallRef.get().request(3);
 
-      // isReady() should remain false during drain
+      // Verify raw call NOT requested during request drain
+      assertThat(rawRequestCount.get()).isEqualTo(0);
+
+      // Complete request drain handshake
+      responseObserverRef.get().onNext(
+          ProcessingResponse.newBuilder()
+              .setRequestBody(
+                  BodyResponse.newBuilder()
+                      .setResponse(
+                          CommonResponse.newBuilder()
+                              .setBodyMutation(
+                                  BodyMutation.newBuilder()
+                                      .setStreamedResponse(
+                                          StreamedBodyResponse.newBuilder()
+                                              .setDrainComplete(true)))))
+              .build());
+
+      // Buffered requests should now be drained to raw call
+      assertThat(rawRequestCount.get()).isEqualTo(3);
+    } finally {
+      if (responseObserverRef.get() != null) {
+        try {
+          responseObserverRef.get().onCompleted();
+        } catch (IllegalStateException ignored) {
+          // Ignore if already closed
+        }
+      }
+      channelManager.close();
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenResponseDrainActive_whenAppRequestsMessages_thenRequestsDrained()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    ExternalProcessor proto =
+        ExternalProcessor.newBuilder()
+            .setGrpcService(
+                GrpcService.newBuilder()
+                    .setGoogleGrpc(
+                        GrpcService.GoogleGrpc.newBuilder()
+                            .setTargetUri("in-process:///" + uniqueExtProcServerName)
+                            .addChannelCredentialsPlugin(
+                                Any.newBuilder()
+                                    .setTypeUrl(
+                                        "type.googleapis.com/envoy.extensions.grpc_service."
+                                            + "channel_credentials.insecure.v3.InsecureCredentials")
+                                    .build())
+                            .build())
+                    .build())
+            .setProcessingMode(
+                ProcessingMode.newBuilder()
+                    .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+                    .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+                    .build())
+            .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final CountDownLatch drainLatch = new CountDownLatch(1);
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            responseObserverRef.set(responseObserver);
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setRequestHeaders(HeadersResponse.getDefaultInstance())
+                          .setRequestDrainResponses(true)
+                          .build());
+                } else if (request.hasResponseBody()
+                    && request.getResponseBody().getDrainComplete()) {
+                  drainLatch.countDown();
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+    grpcCleanup.register(
+        InProcessServerBuilder.forName(uniqueExtProcServerName)
+            .addService(extProcImpl)
+            .directExecutor()
+            .build()
+            .start());
+
+    CachedChannelManager channelManager =
+        new CachedChannelManager(
+            config ->
+                grpcCleanup.register(
+                    InProcessChannelBuilder.forName(uniqueExtProcServerName)
+                        .directExecutor()
+                        .build()));
+
+    ExternalProcessorServerInterceptor interceptor =
+        new ExternalProcessorServerInterceptor(filterConfig, channelManager, FAKE_CONTEXT);
+
+    final AtomicReference<ServerCall<InputStream, InputStream>> interceptedCallRef =
+        new AtomicReference<>();
+    final AtomicInteger appOnReadyCount = new AtomicInteger(0);
+    ServerCallHandler<InputStream, InputStream> nextHandler =
+        (call, headers) -> {
+          interceptedCallRef.set(call);
+          return new ServerCall.Listener<InputStream>() {
+            @Override
+            public void onReady() {
+              appOnReadyCount.incrementAndGet();
+            }
+          };
+        };
+
+    final AtomicInteger rawRequestCount = new AtomicInteger(0);
+    ServerCall<InputStream, InputStream> rawCall =
+        new SimpleServerCall(METHOD_SAY_HELLO_RAW) {
+          @Override
+          public void request(int numMessages) {
+            rawRequestCount.addAndGet(numMessages);
+          }
+        };
+
+    try {
+      ServerCall.Listener<InputStream> rawListener =
+          interceptor.interceptCall(rawCall, new Metadata(), nextHandler);
+
+      assertThat(drainLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(interceptedCallRef.get()).isNotNull();
+
+      // Response-side isReady() must return false during response drain.
       assertThat(interceptedCallRef.get().isReady()).isFalse();
 
-      // Verify raw call NOT requested during drain
-      assertThat(rawRequestCount.get()).isEqualTo(0);
+      // Triggering rawListener.onReady() while responseDraining is true should be suppressed.
+      int readyCountBefore = appOnReadyCount.get();
+      rawListener.onReady();
+      assertThat(appOnReadyCount.get()).isEqualTo(readyCountBefore);
+
+      // App requests messages during response drain -> forwarded immediately, not buffered
+      interceptedCallRef.get().request(3);
+      assertThat(rawRequestCount.get()).isEqualTo(3);
+
+      // Complete response drain handshake
+      responseObserverRef.get().onNext(
+          ProcessingResponse.newBuilder()
+              .setResponseBody(
+                  BodyResponse.newBuilder()
+                      .setResponse(
+                          CommonResponse.newBuilder()
+                              .setBodyMutation(
+                                  BodyMutation.newBuilder()
+                                      .setStreamedResponse(
+                                          StreamedBodyResponse.newBuilder()
+                                              .setDrainComplete(true)))))
+              .build());
+
+      // Response-side isReady() should now be true and onReady() should have fired
+      assertThat(interceptedCallRef.get().isReady()).isTrue();
+      assertThat(appOnReadyCount.get()).isGreaterThan(readyCountBefore);
     } finally {
       if (responseObserverRef.get() != null) {
         try {
