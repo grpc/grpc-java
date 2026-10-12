@@ -28,6 +28,7 @@ import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.toHeaderMap;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.math.LongMath;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
@@ -68,7 +69,6 @@ import io.grpc.stub.MetadataUtils;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
 import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.internal.extproc.DataPlaneCallState;
-import io.grpc.xds.internal.extproc.EventType;
 import io.grpc.xds.internal.extproc.ExtProcStreamState;
 import io.grpc.xds.internal.extproc.KnownLengthInputStream;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
@@ -286,8 +286,40 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final DataPlaneDelayedCall<InputStream, InputStream> delayedCall;
     private final ScheduledExecutorService scheduler;
     final Object streamLock = new Object();
-    @Nullable private volatile EventType expectedRequestResponse;
-    @Nullable private volatile EventType expectedResponseResponse;
+    private volatile boolean requestHeadersSent;
+    private volatile boolean responseHeadersSent;
+    private volatile boolean responseTrailersSent;
+    private volatile boolean clientHeadersReceived;
+    private volatile boolean clientEndOfStreamReceived;
+    private volatile boolean serverHeadersReceived;
+    private volatile boolean serverTrailersReceived;
+    private volatile boolean serverEndOfStreamReceived;
+    private volatile Throwable streamFailureCause;
+
+    private boolean isRequestHeaderConfigured() {
+      ProcessingMode.HeaderSendMode mode = currentProcessingMode.getRequestHeaderMode();
+      return mode == ProcessingMode.HeaderSendMode.SEND
+          || mode == ProcessingMode.HeaderSendMode.DEFAULT;
+    }
+
+    private boolean isRequestBodyConfigured() {
+      return currentProcessingMode.getRequestBodyMode() != ProcessingMode.BodySendMode.NONE;
+    }
+
+    private boolean isResponseHeaderConfigured() {
+      ProcessingMode.HeaderSendMode mode = currentProcessingMode.getResponseHeaderMode();
+      return mode == ProcessingMode.HeaderSendMode.SEND
+          || mode == ProcessingMode.HeaderSendMode.DEFAULT;
+    }
+
+    private boolean isResponseBodyConfigured() {
+      return currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.NONE;
+    }
+
+    private boolean isResponseTrailerConfigured() {
+      return currentProcessingMode.getResponseTrailerMode() == ProcessingMode.HeaderSendMode.SEND;
+    }
+
     @Nullable private volatile ClientCallStreamObserver<ProcessingRequest>
         extProcClientCallRequestObserver;
     @GuardedBy("streamLock")
@@ -495,8 +527,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               boolean wasReady;
               synchronized (streamLock) {
                 wasReady = isReady();
-                downstreamToSidestreamWindow += update.getWindowIncrementDownstreamToSidestream();
-                upstreamToSidestreamWindow += update.getWindowIncrementUpstreamToSidestream();
+                downstreamToSidestreamWindow = LongMath.saturatedAdd(
+                    downstreamToSidestreamWindow,
+                    update.getWindowIncrementDownstreamToSidestream());
+                upstreamToSidestreamWindow = LongMath.saturatedAdd(
+                    upstreamToSidestreamWindow,
+                    update.getWindowIncrementUpstreamToSidestream());
                 drainPendingRequestBodyMessages();
                 drainPendingRequests();
                 if (wrappedListener != null) {
@@ -523,50 +559,148 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             }
 
             if (response.hasRequestHeaders()) {
-              EventType expected = expectedRequestResponse;
-              if (expected == null || expected != EventType.REQUEST_HEADERS) {
+              if (!isRequestHeaderConfigured()) {
                 internalOnError(Status.UNAVAILABLE
-                    .withDescription("Protocol error: received response out of order. Expected: " 
-                        + expected + ", Received: REQUEST_HEADERS")
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Filter is not configured to send client headers.")
                     .asRuntimeException());
                 return;
               }
-              expectedRequestResponse = null;
+              if (!requestHeadersSent) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Received request_headers before request_headers was sent.")
+                    .asRuntimeException());
+                return;
+              }
+              if (clientEndOfStreamReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Received request_headers after end-of-stream in "
+                        + "client-to-server direction.")
+                    .asRuntimeException());
+                return;
+              }
+              if (clientHeadersReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Duplicate request_headers response.")
+                    .asRuntimeException());
+                return;
+              }
+              clientHeadersReceived = true;
             } else if (response.hasResponseHeaders()) {
-              EventType expected = expectedResponseResponse;
-              if (expected == null || expected != EventType.RESPONSE_HEADERS) {
+              if (!isResponseHeaderConfigured()) {
                 internalOnError(Status.UNAVAILABLE
-                    .withDescription("Protocol error: received response out of order. Expected: " 
-                        + expected + ", Received: RESPONSE_HEADERS")
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Filter is not configured to send server headers.")
                     .asRuntimeException());
                 return;
               }
-              expectedResponseResponse = null;
+              if (!responseHeadersSent) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Received response_headers before response_headers was sent.")
+                    .asRuntimeException());
+                return;
+              }
+              if (serverTrailersReceived || serverEndOfStreamReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Received response_headers after trailers or end-of-stream.")
+                    .asRuntimeException());
+                return;
+              }
+              if (serverHeadersReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Duplicate response_headers response.")
+                    .asRuntimeException());
+                return;
+              }
+              serverHeadersReceived = true;
             } else if (response.hasResponseTrailers()) {
-              EventType expected = expectedResponseResponse;
-              if (expected == null || expected != EventType.RESPONSE_TRAILERS) {
+              if (!isResponseTrailerConfigured()) {
                 internalOnError(Status.UNAVAILABLE
-                    .withDescription("Protocol error: received response out of order. Expected: " 
-                        + expected + ", Received: RESPONSE_TRAILERS")
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Filter is not configured to send server trailers.")
                     .asRuntimeException());
                 return;
               }
-              expectedResponseResponse = null;
+              if (isResponseHeaderConfigured() && !serverHeadersReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Received response_trailers before response_headers response.")
+                    .asRuntimeException());
+                return;
+              }
+              if (!responseTrailersSent) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Received response_trailers before response_trailers was sent.")
+                    .asRuntimeException());
+                return;
+              }
+              if (serverTrailersReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Duplicate response_trailers response.")
+                    .asRuntimeException());
+                return;
+              }
+              if (serverEndOfStreamReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. "
+                        + "Received response_trailers after end-of-stream.")
+                    .asRuntimeException());
+                return;
+              }
+              serverTrailersReceived = true;
+              serverEndOfStreamReceived = true;
             } else if (response.hasRequestBody()) {
-              EventType expected = expectedRequestResponse;
-              if (expected == EventType.REQUEST_HEADERS) {
+              if (!isRequestBodyConfigured()) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received request_body when filter is not configured "
+                            + "to send client messages.")
+                    .asRuntimeException());
+                return;
+              }
+              if (isRequestHeaderConfigured() && !clientHeadersReceived) {
                 internalOnError(Status.UNAVAILABLE
                     .withDescription(
                         "Protocol error: received request_body before request_headers response.")
                     .asRuntimeException());
                 return;
               }
+              if (clientEndOfStreamReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received request_body after end-of-stream in "
+                            + "client-to-server direction.")
+                    .asRuntimeException());
+                return;
+              }
             } else if (response.hasResponseBody()) {
-              EventType expected = expectedResponseResponse;
-              if (expected == EventType.RESPONSE_HEADERS) {
+              if (!isResponseBodyConfigured()) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received response_body when filter is not configured "
+                            + "to send server messages.")
+                    .asRuntimeException());
+                return;
+              }
+              if (isResponseHeaderConfigured() && !serverHeadersReceived) {
                 internalOnError(Status.UNAVAILABLE
                     .withDescription(
                         "Protocol error: received response_body before headers response.")
+                    .asRuntimeException());
+                return;
+              }
+              if (serverTrailersReceived || serverEndOfStreamReceived) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received response_body after trailers or end-of-stream.")
                     .asRuntimeException());
                 return;
               }
@@ -621,6 +755,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     mutator);
               }
               if (wrappedListener.isTrailersOnly()) {
+                serverEndOfStreamReceived = true;
                 wrappedListener.proceedWithClose();
               } else {
                 wrappedListener.proceedWithHeaders();
@@ -669,11 +804,18 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         @Override
         public void onCompleted() {
-          if (markExtProcStreamCompleted(extProcStreamState)) {
-            synchronized (streamLock) {
-              extProcClientCallRequestObserver = null;
+          ExtProcStreamState state = extProcStreamState.get();
+          if (state == ExtProcStreamState.DRAINING || config.getObservabilityMode()) {
+            if (markExtProcStreamCompleted(extProcStreamState)) {
+              synchronized (streamLock) {
+                extProcClientCallRequestObserver = null;
+              }
+              handleFailOpen(wrappedListener);
             }
-            handleFailOpen(wrappedListener);
+          } else if (state == ExtProcStreamState.ACTIVE) {
+            internalOnError(Status.UNAVAILABLE
+                .withDescription("External processor stream completed without drain")
+                .asRuntimeException());
           }
         }
       });
@@ -707,11 +849,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
         
         if (request.hasRequestHeaders()) {
-          expectedRequestResponse = EventType.REQUEST_HEADERS;
+          requestHeadersSent = true;
         } else if (request.hasResponseHeaders()) {
-          expectedResponseResponse = EventType.RESPONSE_HEADERS;
+          responseHeadersSent = true;
         } else if (request.hasResponseTrailers()) {
-          expectedResponseResponse = EventType.RESPONSE_TRAILERS;
+          responseTrailersSent = true;
         }
 
         ProcessingRequest requestToSend = request;
@@ -772,8 +914,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 .build());
         accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
         accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
-        sidestreamToUpstreamWindow += incrementUpstream;
-        sidestreamToDownstreamWindow += incrementDownstream;
+        sidestreamToUpstreamWindow =
+            LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
+        sidestreamToDownstreamWindow =
+            LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
       }
     }
 
@@ -796,8 +940,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (shouldSend) {
           accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
           accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
-          sidestreamToUpstreamWindow += incrementUpstream;
-          sidestreamToDownstreamWindow += incrementDownstream;
+          sidestreamToUpstreamWindow =
+              LongMath.saturatedAdd(sidestreamToUpstreamWindow, incrementUpstream);
+          sidestreamToDownstreamWindow =
+              LongMath.saturatedAdd(sidestreamToDownstreamWindow, incrementDownstream);
 
           sendToExtProc(ProcessingRequest.newBuilder()
               .setClientWindowUpdate(ProcessingRequest.ClientWindowUpdate.newBuilder()
@@ -846,10 +992,15 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void internalOnError(Throwable t) {
+      this.streamFailureCause = t;
       if (markExtProcStreamFailed(extProcStreamState)) {
         synchronized (streamLock) {
           if (extProcClientCallRequestObserver != null) {
-            extProcClientCallRequestObserver.onError(t);
+            try {
+              extProcClientCallRequestObserver.onError(t);
+            } catch (Throwable ignored) {
+              // Ignore exception if observer is already closed/completed
+            }
             extProcClientCallRequestObserver = null;
           }
         }
@@ -1185,6 +1336,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             }
           }
           if (isEndOfStream) {
+            clientEndOfStreamReceived = true;
             synchronized (streamLock) {
               if (pendingUpstreamBodyMessages.isEmpty()) {
                 if (requestSideClosed.compareAndSet(false, true)) {
@@ -1309,7 +1461,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     private void handleImmediateResponse(ImmediateResponse immediate, DataPlaneListener listener)
         throws HeaderMutationDisallowedException {
-      Status status = Status.fromCodeValue(immediate.getGrpcStatus().getStatus());
+      Status status = immediate.hasGrpcStatus()
+          ? Status.fromCodeValue(immediate.getGrpcStatus().getStatus())
+          : Status.UNKNOWN;
       if (!immediate.getDetails().isEmpty()) {
         status = status.withDescription(immediate.getDetails());
       }
@@ -1619,7 +1773,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               || dataPlaneClientCall.bodyMessageSentToExtProc.get())) {
         if (markDataPlaneCallClosed(dataPlaneClientCall.dataPlaneCallState)) {
           proceedWithClose(Status.INTERNAL.withDescription("External processor stream failed")
-              .withCause(status.getCause()), new Metadata());
+              .withCause(dataPlaneClientCall.streamFailureCause != null
+                  ? dataPlaneClientCall.streamFailureCause
+                  : status.getCause()), new Metadata());
         }
         return;
       }
@@ -1691,7 +1847,17 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     void proceedWithClose() {
       if (savedStatus != null) {
         if (markDataPlaneCallClosed(dataPlaneClientCall.dataPlaneCallState)) {
-          proceedWithClose(savedStatus, savedTrailers);
+          Status toDeliver = savedStatus;
+          if (savedStatus.isOk()
+              && dataPlaneClientCall.getExtProcStreamState().get().isFailed()
+              && (!dataPlaneClientCall.getConfig().getFailureModeAllow()
+                  || dataPlaneClientCall.bodyMessageSentToExtProc.get())) {
+            toDeliver = Status.INTERNAL.withDescription("External processor stream failed")
+                .withCause(dataPlaneClientCall.streamFailureCause != null
+                    ? dataPlaneClientCall.streamFailureCause
+                    : savedStatus.getCause());
+          }
+          proceedWithClose(toDeliver, savedTrailers);
         }
         savedStatus = null;
         savedTrailers = null;
