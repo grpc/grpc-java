@@ -108,18 +108,5 @@ final class MetadataRegistry {
 
     return parsedMetadata.build();
   }
-
-  interface MetadataValueParser {
-
-    String getTypeUrl();
-
-    /**
-     * Parses the given {@link Any} object into a specific metadata value.
-     *
-     * @param any the {@link Any} object to parse.
-     * @return the parsed metadata value.
-     * @throws ResourceInvalidException if the parsing fails.
-     */
-    Object parse(Any any) throws ResourceInvalidException;
-  }
 }
+

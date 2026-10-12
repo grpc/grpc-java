@@ -44,7 +44,6 @@ import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.Filter.FilterConfigParseContext;
 import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
-import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import java.util.LinkedHashMap;

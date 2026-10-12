@@ -274,7 +274,8 @@ public class ExternalProcessorClientInterceptorTest {
                 + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
-            .build());
+            .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance());
   }
 
   // --- Category 1: Configuration Override ---
@@ -634,17 +635,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
-        .build();
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName).build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
     assertThat(configOrError.errorDetail).isNull();
@@ -739,6 +730,7 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .setTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(5).build())
             .build())
+        .setProcessingMode(ProcessingMode.getDefaultInstance())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -1779,16 +1771,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
@@ -1879,16 +1862,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
@@ -2035,16 +2009,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
@@ -2164,16 +2129,7 @@ public class ExternalProcessorClientInterceptorTest {
   public void givenRequestHeaderModeSkip_whenStartCalled_thenCallIsActivated() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP).build())
         .build();
@@ -2268,16 +2224,7 @@ public class ExternalProcessorClientInterceptorTest {
           throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -2385,16 +2332,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = "extProc-sendMessage-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-sendMessage-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -2539,16 +2477,7 @@ public class ExternalProcessorClientInterceptorTest {
         "extProc-mutatedBody-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-mutatedBody-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -2673,16 +2602,7 @@ public class ExternalProcessorClientInterceptorTest {
         "extProc-emptyMsg-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-emptyMsg-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
@@ -2816,16 +2736,7 @@ public class ExternalProcessorClientInterceptorTest {
         "extProc-discarded-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-discarded-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -2955,16 +2866,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = "extProc-noneBody-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-noneBody-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.NONE).build())
@@ -3063,16 +2965,7 @@ public class ExternalProcessorClientInterceptorTest {
         "extProc-resp-headers-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-resp-headers-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
@@ -3201,16 +3094,7 @@ public class ExternalProcessorClientInterceptorTest {
         "extProc-skip-headers-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-skip-headers-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP).build())
@@ -3351,16 +3235,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
@@ -3506,16 +3381,7 @@ public class ExternalProcessorClientInterceptorTest {
     final String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     final String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
@@ -4730,16 +4596,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenRequestBodyModeGrpc_whenHalfCloseCalled_thenSuperHalfCloseDeferred()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -4827,16 +4684,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -4930,16 +4778,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -5098,16 +4937,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -5243,16 +5073,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -5401,16 +5222,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -5547,16 +5359,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -5694,16 +5497,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -5879,16 +5673,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
@@ -6055,16 +5840,7 @@ public class ExternalProcessorClientInterceptorTest {
   public void givenObservabilityTrue_whenExtProcBusy_thenIsReadyReturnsFalse()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -6177,16 +5953,7 @@ public class ExternalProcessorClientInterceptorTest {
   public void givenObservabilityMode_whenUpstreamBusy_thenIsReadyReturnsFalse()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -6301,16 +6068,7 @@ public class ExternalProcessorClientInterceptorTest {
   public void givenNormalMode_whenUpstreamBusy_thenIsReadyReturnsTrue()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setObservabilityMode(false)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -6414,16 +6172,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenCongestionInExtProc_whenExtProcBecomesReady_thenTriggersOnReady()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -6688,16 +6437,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void testRequestBodyDrainingBypassedWhenRequestBodyModeNone() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
             .build())
@@ -6872,16 +6612,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void testHalfCloseEarlyWhenDrainingAndRequestBodyModeNone() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
             .build())
@@ -6985,16 +6716,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void testHalfCloseEarlyWhenDrainingAndNoMessagesSent() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .build())
@@ -7098,16 +6820,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void testHalfCloseDeferredWhenDrainingAndMessagesSent() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .build())
@@ -7227,16 +6940,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void testResponseBodyDrainingBypassedWhenResponseBodyModeNone() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
@@ -7354,16 +7058,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void testResponseHeadersDrainingBypassedWhenResponseHeadersSkip() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .build())
@@ -7473,16 +7168,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void testResponseTrailersDrainingBypassedWhenResponseTrailersSkip() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
@@ -7594,16 +7280,7 @@ public class ExternalProcessorClientInterceptorTest {
   public void givenRequestDrainActive_whenIsReadyCalled_thenReturnsFalse() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7694,16 +7371,7 @@ public class ExternalProcessorClientInterceptorTest {
         "extProc-draining-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-draining-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7831,16 +7499,7 @@ public class ExternalProcessorClientInterceptorTest {
   public void givenDrainingStream_whenObserverIsNull_thenSendMessageDoesNotQueue()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -7930,16 +7589,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenDrainingStream_whenExtProcStreamCompletes_thenMessagesProceed()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -8088,16 +7738,7 @@ public class ExternalProcessorClientInterceptorTest {
   public void
       drainingStartsBeforeRequestHeaders_whenAppSendsAndHalfCloses_thenBufferedAndDelivered()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -8259,16 +7900,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void drainingStartsAfterRequestHeaders_whenAppSendsAndHalfCloses_thenBufferedAndDelivered()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -8458,16 +8090,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void drainingStartsBeforeResponseHeaders_whenUpstreamResponds_thenBufferedAndDelivered()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -8637,16 +8260,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void drainingStartsAfterResponseHeaders_whenUpstreamResponds_thenBufferedAndDelivered()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -9487,16 +9101,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenObservabilityTrue_whenExtProcBusy_thenAppRequestsBuffered()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -9643,16 +9248,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenRequestDrainActive_whenAppRequestsMessages_thenRequestsBuffered()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
@@ -9759,16 +9355,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenBufferedRequests_whenExtProcStreamBecomesReady_thenDataPlaneDrained()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -9903,16 +9490,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenExtProcStreamCompleted_whenAppRequestsMessages_thenRequestsForwarded()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -10373,16 +9951,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenFailureModeAllowFalse_whenExtProcStreamFails_thenDataPlaneCallCancelled()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setFailureModeAllow(false) // Fail Closed
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -10464,16 +10033,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenFailureModeAllowTrue_whenExtProcStreamFails_thenCallFailsOpen()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setFailureModeAllow(true) // Fail Open
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -10599,16 +10159,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenObservabilityMode_whenDataPlaneClosed_thenSidecarCloseIsDeferred()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setObservabilityMode(true)
         .setDeferredCloseTimeout(
             com.google.protobuf.Duration.newBuilder().setSeconds(10).build())
@@ -10729,16 +10280,7 @@ public class ExternalProcessorClientInterceptorTest {
         "extProc-compression-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-compression-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
@@ -10888,16 +10430,7 @@ public class ExternalProcessorClientInterceptorTest {
         "extProc-resp-compression-" + InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName =
         "dataPlane-resp-compression-" + InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -11029,16 +10562,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT)
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT)
@@ -11178,16 +10702,7 @@ public class ExternalProcessorClientInterceptorTest {
   public void testObservabilityMode_ProceedsWithoutBlockingOnExtProcResponseHeaders()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                        + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -11306,16 +10821,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenImmediateResponse_whenReceived_thenDataPlaneCallCancelled()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -11416,16 +10922,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenImmediateResponseAndObservabilityTrue_whenReceived_thenImmediateResponseIgnored()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -11527,16 +11024,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenImmediateResponseDisabled_whenReceivedBeforeActivation_thenSidecarStreamErrored()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setDisableImmediateResponse(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -11637,16 +11125,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenImmediateResponseDisabled_whenReceivedAfterActivation_thenSidecarStreamErrored()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setDisableImmediateResponse(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -11760,16 +11239,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenImmediateResponseInTrailers_whenReceived_thenDataPlaneCallStatusIsOverridden()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
@@ -11929,16 +11399,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenActiveRpc_whenDataPlaneCallCancelled_thenExtProcStreamIsErrored()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -12025,16 +11486,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenObservabilityModeFalse_whenExtProcBusy_thenIsReadyReturnsFalse()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setObservabilityMode(false)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -12175,16 +11627,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenObservabilityModeFalse_whenExtProcBusy_thenAppRequestsAreBuffered()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
@@ -12415,16 +11858,7 @@ public class ExternalProcessorClientInterceptorTest {
   @SuppressWarnings("unchecked")
   public void givenResponseBodyModeNone_whenExtProcBusy_thenAppRequestsAreNotBuffered()
       throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + extProcServerName)
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
-                + "channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
-                .build())
-            .build())
+    ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
