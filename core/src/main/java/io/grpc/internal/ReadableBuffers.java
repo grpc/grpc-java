@@ -218,16 +218,6 @@ public final class ReadableBuffers {
       }
       offset = mark;
     }
-
-    @Override
-    public boolean byteBufferSupported() {
-      return true;
-    }
-
-    @Override
-    public ByteBuffer getByteBuffer() {
-      return ByteBuffer.wrap(bytes, offset, end - offset).slice();
-    }
   }
 
   /**
