@@ -25,10 +25,16 @@ import java.io.InputStream;
  * An {@link InputStream} backed by a {@link ByteString} that implements {@link KnownLength}.
  */
 public final class KnownLengthInputStream extends InputStream implements KnownLength {
+  private final ByteString byteString;
   private final InputStream delegate;
 
   public KnownLengthInputStream(ByteString byteString) {
+    this.byteString = byteString;
     this.delegate = byteString.newInput();
+  }
+
+  public ByteString getByteString() {
+    return byteString;
   }
 
   @Override
