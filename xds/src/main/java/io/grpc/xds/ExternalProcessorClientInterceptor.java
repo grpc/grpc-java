@@ -1151,6 +1151,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         mergeAccumulatedWindowUpdates(builder);
         sendToExtProc(builder.build());
       }
+      if (config.getObservabilityMode()) {
+        if (requestSideClosed.compareAndSet(false, true)) {
+          proceedWithHalfClose();
+        }
+      }
     }
 
     void cancelDownstream(@Nullable String message, @Nullable Throwable cause) {
