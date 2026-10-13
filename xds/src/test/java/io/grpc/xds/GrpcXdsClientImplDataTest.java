@@ -130,7 +130,6 @@ import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.FilterConfigParseContext;
 import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
-import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;

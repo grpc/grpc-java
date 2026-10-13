@@ -35,7 +35,6 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
