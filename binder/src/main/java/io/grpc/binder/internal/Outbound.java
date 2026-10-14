@@ -199,6 +199,11 @@ abstract class Outbound {
   }
 
   @GuardedBy("this")
+  protected final boolean isSuffixSent() {
+    return outboundState == State.SUFFIX_SENT;
+  }
+
+  @GuardedBy("this")
   final void onTransportReady() throws StatusException {
     // The transport has become ready, attempt sending.
     send();
@@ -232,7 +237,7 @@ abstract class Outbound {
           if (!messageAvailable() && !suffixReady) {
             break;
           }
-          // Fall-through.
+          // fall through
         case PREFIX_SENT:
           InputStream messageStream = peekNextMessage();
           if (messageStream != null) {
@@ -247,11 +252,10 @@ abstract class Outbound {
             // There's still more message data to deliver, break out.
             break;
           }
-          // Fall-through.
+          // fall through
         case ALL_MESSAGES_SENT:
           flags |= TransactionUtils.FLAG_SUFFIX;
           flags |= writeSuffix(parcel.get());
-          onOutboundState(State.SUFFIX_SENT);
           break;
         default:
           throw new AssertionError();
@@ -259,15 +263,14 @@ abstract class Outbound {
       TransactionUtils.fillInFlags(parcel.get(), flags);
       int dataSize = parcel.get().dataSize();
       transport.sendTransaction(callId, parcel);
+      if (TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_SUFFIX)) {
+        onOutboundState(State.SUFFIX_SENT);
+      }
       statsTraceContext.outboundWireSize(dataSize);
       statsTraceContext.outboundUncompressedSize(dataSize);
     } catch (IOException e) {
       throw Status.INTERNAL.withCause(e).asException();
     }
-  }
-
-  protected final void unregister() {
-    transport.unregisterCall(callId);
   }
 
   @Override
@@ -470,13 +473,17 @@ abstract class Outbound {
       send();
     }
 
+    @Nullable
+    @GuardedBy("this")
+    Status getCloseStatusIfSent() {
+      return isSuffixSent() ? closeStatus : null;
+    }
+
     @Override
     @GuardedBy("this")
     protected int writeSuffix(Parcel parcel) throws IOException, StatusException {
       int flags = TransactionUtils.writeStatus(parcel, closeStatus);
       MetadataHelper.writeMetadata(parcel, trailers);
-      // TODO: This is an ugly place for this side-effect.
-      unregister();
       return flags;
     }
   }
