@@ -328,6 +328,42 @@ public class GrpcHttp2HeadersUtilsTest {
     assertThat(it.hasNext()).isFalse();
   }
 
+  @Test
+  public void headerIterator_withPseudoHeadersAndTe() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of(":path"), AsciiString.of("mypath"));
+    http2Headers.add(AsciiString.of(":authority"), AsciiString.of("myauthority"));
+    http2Headers.add(AsciiString.of(":method"), AsciiString.of("mymethod"));
+    http2Headers.add(AsciiString.of(":scheme"), AsciiString.of("myscheme"));
+    http2Headers.add(AsciiString.of("te"), AsciiString.of("trailers"));
+    http2Headers.add(AsciiString.of("custom"), AsciiString.of("val"));
+    Iterator<Map.Entry<CharSequence, CharSequence>> it = http2Headers.iterator();
+
+    assertNextEntry(it, ":path", AsciiString.of("mypath"));
+    assertNextEntry(it, ":authority", AsciiString.of("myauthority"));
+    assertNextEntry(it, ":method", AsciiString.of("mymethod"));
+    assertNextEntry(it, ":scheme", AsciiString.of("myscheme"));
+    assertNextEntry(it, "te", AsciiString.of("trailers"));
+    assertNextEntry(it, "custom", AsciiString.of("val"));
+    assertThat(it.hasNext()).isFalse();
+  }
+
+  @Test
+  public void headerIterator_nullPseudoHeadersSkipped() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of(":path"), AsciiString.of("mypath"));
+    http2Headers.add(AsciiString.of(":authority"), AsciiString.of("myauthority"));
+    http2Headers.remove(AsciiString.of(":authority"));
+    http2Headers.add(AsciiString.of(":scheme"), AsciiString.of("myscheme"));
+    http2Headers.add(AsciiString.of("custom"), AsciiString.of("val"));
+    Iterator<Map.Entry<CharSequence, CharSequence>> it = http2Headers.iterator();
+
+    assertNextEntry(it, ":path", AsciiString.of("mypath"));
+    assertNextEntry(it, ":scheme", AsciiString.of("myscheme"));
+    assertNextEntry(it, "custom", AsciiString.of("val"));
+    assertThat(it.hasNext()).isFalse();
+  }
+
   private static void assertNextEntry(
       Iterator<Map.Entry<CharSequence, CharSequence>> it, CharSequence key, CharSequence value) {
     Map.Entry<CharSequence, CharSequence> entry = it.next();
