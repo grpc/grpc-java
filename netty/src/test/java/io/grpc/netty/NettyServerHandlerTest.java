@@ -80,6 +80,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Error;
@@ -754,6 +755,71 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         metadataCaptor.capture());
     Truth.assertThat(streamCaptor.getValue().getAuthority()).isEqualTo("example.com");
     Truth.assertThat(metadataCaptor.getValue().get(hostKey)).isNull();
+  }
+
+  @Test
+  public void trailersWithPseudoHeadersShouldFail() throws Exception {
+    manualSetUp();
+    createStream();
+
+    Http2Headers trailers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .set(TE_HEADER, TE_TRAILERS)
+        .path(new AsciiString("/smuggled/method"));
+    channelRead(trailersFrame(STREAM_ID, trailers));
+
+    verifyWrite()
+        .writeRstStream(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(Http2Error.PROTOCOL_ERROR.code()),
+            any(ChannelPromise.class));
+    verify(transportListener, times(1))
+        .streamCreated(any(ServerStream.class), anyString(), any(Metadata.class));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(streamListener).closed(captor.capture());
+    assertEquals(Code.INTERNAL, captor.getValue().getCode());
+    verify(streamListener, never()).halfClosed();
+  }
+
+  @Test
+  public void trailersWithPseudoHeadersAfterRejectedHeadersShouldFail() throws Exception {
+    manualSetUp();
+    Http2Headers badHeaders = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .path(new AsciiString("/foo/bar"));
+    channelRead(headersFrame(STREAM_ID, badHeaders));
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            any(Http2Headers.class),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
+
+    Http2Headers trailers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .set(TE_HEADER, TE_TRAILERS)
+        .path(new AsciiString("/smuggled/method"));
+    channelRead(trailersFrame(STREAM_ID, trailers));
+
+    verifyWrite()
+        .writeRstStream(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(Http2Error.PROTOCOL_ERROR.code()),
+            any(ChannelPromise.class));
+    verify(transportListener, never())
+        .streamCreated(any(ServerStream.class), anyString(), any(Metadata.class));
+  }
+
+  private ByteBuf trailersFrame(int streamId, Http2Headers headers) {
+    ChannelHandlerContext ctx = newMockContext();
+    new DefaultHttp2FrameWriter().writeHeaders(ctx, streamId, headers, 0, true, newPromise());
+    return captureWrite(ctx);
   }
 
   @Test
