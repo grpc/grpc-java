@@ -306,13 +306,18 @@ class GrpcHttp2HeadersUtils {
 
     private List<Map.Entry<CharSequence, CharSequence>> namesAndValuesToImmutableList() {
       ArrayList<Map.Entry<CharSequence, CharSequence>> list = new ArrayList<>(values.length);
+      addNamesAndValuesToList(list);
+      return Collections.unmodifiableList(list);
+    }
+
+    protected final void addNamesAndValuesToList(
+        List<Map.Entry<CharSequence, CharSequence>> list) {
       for (int i = 0; i < namesAndValuesIdx; i += 2) {
         String name = new String(namesAndValues[i], US_ASCII);
         // If binary headers, the value is base64 encoded.
         AsciiString value = values[i / 2];
         list.add(new AbstractMap.SimpleImmutableEntry<CharSequence, CharSequence>(name, value));
       }
-      return Collections.unmodifiableList(list);
     }
 
     protected final String namesAndValuesToString() {
@@ -492,6 +497,27 @@ class GrpcHttp2HeadersUtils {
       }
       size += super.size();
       return size;
+    }
+
+    @Override
+    public Iterator<Map.Entry<CharSequence, CharSequence>> iterator() {
+      List<Map.Entry<CharSequence, CharSequence>> list = new ArrayList<>(size());
+      addIfPresent(list, PATH_HEADER, path);
+      addIfPresent(list, AUTHORITY_HEADER, authority);
+      addIfPresent(list, METHOD_HEADER, method);
+      addIfPresent(list, SCHEME_HEADER, scheme);
+      addIfPresent(list, TE_HEADER, te);
+      addNamesAndValuesToList(list);
+      return Collections.unmodifiableList(list).iterator();
+    }
+
+    private static void addIfPresent(
+        List<Map.Entry<CharSequence, CharSequence>> list, AsciiString name, AsciiString value) {
+      if (value != null) {
+        list.add(
+            new AbstractMap.SimpleImmutableEntry<CharSequence, CharSequence>(
+                name.toString(), value));
+      }
     }
 
     @Override
