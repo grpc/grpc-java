@@ -179,7 +179,10 @@ class AltsHandshakerClient {
       logger.log(ChannelLogLevel.DEBUG, "Send ALTS handshake request to upstream");
       resp = handshakerStub.send(req.build());
       logger.log(ChannelLogLevel.DEBUG, "Receive ALTS handshake response from upstream");
-    } catch (IOException | InterruptedException e) {
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new GeneralSecurityException(e);
+    } catch (IOException e) {
       throw new GeneralSecurityException(e);
     }
     handleResponse(resp);
@@ -201,7 +204,10 @@ class AltsHandshakerClient {
     HandshakerResp resp;
     try {
       resp = handshakerStub.send(req.build());
-    } catch (IOException | InterruptedException e) {
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new GeneralSecurityException(e);
+    } catch (IOException e) {
       throw new GeneralSecurityException(e);
     }
     handleResponse(resp);
@@ -231,7 +237,10 @@ class AltsHandshakerClient {
       logger.log(ChannelLogLevel.DEBUG, "Send ALTS handshake request to upstream");
       resp = handshakerStub.send(req.build());
       logger.log(ChannelLogLevel.DEBUG, "Receive ALTS handshake response from upstream");
-    } catch (IOException | InterruptedException e) {
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new GeneralSecurityException(e);
+    } catch (IOException e) {
       throw new GeneralSecurityException(e);
     }
     handleResponse(resp);

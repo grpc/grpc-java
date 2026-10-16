@@ -75,7 +75,10 @@ final class SslContextFactory {
     GetTlsConfigurationResp.ClientTlsConfiguration clientTlsConfiguration;
     try {
       clientTlsConfiguration = getClientTlsConfigurationFromS2A(stub, localIdentity);
-    } catch (IOException | InterruptedException e) {
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new GeneralSecurityException("Failed to get client TLS configuration from S2A.", e);
+    } catch (IOException e) {
       throw new GeneralSecurityException("Failed to get client TLS configuration from S2A.", e);
     }
 
