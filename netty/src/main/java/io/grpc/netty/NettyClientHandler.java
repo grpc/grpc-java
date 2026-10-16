@@ -435,9 +435,15 @@ class NettyClientHandler extends AbstractNettyHandler {
   }
 
   private void onHeadersRead(int streamId, Http2Headers headers, boolean endStream) {
+    if (keepAliveManager != null) {
+      keepAliveManager.onDataReceived();
+    }
     // Stream 1 is reserved for the Upgrade response, so we should ignore its headers here:
     if (streamId != Http2CodecUtil.HTTP_UPGRADE_STREAM_ID) {
       NettyClientStream.TransportState stream = clientStream(requireHttp2Stream(streamId));
+      if (stream == null) {
+        return;
+      }
       PerfMark.event("NettyClientHandler.onHeadersRead", stream.tag());
       // check metadata size vs soft limit
       int h2HeadersSize = Utils.getH2HeadersSize(headers);
@@ -463,23 +469,24 @@ class NettyClientHandler extends AbstractNettyHandler {
       }
       stream.transportHeadersReceived(headers, endStream);
     }
-
-    if (keepAliveManager != null) {
-      keepAliveManager.onDataReceived();
-    }
   }
 
   /**
    * Handler for an inbound HTTP/2 DATA frame.
    */
-  private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) {
+  private int onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) {
     flowControlPing().onDataRead(data.readableBytes(), padding);
-    NettyClientStream.TransportState stream = clientStream(requireHttp2Stream(streamId));
-    PerfMark.event("NettyClientHandler.onDataRead", stream.tag());
-    stream.transportDataReceived(data, endOfStream);
     if (keepAliveManager != null) {
       keepAliveManager.onDataReceived();
     }
+    NettyClientStream.TransportState stream = clientStream(requireHttp2Stream(streamId));
+    if (stream == null) {
+      // No deframer will consume this payload, so return its flow-control credit immediately.
+      return data.readableBytes() + padding;
+    }
+    PerfMark.event("NettyClientHandler.onDataRead", stream.tag());
+    stream.transportDataReceived(data, endOfStream);
+    return padding;
   }
 
   /**
@@ -1089,8 +1096,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     @Override
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding,
         boolean endOfStream) throws Http2Exception {
-      NettyClientHandler.this.onDataRead(streamId, data, padding, endOfStream);
-      return padding;
+      return NettyClientHandler.this.onDataRead(streamId, data, padding, endOfStream);
     }
 
     @Override
