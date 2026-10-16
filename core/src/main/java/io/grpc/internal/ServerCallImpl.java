@@ -46,6 +46,7 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
 import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -66,6 +67,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
   private CallTracer serverCallTracer;
+  // The application's close() and the transport's closed() may race; only the first is counted.
+  private final AtomicBoolean callEndReported = new AtomicBoolean();
 
   // state
   private volatile boolean cancelled;
@@ -229,7 +232,13 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
       stream.close(status, trailers);
     } finally {
-      serverCallTracer.reportCallEnded(status.isOk());
+      reportCallEnded(status.isOk());
+    }
+  }
+
+  private void reportCallEnded(boolean success) {
+    if (callEndReported.compareAndSet(false, true)) {
+      serverCallTracer.reportCallEnded(success);
     }
   }
 
@@ -287,7 +296,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         : Status.INTERNAL.withCause(internalError)
             .withDescription("Internal error so cancelling stream.");
     stream.cancel(status);
-    serverCallTracer.reportCallEnded(false); // error so always false
+    reportCallEnded(false); // error so always false
   }
 
   /**
@@ -415,6 +424,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           listener.onComplete();
         } else {
           call.cancelled = true;
+          call.reportCallEnded(false);
           listener.onCancel();
           // The status will not have a cause in all failure scenarios, but we want to make sure
           // we always cancel the context with one to keep the context cancelled state consistent.
