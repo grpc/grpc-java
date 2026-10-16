@@ -330,6 +330,22 @@ public class GoogleAuthLibraryCallCredentialsTest {
   }
 
   @Test
+  public void googleCredential_noneDenied() {
+    final AccessToken token = new AccessToken("allyourbase", new Date(Long.MAX_VALUE));
+    final Credentials credentials = GoogleCredentials.create(token);
+
+    GoogleAuthLibraryCallCredentials callCredentials =
+        new GoogleAuthLibraryCallCredentials(credentials);
+    callCredentials.applyRequestMetadata(
+        new RequestInfoImpl(SecurityLevel.NONE), executor, applier);
+    runPendingRunnables();
+
+    verify(applier).fail(statusCaptor.capture());
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.Code.UNAUTHENTICATED, status.getCode());
+  }
+
+  @Test
   public void serviceUri() throws Exception {
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
