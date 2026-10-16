@@ -116,6 +116,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       throws ResourceInvalidException {
     Map<Integer, Set<Locality>> priorities = new HashMap<>();
     Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
+    Set<java.net.SocketAddress> endpointAddresses = new HashSet<>();
     List<Endpoints.DropOverload> dropOverloads = new ArrayList<>();
     int maxPriority = -1;
     for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpointsProto
@@ -143,6 +144,14 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       if (!priorities.get(priority).add(locality)) {
         throw new ResourceInvalidException("ClusterLoadAssignment has duplicate locality:"
             + locality + " for priority:" + priority);
+      }
+      for (Endpoints.LbEndpoint endpoint : localityLbEndpoints.endpoints()) {
+        for (java.net.SocketAddress address : endpoint.eag().getAddresses()) {
+          if (!endpointAddresses.add(address)) {
+            throw new ResourceInvalidException(
+                "ClusterLoadAssignment has duplicate endpoint address: " + address);
+          }
+        }
       }
     }
     if (priorities.size() != maxPriority + 1) {
