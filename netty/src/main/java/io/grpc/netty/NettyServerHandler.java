@@ -122,6 +122,14 @@ class NettyServerHandler extends AbstractNettyHandler {
   @VisibleForTesting
   static final long GRACEFUL_SHUTDOWN_PING = 0x97ACEF001L;
   private static final long GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
+  /**
+   * How long to keep the connection open and reading after the second GOAWAY, once no streams are
+   * active. Closing a socket while the peer is still sending (WINDOW_UPDATE, PING) makes the kernel
+   * answer with RST, which discards response bytes that have not been transmitted yet (#9566).
+   * The peer normally closes first, as soon as it has read the GOAWAY and its streams completed.
+   */
+  @VisibleForTesting
+  static final long GRACEFUL_SHUTDOWN_DRAIN_NANOS = TimeUnit.SECONDS.toNanos(1);
   /** Temporary workaround for #8674. Fine to delete after v1.45 release, and maybe earlier. */
   private static final boolean DISABLE_CONNECTION_HEADER_CHECK = Boolean.parseBoolean(
       System.getProperty("io.grpc.netty.disableConnectionHeaderCheck", "false"));
@@ -368,6 +376,9 @@ class NettyServerHandler extends AbstractNettyHandler {
           keepAliveEnforcer.onTransportIdle();
           if (maxConnectionIdleManager != null) {
             maxConnectionIdleManager.onTransportIdle();
+          }
+          if (gracefulShutdown != null) {
+            gracefulShutdown.drainIfIdle();
           }
         }
       }
@@ -694,6 +705,9 @@ class NettyServerHandler extends AbstractNettyHandler {
       if (maxConnectionAgeMonitor != null) {
         maxConnectionAgeMonitor.cancel(false);
       }
+      if (gracefulShutdown != null) {
+        gracefulShutdown.cancelDrain();
+      }
       final Status status =
           Status.UNAVAILABLE.withDescription("connection terminated for unknown reason");
       // Any streams that are still active must be closed
@@ -743,6 +757,12 @@ class NettyServerHandler extends AbstractNettyHandler {
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
     gracefulClose(ctx, new GracefulServerCloseCommand("app_requested"), promise);
     ctx.flush();
+  }
+
+  @Override
+  protected boolean isGracefulShutdownComplete() {
+    return super.isGracefulShutdownComplete()
+        && (gracefulShutdown == null || gracefulShutdown.drainComplete());
   }
 
   /**
@@ -1090,6 +1110,13 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     Future<?> pingFuture;
 
+    ChannelHandlerContext ctx;
+
+    /** Scheduled once the second GOAWAY has been sent and no streams are active. */
+    Future<?> drainFuture;
+
+    boolean drained;
+
     GracefulShutdown(String goAwayMessage,
         @Nullable Long graceTimeInNanos) {
       this.goAwayMessage = goAwayMessage;
@@ -1100,6 +1127,7 @@ class NettyServerHandler extends AbstractNettyHandler {
      * Sends out first GOAWAY and ping, and schedules second GOAWAY and close.
      */
     void start(final ChannelHandlerContext ctx) {
+      this.ctx = ctx;
       goAway(
           ctx,
           Integer.MAX_VALUE,
@@ -1142,11 +1170,45 @@ class NettyServerHandler extends AbstractNettyHandler {
       long overriddenGraceTime = graceTimeOverrideMillis(savedGracefulShutdownTimeMillis);
       try {
         gracefulShutdownTimeoutMillis(overriddenGraceTime);
+        // Closes once isGracefulShutdownComplete(), i.e. after the drain, or when the grace time
+        // runs out.
         NettyServerHandler.super.close(ctx, ctx.newPromise());
       } catch (Exception e) {
         onError(ctx, /* outbound= */ true, e);
       } finally {
         gracefulShutdownTimeoutMillis(savedGracefulShutdownTimeMillis);
+      }
+      drainIfIdle();
+    }
+
+    boolean drainComplete() {
+      return !pingAckedOrTimeout || drained;
+    }
+
+    void drainIfIdle() {
+      if (!pingAckedOrTimeout || drainFuture != null || connection().numActiveStreams() != 0) {
+        return;
+      }
+      drainFuture = ctx.executor().schedule(
+          new Runnable() {
+            @Override
+            public void run() {
+              drained = true;
+              try {
+                // No streams are active, so this closes as soon as pending writes are flushed.
+                NettyServerHandler.super.close(ctx, ctx.newPromise());
+              } catch (Exception e) {
+                onError(ctx, /* outbound= */ true, e);
+              }
+            }
+          },
+          GRACEFUL_SHUTDOWN_DRAIN_NANOS,
+          TimeUnit.NANOSECONDS);
+    }
+
+    void cancelDrain() {
+      if (drainFuture != null) {
+        drainFuture.cancel(false);
       }
     }
 
