@@ -749,11 +749,10 @@ final class ProtocolNegotiators {
   @VisibleForTesting
   static HostPort parseAuthority(String authority) {
     URI uri = GrpcUtil.authorityToUri(Preconditions.checkNotNull(authority, "authority"));
-    String host;
+    String host = GrpcUtil.getHost(uri);
     int port;
-    if (uri.getHost() != null) {
-      host = uri.getHost();
-      port = uri.getPort();
+    if (host != null) {
+      port = GrpcUtil.getPort(uri);
     } else {
       /*
        * Implementation note: We pick -1 as the port here rather than deriving it from the
