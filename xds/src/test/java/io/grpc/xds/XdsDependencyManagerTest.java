@@ -22,8 +22,10 @@ import static io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType.EDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LEDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static io.grpc.xds.XdsTestUtils.CLUSTER_NAME;
+import static io.grpc.xds.XdsTestUtils.EDS_NAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_HOSTNAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_PORT;
 import static io.grpc.xds.XdsTestUtils.RDS_NAME;
@@ -37,16 +39,23 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.github.xds.core.v3.CollectionEntry;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.protobuf.Any;
 import com.google.protobuf.Message;
+import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.ConfigSource;
+import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LbEndpointCollection;
+import io.envoyproxy.envoy.config.endpoint.v3.LedsClusterLocalityConfig;
 import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
@@ -68,6 +77,8 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.XdsLbEndpointCollectionResource.LbEndpointCollectionUpdate;
+import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
@@ -122,6 +133,8 @@ public class XdsDependencyManagerTest {
 
   private TestWatcher xdsConfigWatcher;
 
+  private static final String LEDS_NAME = "leds-collection-0";
+
   private final String serverName = "the-service-name";
   private final Queue<XdsTestUtils.LrsRpcCall> loadReportCalls = new ArrayDeque<>();
   private final AtomicBoolean adsEnded = new AtomicBoolean(true);
@@ -153,6 +166,7 @@ public class XdsDependencyManagerTest {
   private XdsDependencyManager xdsDependencyManager = new XdsDependencyManager(
       xdsClient, syncContext, serverName, serverName, nameResolverArgs);
   private boolean savedEnableLogicalDns;
+  private boolean savedEnableEndpointFallback;
 
   @Before
   public void setUp() throws Exception {
@@ -171,6 +185,7 @@ public class XdsDependencyManagerTest {
     defaultXdsConfig = XdsTestUtils.getDefaultXdsConfig(serverName);
 
     savedEnableLogicalDns = XdsDependencyManager.enableLogicalDns;
+    savedEnableEndpointFallback = BootstrapperImpl.enableEndpointFallback;
   }
 
   @After
@@ -185,6 +200,7 @@ public class XdsDependencyManagerTest {
     assertThat(fakeClock.getPendingTasks()).isEmpty();
 
     XdsDependencyManager.enableLogicalDns = savedEnableLogicalDns;
+    BootstrapperImpl.enableEndpointFallback = savedEnableEndpointFallback;
   }
 
   @Test
@@ -259,6 +275,151 @@ public class XdsDependencyManagerTest {
     assertThat(endpoint).isNotNull();
     return endpoint;
   }
+
+  private static XdsClusterConfig.EndpointConfig getEndpointConfig(
+      StatusOr<XdsClusterConfig> childConfigOr) {
+    XdsClusterConfig.ClusterChild clusterChild = childConfigOr.getValue().getChildren();
+    assertThat(clusterChild).isInstanceOf(XdsClusterConfig.EndpointConfig.class);
+    return (XdsClusterConfig.EndpointConfig) clusterChild;
+  }
+
+  @Test
+  public void verify_ledsCollection() {
+    BootstrapperImpl.enableEndpointFallback = true;
+    setEdsWithLeds(LEDS_NAME);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LEDS, ImmutableMap.<String, Message>of(
+        LEDS_NAME, buildLbEndpointCollection("127.0.0.30")));
+
+    xdsDependencyManager.start(xdsConfigWatcher);
+
+    verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    XdsConfig config = xdsUpdateCaptor.getValue().getValue();
+    XdsClusterConfig.EndpointConfig endpointConfig =
+        getEndpointConfig(config.getClusters().get(CLUSTER_NAME));
+
+    Endpoints.LocalityLbEndpoints locality = endpointConfig.getEndpoint().getValue()
+        .localityLbEndpointsMap.values().iterator().next();
+    assertThat(locality.endpointCollection()).isNull();
+    assertThat(locality.lbEndpointCollectionName()).isEqualTo(LEDS_NAME);
+
+    StatusOr<LbEndpointCollectionUpdate> collectionOr =
+        endpointConfig.getLbEndpointCollectionResources().get(LEDS_NAME);
+    assertThat(collectionOr).isNotNull();
+    assertThat(collectionOr.hasValue()).isTrue();
+    assertThat(collectionOr.getValue().getEndpointCollection().endpoints()).containsExactly(
+        Endpoints.LbEndpoint.create("127.0.0.30", ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME,
+            ImmutableMap.of()));
+  }
+
+  @Test
+  public void verify_ledsCollectionUpdate_republishesConfig() {
+    BootstrapperImpl.enableEndpointFallback = true;
+    setEdsWithLeds(LEDS_NAME);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LEDS, ImmutableMap.<String, Message>of(
+        LEDS_NAME, buildLbEndpointCollection("127.0.0.30")));
+
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
+    xdsDependencyManager.start(xdsConfigWatcher);
+    inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+
+    // Only the LEDS resource changes; the EDS resource is untouched.
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LEDS, ImmutableMap.<String, Message>of(
+        LEDS_NAME, buildLbEndpointCollection("127.0.0.31")));
+
+    inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    StatusOr<LbEndpointCollectionUpdate> collectionOr =
+        getEndpointConfig(xdsUpdateCaptor.getValue().getValue().getClusters().get(CLUSTER_NAME))
+            .getLbEndpointCollectionResources().get(LEDS_NAME);
+    assertThat(collectionOr.getValue().getEndpointCollection().endpoints()).containsExactly(
+        Endpoints.LbEndpoint.create("127.0.0.31", ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME,
+            ImmutableMap.of()));
+  }
+
+  @Test
+  public void verify_ledsCollection_unsubscribedWhenNoLongerReferenced() {
+    BootstrapperImpl.enableEndpointFallback = true;
+    setEdsWithLeds(LEDS_NAME);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LEDS, ImmutableMap.<String, Message>of(
+        LEDS_NAME, buildLbEndpointCollection("127.0.0.30")));
+
+    xdsDependencyManager.start(xdsConfigWatcher);
+    verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    assertThat(getEndpointConfig(xdsUpdateCaptor.getValue().getValue().getClusters()
+        .get(CLUSTER_NAME)).getLbEndpointCollectionResources()).containsKey(LEDS_NAME);
+
+    // Replace the EDS resource with one that inlines its endpoints.
+    XdsTestUtils.setAdsConfig(controlPlaneService, serverName);
+
+    verify(xdsConfigWatcher, atLeastOnce()).onUpdate(xdsUpdateCaptor.capture());
+    assertThat(getEndpointConfig(xdsUpdateCaptor.getValue().getValue().getClusters()
+        .get(CLUSTER_NAME)).getLbEndpointCollectionResources()).isEmpty();
+  }
+
+  @Test
+  public void verify_ledsCollection_sharedByTwoLocalities() throws Exception {
+    BootstrapperImpl.enableEndpointFallback = true;
+    // Two distinct localities referring to the same LbEndpointCollection resource.
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.<String, Message>of(EDS_NAME,
+        ClusterLoadAssignment.newBuilder()
+            .setClusterName(EDS_NAME)
+            .addEndpoints(ledsLocality("region1", LEDS_NAME))
+            .addEndpoints(ledsLocality("region2", LEDS_NAME))
+            .build()));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LEDS, ImmutableMap.<String, Message>of(
+        LEDS_NAME, buildLbEndpointCollection("127.0.0.30")));
+
+    xdsDependencyManager.start(xdsConfigWatcher);
+
+    verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    XdsClusterConfig.EndpointConfig endpointConfig =
+        getEndpointConfig(xdsUpdateCaptor.getValue().getValue().getClusters().get(CLUSTER_NAME));
+    assertThat(endpointConfig.getEndpoint().getValue().localityLbEndpointsMap).hasSize(2);
+    // The collection is stored once and subscribed to once.
+    assertThat(endpointConfig.getLbEndpointCollectionResources().keySet())
+        .containsExactly(LEDS_NAME);
+    Map<XdsResourceType<?>, Map<String, ResourceMetadata>> watches =
+        xdsClient.getSubscribedResourcesMetadataSnapshot().get();
+    assertThat(watches.get(XdsLbEndpointCollectionResource.getInstance()).keySet())
+        .containsExactly(LEDS_NAME);
+  }
+
+  /** Replaces the default EDS resource with one whose only locality points at a LEDS resource. */
+  private void setEdsWithLeds(String collectionName) {
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_NAME)
+        .addEndpoints(ledsLocality("", collectionName))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
+        ImmutableMap.<String, Message>of(EDS_NAME, clusterLoadAssignment));
+  }
+
+  /** Builds a locality in {@code region} whose endpoints come from a LEDS resource. */
+  private static LocalityLbEndpoints.Builder ledsLocality(String region, String collectionName) {
+    return LocalityLbEndpoints.newBuilder()
+        .setLocality(io.envoyproxy.envoy.config.core.v3.Locality.newBuilder().setRegion(region))
+        .setLoadBalancingWeight(UInt32Value.of(10))
+        .setPriority(0)
+        .setLedsClusterLocalityConfig(LedsClusterLocalityConfig.newBuilder()
+            .setLedsConfig(ConfigSource.newBuilder()
+                .setSelf(SelfConfigSource.getDefaultInstance()))
+            .setLedsCollectionName(collectionName));
+  }
+
+  private static LbEndpointCollection buildLbEndpointCollection(String address) {
+    return LbEndpointCollection.newBuilder()
+        .addEntries(CollectionEntry.newBuilder()
+            .setInlineEntry(CollectionEntry.InlineEntry.newBuilder()
+                .setResource(Any.pack(LbEndpoint.newBuilder()
+                    .setEndpoint(Endpoint.newBuilder()
+                        .setHostname(ENDPOINT_HOSTNAME)
+                        .setAddress(Address.newBuilder()
+                            .setSocketAddress(SocketAddress.newBuilder()
+                                .setAddress(address)
+                                .setPortValue(ENDPOINT_PORT))))
+                    .build()))))
+        .build();
+  }
+
 
   @Test
   public void testComplexRegisteredAggregate() throws IOException {
@@ -680,7 +841,8 @@ public class XdsDependencyManagerTest {
     assertThat(edsForB.clusterName).isEqualTo(edsName);
     assertThat(edsForA).isEqualTo(edsForB);
     edsForA.localityLbEndpointsMap.values().forEach(
-        localityLbEndpoints -> assertThat(localityLbEndpoints.endpoints()).hasSize(1));
+        localityLbEndpoints ->
+            assertThat(localityLbEndpoints.endpointCollection().endpoints()).hasSize(1));
   }
 
   @Test
