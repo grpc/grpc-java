@@ -206,6 +206,20 @@ public class AutoshardingClientTest {
   }
 
   @Test
+  public void assignmentWithNoSlices_isDeliveredAndAccepted() throws Exception {
+    start(client);
+    takeRequest();
+    StreamObserver<WatchShardingAssignmentResponse> serverStream = takeServerStream();
+
+    serverStream.onNext(metadataResponse(1));
+
+    assertThat(takeAssignment().getSlices()).hasSize(1);
+    WatchShardingAssignmentRequest ack = takeRequest();
+    assertThat(ack.getAssignmentAck().getAccepted()).isTrue();
+    assertThat(ack.getAssignmentAck().getErrorMessage()).isEmpty();
+  }
+
+  @Test
   public void generationZero_acceptedAsTheFirstAssignment() throws Exception {
     start(client);
     takeRequest();

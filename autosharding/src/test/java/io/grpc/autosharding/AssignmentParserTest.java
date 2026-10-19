@@ -142,21 +142,21 @@ public class AssignmentParserTest {
   }
 
   @Test
-  public void parse_noSlices_isRejected() {
-    AssignmentParser.Result result =
-        AssignmentParser.parse(ImmutableList.of(AssignmentChunk.getDefaultInstance()));
+  public void parse_noSlices_yieldsSingleEmptySliceCoveringKeyspace() {
+    Assignment assignment = parseFully(ImmutableList.of(AssignmentChunk.getDefaultInstance()));
 
-    // Treated like an assignment whose slices were all dropped: no usable slice remains.
-    assertThat(result.assignment).isNull();
-    assertThat(result.errorMessage).contains("no slices");
+    // Not an error: the server is saying that nothing is assigned.
+    assertThat(assignment.getSlices()).hasSize(1);
+    assertSlice(assignment.getSlices().get(0), "", null);
+    assertThat(assignment.getEndpointNames()).isEmpty();
   }
 
   @Test
-  public void parse_noChunks_isRejected() {
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of());
+  public void parse_noChunks_yieldsSingleEmptySliceCoveringKeyspace() {
+    Assignment assignment = parseFully(ImmutableList.of());
 
-    assertThat(result.assignment).isNull();
-    assertThat(result.errorMessage).contains("no slices");
+    assertThat(assignment.getSlices()).hasSize(1);
+    assertSlice(assignment.getSlices().get(0), "", null);
   }
 
   @Test

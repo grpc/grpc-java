@@ -63,12 +63,12 @@ final class AssignmentParser {
    * <ul>
    *   <li>every slice usable: {@link #assignment} set, {@link #errorMessage} null;
    *   <li>some slices dropped but at least one kept: both set;
-   *   <li>no usable slice, including none received at all: {@link #assignment} null, {@link
+   *   <li>slices were received but none was usable: {@link #assignment} null, {@link
    *       #errorMessage} set.
    * </ul>
    */
   static final class Result {
-    /** The assignment to hand to the LB policy, or null if no usable slice remained. */
+    /** The assignment to hand to the LB policy, or null if every slice received was dropped. */
     @Nullable final Assignment assignment;
 
     /**
@@ -106,8 +106,9 @@ final class AssignmentParser {
   /**
    * Parses and validates the buffered chunks of a single logical assignment.
    *
-   * <p>An assignment is unusable when no usable slice remains, whether because every slice was
-   * dropped or because it carried none.
+   * <p>An assignment carrying no slices at all is not an error: the server is saying that nothing
+   * is assigned, and the result is a single endpoint-less slice spanning the keyspace. Only an
+   * assignment whose slices were <em>all</em> dropped is unusable.
    *
    * @param chunks the chunks received since the last {@code AssignmentMetadata}, in the order
    *     they were received
@@ -123,11 +124,10 @@ final class AssignmentParser {
         (s1, s2) -> UNSIGNED_BYTES_COMPARATOR.compare(s1.getStartKey(), s2.getStartKey()));
     slices = dropOverlaps(slices, dropped);
 
-    if (slices.isEmpty()) {
-      return new Result(
-          null, dropped.isEmpty() ? "assignment contains no slices" : describe(dropped));
-    }
     String errorMessage = dropped.isEmpty() ? null : describe(dropped);
+    if (slices.isEmpty() && !dropped.isEmpty()) {
+      return new Result(null, errorMessage);
+    }
     return new Result(new Assignment(fillGaps(slices), endpointNames), errorMessage);
   }
 

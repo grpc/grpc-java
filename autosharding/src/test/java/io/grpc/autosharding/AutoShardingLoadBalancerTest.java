@@ -835,6 +835,30 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
+  public void assignmentWithNoSlices_fallbackEnabled_routesToFallback() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    reportReady("a");
+
+    deliverAssignment(1);
+
+    assertThat(currentState).isEqualTo(READY);
+    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+  }
+
+  @Test
+  public void assignmentWithNoSlices_afterAGoodOne_replacesIt() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+
+    // Unlike an unusable assignment, this one is accepted, so the previous one stops applying.
+    deliverAssignment(2);
+
+    assertThat(pick("k").getStatus().getDescription())
+        .contains("No valid endpoints in slice and fallback disabled");
+  }
+
+  @Test
   public void streamFailure_beforeAnyAssignment_entersFallback() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b");
     reportReady("a");
