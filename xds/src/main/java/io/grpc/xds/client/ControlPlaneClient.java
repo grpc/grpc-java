@@ -114,21 +114,21 @@ final class ControlPlaneClient {
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
+  // Must be synchronized.
   void shutdown() {
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        shutdown = true;
-        logger.log(XdsLogLevel.INFO, "Shutting down");
-        if (adsStream != null) {
-          adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
-        }
-        if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
-          rpcRetryTimer.cancel();
-        }
-        xdsTransport.shutdown();
-      }
-    });
+    syncContext.throwIfNotInThisSynchronizationContext();
+    if (shutdown) {
+      return;
+    }
+    shutdown = true;
+    logger.log(XdsLogLevel.INFO, "Shutting down");
+    if (adsStream != null) {
+      adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
+    }
+    if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
+      rpcRetryTimer.cancel();
+    }
+    xdsTransport.shutdown();
   }
 
   @Override
