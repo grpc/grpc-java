@@ -17,18 +17,23 @@
 package io.grpc.binder.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.binder.internal.BinderTransport.FIRST_CALL_ID;
+import static io.grpc.binder.internal.TransactionBuilder.newOutOfBandCloseTxnBuilder;
+import static io.grpc.binder.internal.TransactionBuilder.newStreamTxnToServerBuilder;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.robolectric.Shadows.shadowOf;
 
+import android.os.Binder;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
 import android.os.RemoteException;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.MockServerTransportListener;
@@ -120,6 +125,35 @@ public final class BinderServerTransportTest {
     transport.start(transportListener);
     shadowOf(Looper.getMainLooper()).idle();
 
+    assertThat(transportListener.isTerminated()).isTrue();
+  }
+
+  @Test
+  public void testShutdownWhileCallActiveAndPreviousUnregisterPending() throws Exception {
+    transport = newBinderServerTransportBuilder().setCallbackBinder(new Binder()).build();
+    transport.start(transportListener);
+
+    // Start and finish call 1 while the transport is READY. This schedules a task on the executor
+    // to check whether the transport should terminate if it is in the SHUTDOWN state.
+    newStreamTxnToServerBuilder(0)
+        .withPrefix("service/Method", new Metadata())
+        .dispatchTo(transport, FIRST_CALL_ID);
+    newOutOfBandCloseTxnBuilder(Status.CANCELLED).dispatchTo(transport, FIRST_CALL_ID);
+
+    // Before that scheduled task runs, start call 2 and initiate a graceful shutdown.
+    newStreamTxnToServerBuilder(0)
+        .withPrefix("service/Method", new Metadata())
+        .dispatchTo(transport, FIRST_CALL_ID + 1);
+    transport.shutdown();
+
+    // Run the pending task from call 1's unregistration. Because call 2 is still active, the
+    // transport must not terminate yet.
+    shadowOf(Looper.getMainLooper()).idle();
+    assertThat(transportListener.isTerminated()).isFalse();
+
+    // Once call 2 finishes, the transport terminates.
+    newOutOfBandCloseTxnBuilder(Status.CANCELLED).dispatchTo(transport, FIRST_CALL_ID + 1);
+    shadowOf(Looper.getMainLooper()).idle();
     assertThat(transportListener.isTerminated()).isTrue();
   }
 }
