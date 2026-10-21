@@ -403,13 +403,15 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   final void unregisterCall(int callId) {
     boolean removed = (ongoingCalls.remove(callId) != null);
     if (removed && ongoingCalls.isEmpty()) {
-      // Possibly shutdown (not synchronously, since inbound is held).
+      // If inState(SHUTDOWN), we'd need to terminate (as the last call to finish). But we can't
+      // even check our state safely right now because inbound/outbound is held. Instead, do the
+      // check later on a clean stack.
       scheduledExecutorService.execute(
           () -> {
             synchronized (this) {
               if (inState(TransportState.SHUTDOWN)) {
-                // No more ongoing calls, and we're shutdown. Finish the shutdown.
-                shutdownInternal(shutdownStatus, true);
+                // Don't forceTerminate because ongoingCalls may no longer be empty.
+                shutdownInternal(shutdownStatus, /* forceTerminate= */ false);
               }
             }
           });
