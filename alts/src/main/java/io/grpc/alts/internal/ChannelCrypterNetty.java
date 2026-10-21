@@ -21,8 +21,8 @@ import java.security.GeneralSecurityException;
 import java.util.List;
 
 /**
- * A @{code ChannelCrypterNetty} performs stateful encryption and decryption of independent input
- * and output streams. Both decrypt and encrypt gather their input from a list of Netty @{link
+ * A {@code ChannelCrypterNetty} performs stateful encryption and decryption of independent input
+ * and output streams. Both decrypt and encrypt gather their input from a list of Netty {@link
  * ByteBuf} instances.
  *
  * <p>Note that we provide implementations of this interface that provide integrity only and

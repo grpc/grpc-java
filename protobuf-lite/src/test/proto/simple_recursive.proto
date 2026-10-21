@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package grpc.testing;
+
+option java_package = "io.grpc.testing.protobuf";
+option java_outer_classname = "SimpleRecursiveProto";
+option java_multiple_files = true;
+
+// A simple recursive message for testing purposes
+message SimpleRecursiveMessage {
+  string value = 1;
+  SimpleRecursiveMessage message = 2;
+}

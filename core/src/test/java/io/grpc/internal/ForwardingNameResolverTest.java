@@ -81,7 +81,6 @@ public class ForwardingNameResolverTest {
     NameResolver.Listener2 listener = new NameResolver.Listener2() {
       @Override
       public void onResult(ResolutionResult result) {
-
       }
 
       @Override

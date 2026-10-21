@@ -1,0 +1,64 @@
+substitutions:
+  _GAE_SERVICE_ACCOUNT: appengine-testing-java@grpc-testing.iam.gserviceaccount.com
+options:
+  env:
+  - BUILD_ID=$BUILD_ID
+  - KOKORO_GAE_SERVICE=java-gae-interop-test
+  - DUMMY_DEFAULT_VERSION=dummy-default
+  - GRADLE_OPTS=-Dorg.gradle.jvmargs='-Xmx1g'
+  - GRADLE_FLAGS=-PskipCodegen=true -PskipAndroid=true
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+steps:
+- id: clean-stale-deploys
+  name: gcr.io/cloud-builders/gcloud
+  allowFailure: true
+  script: |
+    #!/usr/bin/env bash
+    set -e
+    echo "Cleaning out stale deploys from previous runs, it is ok if this part fails"
+    # If the test fails, the deployment is leaked.
+    # Delete all versions whose name is not 'dummy-default' and is older than 1 hour.
+    # This expression is an ISO8601 relative date:
+    # https://cloud.google.com/sdk/gcloud/reference/topic/datetimes
+    (gcloud app versions list --format="get(version.id)" \
+        --filter="service=$KOKORO_GAE_SERVICE AND NOT version : '$DUMMY_DEFAULT_VERSION' AND version.createTime<'-p1h'" \
+        | xargs -i gcloud app services delete "$KOKORO_GAE_SERVICE" --version {} --quiet) || true
+
+- name: gcr.io/cloud-builders/docker
+  args: ['build', '-t', 'gae-build', 'buildscripts/gae-build/']
+
+- id: build
+  name: gae-build
+  script: |
+    #!/usr/bin/env bash
+    exec ./gradlew $GRADLE_FLAGS :grpc-gae-interop-testing-jdk8:appengineStage
+
+- id: deploy
+  name: gcr.io/cloud-builders/gcloud
+  args:
+    - app
+    - deploy
+    - gae-interop-testing/gae-jdk8/build/staged-app/app.yaml
+    - --service-account=$_GAE_SERVICE_ACCOUNT
+    - --no-promote
+    - --no-stop-previous-version
+    - --version=cb-$BUILD_ID
+
+- id: runInteropTestRemote
+  name: eclipse-temurin:17-jdk
+  env:
+  - PROJECT_ID=$PROJECT_ID
+  script: |
+    #!/usr/bin/env bash
+    exec ./gradlew $GRADLE_FLAGS --stacktrace -PgaeDeployVersion="cb-$BUILD_ID" \
+        -PgaeProjectId="$PROJECT_ID" :grpc-gae-interop-testing-jdk8:runInteropTestRemote
+
+- id: cleanup
+  name: gcr.io/cloud-builders/gcloud
+  script: |
+    #!/usr/bin/env bash
+    set -e
+    echo "Performing cleanup now."
+    gcloud app services delete "$KOKORO_GAE_SERVICE" --version "cb-$BUILD_ID" --quiet

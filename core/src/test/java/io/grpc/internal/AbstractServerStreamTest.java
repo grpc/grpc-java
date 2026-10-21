@@ -18,6 +18,8 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -28,11 +30,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.AbstractServerStream.TransportState;
 import io.grpc.internal.MessageFramerTest.ByteWritableBuffer;
 import java.io.ByteArrayInputStream;
@@ -42,9 +46,7 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -56,8 +58,6 @@ import org.mockito.ArgumentCaptor;
 public class AbstractServerStreamTest {
   private static final int TIMEOUT_MS = 1000;
   private static final int MAX_MESSAGE_SIZE = 100;
-
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final WritableBufferAllocator allocator = new WritableBufferAllocator() {
     @Override
@@ -81,7 +81,7 @@ public class AbstractServerStreamTest {
   }
 
   /**
-   * Test for issue https://github.com/grpc/grpc-java/issues/1795
+   * Test for issue https://github.com/grpc/grpc-java/issues/1795 .
    */
   @Test
   public void frameShouldBeIgnoredAfterDeframerClosed() {
@@ -105,6 +105,43 @@ public class AbstractServerStreamTest {
 
     verify(buffer).close();
     assertNull("no message expected", streamListenerMessageQueue.poll());
+  }
+
+  @Test
+  public void noHalfCloseListenerOnCancellation() throws Exception {
+    final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
+    final SettableFuture<Status> closedFuture = SettableFuture.create();
+
+    stream.transportState().setListener(new ServerStreamListenerBase() {
+      @Override
+      public void messagesAvailable(StreamListener.MessageProducer producer) {
+        InputStream message;
+        while ((message = producer.next()) != null) {
+          streamListenerMessageQueue.add(message);
+        }
+      }
+
+      @Override
+      public void halfClosed() {
+        if (streamListenerMessageQueue.isEmpty()) {
+          throw new StatusRuntimeException(Status.INTERNAL.withDescription(
+              "Half close without request"));
+        }
+      }
+
+      @Override
+      public void closed(Status status) {
+        closedFuture.set(status);
+      }
+    });
+
+    ReadableBuffer buffer = mock(ReadableBuffer.class);
+    when(buffer.readableBytes()).thenReturn(1);
+    stream.transportState().inboundDataReceived(buffer, true);
+    Status cancel = Status.CANCELLED.withDescription("DEADLINE EXCEEDED");
+    stream.transportState().transportReportStatus(cancel);
+    assertEquals(cancel, closedFuture.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    verify(buffer).close();
   }
 
   @Test
@@ -163,7 +200,7 @@ public class AbstractServerStreamTest {
 
     // Queue a partial message in the deframer
     stream.transportState().inboundDataReceived(ReadableBuffers.wrap(new byte[] {1}), true);
-    stream.transportState().requestMessagesFromDeframer(1);
+    stream.request(1);
 
     Status status = closedFuture.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertEquals(Status.INTERNAL.getCode(), status.getCode());
@@ -171,7 +208,7 @@ public class AbstractServerStreamTest {
   }
 
   /**
-   * Test for issue https://github.com/grpc/grpc-java/issues/615
+   * Test for issue https://github.com/grpc/grpc-java/issues/615 .
    */
   @Test
   public void completeWithoutClose() {
@@ -185,9 +222,9 @@ public class AbstractServerStreamTest {
   public void setListener_setOnlyOnce() {
     TransportState state = stream.transportState();
     state.setListener(new ServerStreamListenerBase());
-    thrown.expect(IllegalStateException.class);
 
-    state.setListener(new ServerStreamListenerBase());
+    ServerStreamListenerBase listener2 = new ServerStreamListenerBase();
+    assertThrows(IllegalStateException.class, () -> state.setListener(listener2));
   }
 
   @Test
@@ -197,8 +234,7 @@ public class AbstractServerStreamTest {
 
     TransportState state = stream.transportState();
 
-    thrown.expect(IllegalStateException.class);
-    state.onStreamAllocated();
+    assertThrows(IllegalStateException.class, state::onStreamAllocated);
   }
 
   @Test
@@ -214,8 +250,7 @@ public class AbstractServerStreamTest {
   public void setListener_failsOnNull() {
     TransportState state = stream.transportState();
 
-    thrown.expect(NullPointerException.class);
-    state.setListener(null);
+    assertThrows(NullPointerException.class, () -> state.setListener(null));
   }
 
   // TODO(ericgribkoff) This test is only valid if deframeInTransportThread=true, as otherwise the
@@ -243,30 +278,28 @@ public class AbstractServerStreamTest {
 
   @Test
   public void writeHeaders_failsOnNullHeaders() {
-    thrown.expect(NullPointerException.class);
-
-    stream.writeHeaders(null);
+    assertThrows(NullPointerException.class, () -> stream.writeHeaders(null, true));
   }
 
   @Test
   public void writeHeaders() {
     Metadata headers = new Metadata();
-    stream.writeHeaders(headers);
-    verify(sink).writeHeaders(same(headers));
+    stream.writeHeaders(headers, true);
+    verify(sink).writeHeaders(same(headers), eq(true));
   }
 
   @Test
   public void writeMessage_dontWriteDuplicateHeaders() {
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
     stream.writeMessage(new ByteArrayInputStream(new byte[]{}));
 
     // Make sure it wasn't called twice
-    verify(sink).writeHeaders(any(Metadata.class));
+    verify(sink).writeHeaders(any(Metadata.class), eq(true));
   }
 
   @Test
   public void writeMessage_ignoreIfFramerClosed() {
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
     stream.endOfMessages();
     reset(sink);
 
@@ -277,7 +310,7 @@ public class AbstractServerStreamTest {
 
   @Test
   public void writeMessage() {
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
 
     stream.writeMessage(new ByteArrayInputStream(new byte[]{}));
     stream.flush();
@@ -287,7 +320,7 @@ public class AbstractServerStreamTest {
 
   @Test
   public void writeMessage_closesStream() throws Exception {
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
     InputStream input = mock(InputStream.class, delegatesTo(new ByteArrayInputStream(new byte[1])));
     stream.writeMessage(input);
     verify(input).close();
@@ -295,16 +328,13 @@ public class AbstractServerStreamTest {
 
   @Test
   public void close_failsOnNullStatus() {
-    thrown.expect(NullPointerException.class);
-
-    stream.close(null, new Metadata());
+    Metadata trailers = new Metadata();
+    assertThrows(NullPointerException.class, () -> stream.close(null, trailers));
   }
 
   @Test
   public void close_failsOnNullMetadata() {
-    thrown.expect(NullPointerException.class);
-
-    stream.close(Status.INTERNAL, null);
+    assertThrows(NullPointerException.class, () -> stream.close(Status.INTERNAL, null));
   }
 
   @Test
@@ -331,6 +361,40 @@ public class AbstractServerStreamTest {
     assertEquals("bad", metadataCaptor.getValue().get(InternalStatus.MESSAGE_KEY));
   }
 
+  @Test
+  public void triggerEvent_propagatesToListener() {
+    ServerStreamListener listener = mock(ServerStreamListener.class);
+    stream.transportState().setListener(listener);
+
+    Object event = new Object();
+    stream.triggerEvent(event);
+
+    verify(listener).triggerEvent(event);
+  }
+
+  @Test
+  public void triggerEvent_ignoredAfterClose() {
+    ServerStreamListener listener = mock(ServerStreamListener.class);
+    stream.transportState().setListener(listener);
+
+    stream.close(Status.OK, new Metadata());
+    stream.transportState().complete();
+
+    Object event = new Object();
+    stream.triggerEvent(event);
+
+    verify(listener, never()).triggerEvent(any());
+  }
+
+  @Test
+  public void changeOnReadyThreshold() {
+    stream.setListener(new ServerStreamListenerBase());
+    stream.transportState().onStreamAllocated();
+    stream.setOnReadyThreshold(Integer.MAX_VALUE);
+    stream.onSendingBytes(Integer.MAX_VALUE - 1);
+    assertTrue(stream.isReady());
+  }
+
   private static class ServerStreamListenerBase implements ServerStreamListener {
     @Override
     public void messagesAvailable(MessageProducer producer) {
@@ -352,6 +416,9 @@ public class AbstractServerStreamTest {
 
     @Override
     public void closed(Status status) {}
+
+    @Override
+    public void triggerEvent(Object event) {}
   }
 
   private static class AbstractServerStreamBase extends AbstractServerStream {
@@ -394,6 +461,10 @@ public class AbstractServerStreamTest {
         r.run();
       }
     }
+
+    @Override
+    public int streamId() {
+      return -1;
+    }
   }
 }
-

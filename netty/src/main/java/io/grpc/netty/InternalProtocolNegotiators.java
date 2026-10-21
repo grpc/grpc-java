@@ -16,14 +16,17 @@
 
 package io.grpc.netty;
 
+import com.google.common.base.Optional;
 import io.grpc.ChannelLogger;
+import io.grpc.internal.ObjectPool;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.GrpcNegotiationHandler;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.util.concurrent.Executor;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Internal accessor for {@link ProtocolNegotiators}.
@@ -33,33 +36,18 @@ public final class InternalProtocolNegotiators {
   private InternalProtocolNegotiators() {}
 
   /**
-   * Returns the channel logger for the given channel context, or a Noop Logger if absent.
-   */
-  public static ChannelLogger negotiationLogger(ChannelHandlerContext ctx) {
-    return ProtocolNegotiators.negotiationLogger(ctx);
-  }
-
-  /**
-   * Buffers all writes until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} or
-   * {@link #fail(ChannelHandlerContext, Throwable)} is called. This handler allows us to
-   * write to a {@link io.netty.channel.Channel} before we are allowed to write to it officially
-   * i.e.  before it's active or the TLS Handshake is complete.
-   */
-  public abstract static class AbstractBufferingHandler
-      extends ProtocolNegotiators.AbstractBufferingHandler {
-
-    protected AbstractBufferingHandler(ChannelHandler... handlers) {
-      super(handlers);
-    }
-  }
-
-  /**
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
+   * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
-  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext) {
-    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext);
+  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
+          ObjectPool<? extends Executor> executorPool,
+          Optional<Runnable> handshakeCompleteRunnable,
+          X509TrustManager extendedX509TrustManager,
+          String sni) {
+    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext,
+        executorPool, handshakeCompleteRunnable, extendedX509TrustManager, sni);
     final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
       @Override
@@ -77,15 +65,103 @@ public final class InternalProtocolNegotiators {
         negotiator.close();
       }
     }
-    
+
     return new TlsNegotiator();
+  }
+
+  /**
+   * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
+   * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
+   * may happen immediately, even before the TLS Handshake is complete.
+   */
+  public static InternalProtocolNegotiator.ProtocolNegotiator tls(
+      SslContext sslContext, String sni,
+      X509TrustManager extendedX509TrustManager) {
+    return tls(sslContext, null, Optional.absent(), extendedX509TrustManager, sni);
+  }
+
+  /**
+   * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will be
+   * negotiated, the server TLS {@code handler} is added and writes to the {@link
+   * io.netty.channel.Channel} may happen immediately, even before the TLS Handshake is complete.
+   */
+  public static InternalProtocolNegotiator.ProtocolNegotiator serverTls(SslContext sslContext) {
+    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.serverTls(sslContext);
+    final class ServerTlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
+
+      @Override
+      public AsciiString scheme() {
+        return negotiator.scheme();
+      }
+
+      @Override
+      public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+        return negotiator.newHandler(grpcHandler);
+      }
+
+      @Override
+      public void close() {
+        negotiator.close();
+      }
+    }
+
+    return new ServerTlsNegotiator();
+  }
+
+  /** Returns a {@link ProtocolNegotiator} for plaintext client channel. */
+  public static InternalProtocolNegotiator.ProtocolNegotiator plaintext() {
+    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.plaintext();
+    final class PlaintextNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
+
+      @Override
+      public AsciiString scheme() {
+        return negotiator.scheme();
+      }
+
+      @Override
+      public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+        return negotiator.newHandler(grpcHandler);
+      }
+
+      @Override
+      public void close() {
+        negotiator.close();
+      }
+    }
+
+    return new PlaintextNegotiator();
+  }
+
+  /** Returns a {@link ProtocolNegotiator} for plaintext server channel. */
+  public static InternalProtocolNegotiator.ProtocolNegotiator serverPlaintext() {
+    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.serverPlaintext();
+    final class ServerPlaintextNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
+
+      @Override
+      public AsciiString scheme() {
+        return negotiator.scheme();
+      }
+
+      @Override
+      public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+        return negotiator.newHandler(grpcHandler);
+      }
+
+      @Override
+      public void close() {
+        negotiator.close();
+      }
+    }
+
+    return new ServerPlaintextNegotiator();
   }
 
   /**
    * Internal version of {@link WaitUntilActiveHandler}.
    */
-  public static ChannelHandler waitUntilActiveHandler(ChannelHandler next) {
-    return new WaitUntilActiveHandler(next);
+  public static ChannelHandler waitUntilActiveHandler(ChannelHandler next,
+      ChannelLogger negotiationLogger) {
+    return new WaitUntilActiveHandler(next, negotiationLogger);
   }
 
   /**
@@ -96,7 +172,22 @@ public final class InternalProtocolNegotiators {
   }
 
   public static ChannelHandler clientTlsHandler(
-      ChannelHandler next, SslContext sslContext, String authority) {
-    return new ClientTlsHandler(next, sslContext, authority);
+      ChannelHandler next, SslContext sslContext, String authority,
+      ChannelLogger negotiationLogger) {
+    return new ClientTlsHandler(next, sslContext, authority, null, negotiationLogger,
+        Optional.absent(), null, null);
+  }
+
+  public static class ProtocolNegotiationHandler
+      extends ProtocolNegotiators.ProtocolNegotiationHandler {
+
+    protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName,
+        ChannelLogger negotiationLogger) {
+      super(next, negotiatorName, negotiationLogger);
+    }
+
+    protected ProtocolNegotiationHandler(ChannelHandler next, ChannelLogger negotiationLogger) {
+      super(next, negotiationLogger);
+    }
   }
 }

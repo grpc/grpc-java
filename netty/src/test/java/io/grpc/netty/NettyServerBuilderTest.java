@@ -16,23 +16,24 @@
 
 package io.grpc.netty;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.truth.Truth;
-import io.grpc.ServerStreamTracer.Factory;
+import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
+import io.netty.util.AsciiString;
+import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
-import java.util.List;
+import java.util.Arrays;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -42,16 +43,71 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class NettyServerBuilderTest {
 
-  @Rule public final ExpectedException thrown = ExpectedException.none();
-
   private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
 
   @Test
-  public void createMultipleServers() {
-    builder.addListenAddress(new InetSocketAddress(8081));
-    List<NettyServer> servers = builder.buildTransportServers(ImmutableList.<Factory>of());
+  public void neverIndexMetadataKeysAreFluentAdditiveAndIgnoreDuplicates() throws Exception {
+    Metadata.Key<String> stringKey =
+        Metadata.Key.of("x-high-cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<String> duplicateStringKey =
+        Metadata.Key.of("X-High-Cardinality", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata.Key<byte[]> binaryKey =
+        Metadata.Key.of("trace-bin", Metadata.BINARY_BYTE_MARSHALLER);
 
-    Truth.assertThat(servers).hasSize(2);
+    assertThat(builder.neverIndexMetadataKey(stringKey)).isSameInstanceAs(builder);
+    assertThat(builder.neverIndexMetadataKeys(
+        Arrays.asList(duplicateStringKey, binaryKey)))
+        .isSameInstanceAs(builder);
+    assertThat(neverIndexedMetadataKeys(builder))
+        .containsExactly(AsciiString.of("x-high-cardinality"), AsciiString.of("trace-bin"));
+  }
+
+  @Test
+  public void neverIndexMetadataKeyRejectsNull() {
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> builder.neverIndexMetadataKey(null));
+
+    assertThat(exception).hasMessageThat().isEqualTo("key");
+  }
+
+  @Test
+  public void neverIndexMetadataKeysRejectsNullCollection() {
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> builder.neverIndexMetadataKeys(null));
+
+    assertThat(exception).hasMessageThat().isEqualTo("keys");
+  }
+
+  @Test
+  public void neverIndexMetadataKeysRejectsNullElementWithoutPartialMutation() throws Exception {
+    Metadata.Key<String> validKey =
+        Metadata.Key.of("valid-key", Metadata.ASCII_STRING_MARSHALLER);
+
+    NullPointerException exception = assertThrows(
+        NullPointerException.class,
+        () -> builder.neverIndexMetadataKeys(
+            Arrays.<Metadata.Key<?>>asList(validKey, null)));
+
+    assertThat(exception).hasMessageThat().isEqualTo("key");
+    assertThat(neverIndexedMetadataKeys(builder)).isEmpty();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Set<AsciiString> neverIndexedMetadataKeys(NettyServerBuilder builder)
+      throws Exception {
+    Field field = NettyServerBuilder.class.getDeclaredField("neverIndexedMetadataKeys");
+    field.setAccessible(true);
+    return (Set<AsciiString>) field.get(builder);
+  }
+
+  @Test
+  public void addMultipleListenAddresses() {
+    builder.addListenAddress(new InetSocketAddress(8081));
+    NettyServer server = builder.buildTransportServers(
+        ImmutableList.of(),
+        new MetricRecorder() {});
+
+    assertThat(server.getListenSocketAddresses()).hasSize(2);
   }
 
   @Test
@@ -64,120 +120,135 @@ public class NettyServerBuilderTest {
     SslContext sslContext = mock(SslContext.class);
     when(sslContext.isClient()).thenReturn(true);
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Client SSL context can not be used for server");
-    builder.sslContext(sslContext);
+    IllegalArgumentException e = assertThrows(
+        IllegalArgumentException.class, () -> builder.sslContext(sslContext));
+    assertThat(e).hasMessageThat().isEqualTo("Client SSL context can not be used for server");
   }
 
   @Test
   public void failIfKeepAliveTimeNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("keepalive time must be positive");
-
-    builder.keepAliveTime(-10L, TimeUnit.HOURS);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.keepAliveTime(-10L, TimeUnit.HOURS));
+    assertThat(e).hasMessageThat().isEqualTo("keepalive time must be positive：-10");
   }
 
   @Test
   public void failIfKeepAliveTimeoutNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("keepalive timeout must be positive");
-
-    builder.keepAliveTimeout(-10L, TimeUnit.HOURS);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.keepAliveTimeout(-10L, TimeUnit.HOURS));
+    assertThat(e).hasMessageThat().isEqualTo("keepalive timeout must be positive: -10");
   }
 
   @Test
   public void failIfMaxConcurrentCallsPerConnectionNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("max must be positive");
-
-    builder.maxConcurrentCallsPerConnection(0);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.maxConcurrentCallsPerConnection(0));
+    assertThat(e).hasMessageThat().isEqualTo("max must be positive: 0");
   }
 
   @Test
   public void failIfMaxInboundMetadataSizeNonPositive() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("maxInboundMetadataSize must be > 0");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.maxInboundMetadataSize(0));
+    assertThat(e).hasMessageThat().isEqualTo("maxInboundMetadataSize must be positive: 0");
+  }
 
-    builder.maxInboundMetadataSize(0);
+  @Test
+  public void failIfSoftInboundMetadataSizeNonPositive() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.maxInboundMetadataSize(0, 100));
+    assertThat(e).hasMessageThat().isEqualTo("softLimitHeaderListSize must be positive: 0");
+  }
+
+  @Test
+  public void failIfMaxInboundMetadataSizeSmallerThanSoft() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.maxInboundMetadataSize(100, 80));
+    assertThat(e).hasMessageThat().isEqualTo("maxInboundMetadataSize: 80 "
+        + "must be greater than softLimitHeaderListSize: 100");
   }
 
   @Test
   public void failIfMaxConnectionIdleNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("max connection idle must be positive");
-
-    builder.maxConnectionIdle(-1, TimeUnit.HOURS);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.maxConnectionIdle(-1, TimeUnit.HOURS));
+    assertThat(e).hasMessageThat().isEqualTo("max connection idle must be positive: -1");
   }
 
   @Test
   public void failIfMaxConnectionAgeNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("max connection age must be positive");
-
-    builder.maxConnectionAge(-1, TimeUnit.HOURS);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.maxConnectionAge(-1, TimeUnit.HOURS));
+    assertThat(e).hasMessageThat().isEqualTo("max connection age must be positive: -1");
   }
 
   @Test
   public void failIfMaxConnectionAgeGraceNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("max connection age grace must be non-negative");
-
-    builder.maxConnectionAgeGrace(-1, TimeUnit.HOURS);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.maxConnectionAgeGrace(-1, TimeUnit.HOURS));
+    assertThat(e).hasMessageThat().isEqualTo("max connection age grace must be non-negative: -1");
   }
 
   @Test
   public void failIfPermitKeepAliveTimeNegative() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("permit keepalive time must be non-negative");
-
-    builder.permitKeepAliveTime(-1, TimeUnit.HOURS);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.permitKeepAliveTime(-1, TimeUnit.HOURS));
+    assertThat(e).hasMessageThat().isEqualTo("permit keepalive time must be non-negative: -1");
   }
 
   @Test
-  public void shouldFallBackToNio_onlyBossGroupProvided() {
+  public void assertEventLoopsAndChannelType_onlyBossGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+    builder.bossEventLoopGroup(mockEventLoopGroup);
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        builder::assertEventLoopsAndChannelType);
+    assertThat(e).hasMessageThat().isEqualTo(
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided "
+            + "or neither should be");
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_onlyWorkerGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+    builder.workerEventLoopGroup(mockEventLoopGroup);
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        builder::assertEventLoopsAndChannelType);
+    assertThat(e).hasMessageThat().isEqualTo(
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided "
+            + "or neither should be");
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_onlyTypeProvided() {
+    builder.channelType(LocalServerChannel.class);
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        builder::assertEventLoopsAndChannelType);
+    assertThat(e).hasMessageThat().isEqualTo(
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided "
+            + "or neither should be");
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_usingDefault() {
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_allProvided() {
     EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
 
     builder.bossEventLoopGroup(mockEventLoopGroup);
-
-    assertTrue(builder.shouldFallBackToNio());
-  }
-
-  @Test
-  public void shouldFallBackToNio_onlyWorkerGroupProvided() {
-    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
-
-    builder.workerEventLoopGroup(mockEventLoopGroup);
-
-    assertTrue(builder.shouldFallBackToNio());
-  }
-
-  @Test
-  public void shouldFallBackToNio_onlyTypeProvided() {
-    builder.channelType(LocalServerChannel.class);
-
-    assertTrue(builder.shouldFallBackToNio());
-  }
-
-  @Test
-  public void shouldFallBackToNio_usingDefault() {
-    assertFalse(builder.shouldFallBackToNio());
-  }
-
-  @Test
-  public void shouldFallBackToNio_allProvided() {
-    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
-
-    builder.bossEventLoopGroup(mockEventLoopGroup);
     builder.workerEventLoopGroup(mockEventLoopGroup);
     builder.channelType(LocalServerChannel.class);
 
-    assertFalse(builder.shouldFallBackToNio());
+    builder.assertEventLoopsAndChannelType();
   }
 
   @Test
-  public void useNioTransport_shouldNotFallBack() {
+  public void useNioTransport_shouldNotThrow() {
     InternalNettyServerBuilder.useNioTransport(builder);
 
-    assertFalse(builder.shouldFallBackToNio());
+    builder.assertEventLoopsAndChannelType();
   }
+
 }

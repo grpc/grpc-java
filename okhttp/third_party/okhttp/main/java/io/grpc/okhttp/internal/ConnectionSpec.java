@@ -30,40 +30,43 @@ import javax.net.ssl.SSLSocket;
  */
 public final class ConnectionSpec {
 
-  // This is a subset of the cipher suites supported in Chrome 37, current as of 2014-10-5.
-  // All of these suites are available on Android 5.0; earlier releases support a subset of
-  // these suites. https://github.com/square/okhttp/issues/330
+  // This is nearly equal to the cipher suites supported in Chrome 72, current as of 2019-02-24.
+  // See https://tinyurl.com/okhttp-cipher-suites for availability.
   private static final CipherSuite[] APPROVED_CIPHER_SUITES = new CipherSuite[] {
-      CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-      CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-      CipherSuite.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+          // TLSv1.3.
+          CipherSuite.TLS_AES_128_GCM_SHA256,
+          CipherSuite.TLS_AES_256_GCM_SHA384,
+          CipherSuite.TLS_CHACHA20_POLY1305_SHA256,
 
-      // Note that the following cipher suites are all on HTTP/2's bad cipher suites list. We'll
-      // continue to include them until better suites are commonly available. For example, none
-      // of the better cipher suites listed above shipped with Android 4.4 or Java 7.
-      CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-      CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-      CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-      CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-      CipherSuite.TLS_DHE_RSA_WITH_AES_128_CBC_SHA,
-      CipherSuite.TLS_DHE_DSS_WITH_AES_128_CBC_SHA,
-      CipherSuite.TLS_DHE_RSA_WITH_AES_256_CBC_SHA,
-      CipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256,
-      CipherSuite.TLS_RSA_WITH_AES_128_CBC_SHA,
-      CipherSuite.TLS_RSA_WITH_AES_256_CBC_SHA,
-      CipherSuite.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+          // TLSv1.0, TLSv1.1, TLSv1.2.
+          CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+          CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+          CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+          CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+          CipherSuite.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+          CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+
+          // Note that the following cipher suites are all on HTTP/2's bad cipher suites list. We'll
+          // continue to include them until better suites are commonly available.
+          CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+          CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+          CipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256,
+          CipherSuite.TLS_RSA_WITH_AES_256_GCM_SHA384,
+          CipherSuite.TLS_RSA_WITH_AES_128_CBC_SHA,
+          CipherSuite.TLS_RSA_WITH_AES_256_CBC_SHA,
+          CipherSuite.TLS_RSA_WITH_3DES_EDE_CBC_SHA
   };
 
   /** A modern TLS connection with extensions like SNI and ALPN available. */
   public static final ConnectionSpec MODERN_TLS = new Builder(true)
       .cipherSuites(APPROVED_CIPHER_SUITES)
-      .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_1, TlsVersion.TLS_1_0)
+      .tlsVersions(TlsVersion.TLS_1_3, TlsVersion.TLS_1_2)
       .supportsTlsExtensions(true)
       .build();
 
   /** A backwards-compatible fallback connection for interop with obsolete servers. */
   public static final ConnectionSpec COMPATIBLE_TLS = new Builder(MODERN_TLS)
-      .tlsVersions(TlsVersion.TLS_1_0)
+      .tlsVersions(TlsVersion.TLS_1_3, TlsVersion.TLS_1_2, TlsVersion.TLS_1_1, TlsVersion.TLS_1_0)
       .supportsTlsExtensions(true)
       .build();
 

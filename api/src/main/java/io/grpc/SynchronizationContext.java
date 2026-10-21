@@ -18,8 +18,10 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.TimeUtils.convertToNanos;
 
 import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
@@ -57,7 +59,6 @@ import javax.annotation.concurrent.ThreadSafe;
  * @since 1.17.0
  */
 @ThreadSafe
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4984")
 public final class SynchronizationContext implements Executor {
   private final UncaughtExceptionHandler uncaughtExceptionHandler;
 
@@ -162,6 +163,52 @@ public final class SynchronizationContext implements Executor {
       }, delay, unit);
     return new ScheduledHandle(runnable, future);
   }
+
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
+  public final ScheduledHandle schedule(
+      final Runnable task, Duration delay, ScheduledExecutorService timerService) {
+    return schedule(task, convertToNanos(delay), TimeUnit.NANOSECONDS, timerService);
+  }
+
+  /**
+   * Schedules a task to be added and run via {@link #execute} after an initial delay and then
+   * repeated after the delay until cancelled.
+   *
+   * @param task the task being scheduled
+   * @param initialDelay the delay before the first run
+   * @param delay the delay after the first run.
+   * @param unit the time unit for the delay
+   * @param timerService the {@code ScheduledExecutorService} that provides delayed execution
+   *
+   * @return an object for checking the status and/or cancel the scheduled task
+   */
+  public final ScheduledHandle scheduleWithFixedDelay(
+      final Runnable task, long initialDelay, long delay, TimeUnit unit,
+      ScheduledExecutorService timerService) {
+    final ManagedRunnable runnable = new ManagedRunnable(task);
+    ScheduledFuture<?> future = timerService.scheduleWithFixedDelay(new Runnable() {
+      @Override
+      public void run() {
+        execute(runnable);
+      }
+
+      @Override
+      public String toString() {
+        return task.toString() + "(scheduled in SynchronizationContext with delay of " + delay
+            + ")";
+      }
+    }, initialDelay, delay, unit);
+    return new ScheduledHandle(runnable, future);
+  }
+
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
+  public final ScheduledHandle scheduleWithFixedDelay(
+      final Runnable task, Duration initialDelay, Duration delay,
+      ScheduledExecutorService timerService) {
+    return scheduleWithFixedDelay(task, convertToNanos(initialDelay), convertToNanos(delay),
+        TimeUnit.NANOSECONDS, timerService);
+  }
+
 
   private static class ManagedRunnable implements Runnable {
     final Runnable task;

@@ -18,6 +18,7 @@ package io.grpc.testing;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,9 +36,7 @@ import io.grpc.Server;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule.Resource;
 import java.util.concurrent.TimeUnit;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.junit.runners.model.MultipleFailureException;
@@ -50,9 +49,6 @@ import org.mockito.InOrder;
 @RunWith(JUnit4.class)
 public class GrpcCleanupRuleTest {
   public static final FakeClock fakeClock = new FakeClock();
-
-  @Rule
-  public ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void registerChannelReturnSameChannel() {
@@ -71,10 +67,9 @@ public class GrpcCleanupRuleTest {
     ManagedChannel channel = null;
     GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("channel");
-
-    grpcCleanup.register(channel);
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> grpcCleanup.register(channel));
+    assertThat(e).hasMessageThat().isEqualTo("channel");
   }
 
   @Test
@@ -82,10 +77,9 @@ public class GrpcCleanupRuleTest {
     Server server = null;
     GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("server");
-
-    grpcCleanup.register(server);
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> grpcCleanup.register(server));
+    assertThat(e).hasMessageThat().isEqualTo("server");
   }
 
   @Test
@@ -247,13 +241,13 @@ public class GrpcCleanupRuleTest {
 
     inOrder.verify(resource3).awaitReleased(anyLong(), any(TimeUnit.class));
     inOrder.verify(resource2).awaitReleased(anyLong(), any(TimeUnit.class));
+    inOrder.verify(resource1).awaitReleased(anyLong(), any(TimeUnit.class));
     inOrder.verify(resource2).forceCleanUp();
-    inOrder.verify(resource1).forceCleanUp();
 
     inOrder.verifyNoMoreInteractions();
 
     verify(resource3, never()).forceCleanUp();
-    verify(resource1, never()).awaitReleased(anyLong(), any(TimeUnit.class));
+    verify(resource1, never()).forceCleanUp();
   }
 
   @Test
@@ -279,7 +273,7 @@ public class GrpcCleanupRuleTest {
     boolean cleanupFailed = false;
     try {
       grpcCleanup.apply(statement, null /* description*/).evaluate();
-    } catch (InterruptedException e) {
+    } catch (Throwable e) {
       cleanupFailed = true;
     }
 
@@ -380,7 +374,8 @@ public class GrpcCleanupRuleTest {
   @Test
   public void baseTestFailsThenCleanupFails() throws Throwable {
     // setup
-    Exception baseTestFailure = new Exception();
+    Exception baseTestFailure = new Exception("base test failure");
+    Exception cleanupFailure = new RuntimeException("force cleanup failed");
 
     Statement statement = mock(Statement.class);
     doThrow(baseTestFailure).when(statement).evaluate();
@@ -388,7 +383,7 @@ public class GrpcCleanupRuleTest {
     Resource resource1 = mock(Resource.class);
     Resource resource2 = mock(Resource.class);
     Resource resource3 = mock(Resource.class);
-    doThrow(new RuntimeException()).when(resource2).forceCleanUp();
+    doThrow(cleanupFailure).when(resource2).forceCleanUp();
 
     InOrder inOrder = inOrder(statement, resource1, resource2, resource3);
     GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
@@ -406,8 +401,14 @@ public class GrpcCleanupRuleTest {
     }
 
     // verify
-    assertThat(failure).isInstanceOf(MultipleFailureException.class);
-    assertSame(baseTestFailure, ((MultipleFailureException) failure).getFailures().get(0));
+    if (failure instanceof MultipleFailureException) {
+      // JUnit 4.13+
+      assertThat(((MultipleFailureException) failure).getFailures())
+          .containsExactly(baseTestFailure, cleanupFailure);
+    } else {
+      // JUnit 4.12. Suffers from https://github.com/junit-team/junit4/issues/1334
+      assertThat(failure).isSameInstanceAs(cleanupFailure);
+    }
 
     inOrder.verify(statement).evaluate();
     inOrder.verify(resource3).forceCleanUp();

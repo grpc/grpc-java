@@ -59,6 +59,6 @@ public interface StreamListener {
      * messages until the producer returns null, at which point the producer may be discarded.
      */
     @Nullable
-    public InputStream next();
+    InputStream next();
   }
 }

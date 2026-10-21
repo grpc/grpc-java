@@ -32,7 +32,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class AltsHandshakerStubTest {
   /** Mock status of handshaker service. */
-  private static enum Status {
+  private enum Status {
     OK,
     ERROR,
     COMPLETE
@@ -68,6 +68,7 @@ public class AltsHandshakerStubTest {
       fail("Exception expected");
     } catch (IOException ex) {
       assertThat(ex).hasMessageThat().contains("Received a terminating error");
+      assertThat(ex.getCause()).hasMessageThat().contains("Root cause message");
     }
   }
 
@@ -152,7 +153,7 @@ public class AltsHandshakerStubTest {
           reader.onNext(resp.setOutFrames(req.getNext().getInBytes()).build());
           break;
         case ERROR:
-          reader.onError(new RuntimeException());
+          reader.onError(new RuntimeException("Root cause message"));
           break;
         case COMPLETE:
           reader.onCompleted();

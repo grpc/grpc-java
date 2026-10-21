@@ -18,6 +18,7 @@ package io.grpc.grpclb;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
@@ -28,9 +29,7 @@ import io.grpc.lb.v1.ClientStatsPerToken;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -115,7 +114,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
         callsDroppedPerToken = new HashMap<>(localCallsDroppedPerToken.size());
       }
     }
-    for (Entry<String, LongHolder> entry : localCallsDroppedPerToken.entrySet()) {
+    for (Map.Entry<String, LongHolder> entry : localCallsDroppedPerToken.entrySet()) {
       statsBuilder.addCallsFinishedWithDrop(
           ClientStatsPerToken.newBuilder()
               .setLoadBalanceToken(entry.getKey())

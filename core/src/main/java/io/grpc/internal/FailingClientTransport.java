@@ -21,6 +21,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -45,15 +46,16 @@ class FailingClientTransport implements ClientTransport {
 
   @Override
   public ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-    return new FailingClientStream(error, rpcProgress);
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      ClientStreamTracer[] tracers) {
+    return new FailingClientStream(error, rpcProgress, tracers);
   }
 
   @Override
   public void ping(final PingCallback callback, Executor executor) {
     executor.execute(new Runnable() {
         @Override public void run() {
-          callback.onFailure(error.asException());
+          callback.onFailure(error);
         }
       });
   }

@@ -20,18 +20,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.protobuf.ByteString;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.Status;
 import io.grpc.alts.internal.HandshakerServiceGrpc.HandshakerServiceStub;
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /** An API for conducting handshakes via ALTS handshaker service. */
 class AltsHandshakerClient {
-  private static final Logger logger = Logger.getLogger(AltsHandshakerClient.class.getName());
-
   private static final String APPLICATION_PROTOCOL = "grpc";
   private static final String RECORD_PROTOCOL = "ALTSRP_GCM_AES128_REKEY";
   private static final int KEY_LENGTH = AltsChannelCrypter.getKeyLength();
@@ -40,17 +39,22 @@ class AltsHandshakerClient {
   private final AltsHandshakerOptions handshakerOptions;
   private HandshakerResult result;
   private HandshakerStatus status;
+  private final ChannelLogger logger;
 
   /** Starts a new handshake interacting with the handshaker service. */
-  AltsHandshakerClient(HandshakerServiceStub stub, AltsHandshakerOptions options) {
+  AltsHandshakerClient(
+      HandshakerServiceStub stub, AltsHandshakerOptions options, ChannelLogger logger) {
     handshakerStub = new AltsHandshakerStub(stub);
     handshakerOptions = options;
+    this.logger = logger;
   }
 
   @VisibleForTesting
-  AltsHandshakerClient(AltsHandshakerStub handshakerStub, AltsHandshakerOptions options) {
+  AltsHandshakerClient(
+      AltsHandshakerStub handshakerStub, AltsHandshakerOptions options, ChannelLogger logger) {
     this.handshakerStub = handshakerStub;
     handshakerOptions = options;
+    this.logger = logger;
   }
 
   static String getApplicationProtocol() {
@@ -82,6 +86,7 @@ class AltsHandshakerClient {
         startClientReq.addTargetIdentitiesBuilder().setServiceAccount(serviceAccount);
       }
     }
+    startClientReq.setMaxFrameSize(AltsTsiFrameProtector.getMaxFrameSize());
     req.setClientStart(startClientReq);
   }
 
@@ -97,6 +102,7 @@ class AltsHandshakerClient {
     if (handshakerOptions.getRpcProtocolVersions() != null) {
       startServerReq.setRpcVersions(handshakerOptions.getRpcProtocolVersions());
     }
+    startServerReq.setMaxFrameSize(AltsTsiFrameProtector.getMaxFrameSize());
     req.setServerStart(startServerReq);
   }
 
@@ -136,7 +142,7 @@ class AltsHandshakerClient {
       throw new IllegalStateException("Could not get enough key data from the handshake.");
     }
     byte[] key = new byte[KEY_LENGTH];
-    result.getKeyData().copyTo(key, 0, 0, KEY_LENGTH);
+    result.getKeyData().substring(0, KEY_LENGTH).copyTo(key, 0);
     return key;
   }
 
@@ -151,7 +157,7 @@ class AltsHandshakerClient {
     }
     if (status.getCode() != Status.Code.OK.value()) {
       String error = "Handshaker service error: " + status.getDetails();
-      logger.log(Level.INFO, error);
+      logger.log(ChannelLogLevel.DEBUG, error);
       close();
       throw new GeneralSecurityException(error);
     }
@@ -170,7 +176,9 @@ class AltsHandshakerClient {
     setStartClientFields(req);
     HandshakerResp resp;
     try {
+      logger.log(ChannelLogLevel.DEBUG, "Send ALTS handshake request to upstream");
       resp = handshakerStub.send(req.build());
+      logger.log(ChannelLogLevel.DEBUG, "Receive ALTS handshake response from upstream");
     } catch (IOException | InterruptedException e) {
       throw new GeneralSecurityException(e);
     }
@@ -197,7 +205,7 @@ class AltsHandshakerClient {
       throw new GeneralSecurityException(e);
     }
     handleResponse(resp);
-    inBytes.position(inBytes.position() + resp.getBytesConsumed());
+    ((Buffer) inBytes).position(inBytes.position() + resp.getBytesConsumed());
     return resp.getOutFrames().asReadOnlyByteBuffer();
   }
 
@@ -220,17 +228,25 @@ class AltsHandshakerClient {
                     .build());
     HandshakerResp resp;
     try {
+      logger.log(ChannelLogLevel.DEBUG, "Send ALTS handshake request to upstream");
       resp = handshakerStub.send(req.build());
+      logger.log(ChannelLogLevel.DEBUG, "Receive ALTS handshake response from upstream");
     } catch (IOException | InterruptedException e) {
       throw new GeneralSecurityException(e);
     }
     handleResponse(resp);
-    inBytes.position(inBytes.position() + resp.getBytesConsumed());
+    ((Buffer) inBytes).position(inBytes.position() + resp.getBytesConsumed());
     return resp.getOutFrames().asReadOnlyByteBuffer();
   }
 
+  private boolean closed = false;
+
   /** Closes the connection. */
   public void close() {
+    if (closed) {
+      return;
+    }
+    closed = true;
     handshakerStub.close();
   }
 }

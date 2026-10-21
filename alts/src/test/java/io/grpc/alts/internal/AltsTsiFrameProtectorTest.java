@@ -125,7 +125,7 @@ public class AltsTsiFrameProtectorTest {
         getDirectBuffer(
             AltsTsiFrameProtector.getHeaderBytes() + FakeChannelCrypter.getTagBytes(), ref);
     in.writeIntLE(
-        AltsTsiFrameProtector.getLimitMaxAllowedFrameBytes()
+        AltsTsiFrameProtector.getLimitMaxAllowedFrameSize()
             - AltsTsiFrameProtector.getHeaderLenFieldBytes()
             + 1);
     in.writeIntLE(6);
@@ -206,7 +206,7 @@ public class AltsTsiFrameProtectorTest {
         getDirectBuffer(
             AltsTsiFrameProtector.getHeaderBytes() + FakeChannelCrypter.getTagBytes(), ref);
     in.writeIntLE(
-        AltsTsiFrameProtector.getLimitMaxAllowedFrameBytes()
+        AltsTsiFrameProtector.getLimitMaxAllowedFrameSize()
             - AltsTsiFrameProtector.getHeaderLenFieldBytes());
     in.writeIntLE(6);
 

@@ -17,7 +17,7 @@
 package io.grpc.internal;
 
 import io.grpc.Attributes;
-import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
@@ -50,7 +50,8 @@ public class StatsTraceContextBenchmark {
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public StatsTraceContext newClientContext() {
-    return StatsTraceContext.newClientContext(CallOptions.DEFAULT, Attributes.EMPTY, emptyMetadata);
+    return StatsTraceContext.newClientContext(
+        new ClientStreamTracer[] { new ClientStreamTracer() {} }, Attributes.EMPTY, emptyMetadata);
   }
 
   /**

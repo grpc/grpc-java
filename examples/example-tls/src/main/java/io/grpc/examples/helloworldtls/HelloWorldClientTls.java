@@ -16,20 +16,18 @@
 
 package io.grpc.examples.helloworldtls;
 
+import io.grpc.Channel;
+import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NettyChannelBuilder;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
 import java.io.File;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.net.ssl.SSLException;
 
 /**
  * A simple client that requests a greeting from the {@link HelloWorldServerTls} with TLS.
@@ -37,45 +35,13 @@ import javax.net.ssl.SSLException;
 public class HelloWorldClientTls {
     private static final Logger logger = Logger.getLogger(HelloWorldClientTls.class.getName());
 
-    private final ManagedChannel channel;
     private final GreeterGrpc.GreeterBlockingStub blockingStub;
-
-    private static SslContext buildSslContext(String trustCertCollectionFilePath,
-                                              String clientCertChainFilePath,
-                                              String clientPrivateKeyFilePath) throws SSLException {
-        SslContextBuilder builder = GrpcSslContexts.forClient();
-        if (trustCertCollectionFilePath != null) {
-            builder.trustManager(new File(trustCertCollectionFilePath));
-        }
-        if (clientCertChainFilePath != null && clientPrivateKeyFilePath != null) {
-            builder.keyManager(new File(clientCertChainFilePath), new File(clientPrivateKeyFilePath));
-        }
-        return builder.build();
-    }
-
-    /**
-     * Construct client connecting to HelloWorld server at {@code host:port}.
-     */
-    public HelloWorldClientTls(String host,
-                               int port,
-                               SslContext sslContext) throws SSLException {
-
-        this(NettyChannelBuilder.forAddress(host, port)
-                .overrideAuthority("foo.test.google.fr")  /* Only for using provided test certs. */
-                .sslContext(sslContext)
-                .build());
-    }
 
     /**
      * Construct client for accessing RouteGuide server using the existing channel.
      */
-    HelloWorldClientTls(ManagedChannel channel) {
-        this.channel = channel;
+    public HelloWorldClientTls(Channel channel) {
         blockingStub = GreeterGrpc.newBlockingStub(channel);
-    }
-
-    public void shutdown() throws InterruptedException {
-        channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
     }
 
     /**
@@ -107,26 +73,29 @@ public class HelloWorldClientTls {
             System.exit(0);
         }
 
-        HelloWorldClientTls client;
+        // If only defaults are necessary, you can use TlsChannelCredentials.create() instead of
+        // interacting with the Builder.
+        TlsChannelCredentials.Builder tlsBuilder = TlsChannelCredentials.newBuilder();
         switch (args.length) {
-            case 2:
-                /* Use default CA. Only for real server certificates. */
-                client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
-                        buildSslContext(null, null, null));
-                break;
+            case 5:
+                tlsBuilder.keyManager(new File(args[3]), new File(args[4]));
+                // fallthrough
             case 3:
-                client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
-                        buildSslContext(args[2], null, null));
-                break;
+                tlsBuilder.trustManager(new File(args[2]));
+                // fallthrough
             default:
-                client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
-                        buildSslContext(args[2], args[3], args[4]));
         }
-
+        String host = args[0];
+        int port = Integer.parseInt(args[1]);
+        ManagedChannel channel = Grpc.newChannelBuilderForAddress(host, port, tlsBuilder.build())
+                /* Only for using provided test certs. */
+                .overrideAuthority("foo.test.google.fr")
+                .build();
         try {
-            client.greet(args[0]);
+            HelloWorldClientTls client = new HelloWorldClientTls(channel);
+            client.greet(host);
         } finally {
-            client.shutdown();
+            channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
         }
     }
 }

@@ -22,8 +22,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.Attributes;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.ServerTransport;
@@ -34,11 +36,14 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelPromise;
+import io.netty.util.AsciiString;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.net.SocketException;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -50,11 +55,10 @@ class NettyServerTransport implements ServerTransport {
   // connectionLog is for connection related messages only
   private static final Logger connectionLog = Logger.getLogger(
       String.format("%s.connections", NettyServerTransport.class.getName()));
+
   // Some exceptions are not very useful and add too much noise to the log
-  private static final ImmutableList<String> QUIET_ERRORS = ImmutableList.of(
-      "Connection reset by peer",
-      "An existing connection was forcibly closed by the remote host",
-      "An established connection was aborted by the software in your host machine");
+  private static final ImmutableList<String> QUIET_EXCEPTIONS = ImmutableList.of(
+      "NativeIoException" /* Netty exceptions */);
 
   private final InternalLogId logId;
   private final Channel channel;
@@ -65,9 +69,12 @@ class NettyServerTransport implements ServerTransport {
   private NettyServerHandler grpcHandler;
   private ServerTransportListener listener;
   private boolean terminated;
+  private final boolean autoFlowControl;
   private final int flowControlWindow;
+  private final Set<AsciiString> neverIndexedMetadataKeys;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
+  private final int softLimitHeaderListSize;
   private final long keepAliveTimeInNanos;
   private final long keepAliveTimeoutInNanos;
   private final long maxConnectionIdleInNanos;
@@ -75,6 +82,10 @@ class NettyServerTransport implements ServerTransport {
   private final long maxConnectionAgeGraceInNanos;
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
+  private final int maxRstCount;
+  private final long maxRstPeriodNanos;
+  private final Attributes eagAttributes;
+  private final MetricRecorder metricRecorder;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
 
@@ -85,16 +96,23 @@ class NettyServerTransport implements ServerTransport {
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer transportTracer,
       int maxStreams,
+      boolean autoFlowControl,
       int flowControlWindow,
+      Set<AsciiString> neverIndexedMetadataKeys,
       int maxMessageSize,
       int maxHeaderListSize,
+      int softLimitHeaderListSize,
       long keepAliveTimeInNanos,
       long keepAliveTimeoutInNanos,
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
-      long permitKeepAliveTimeInNanos) {
+      long permitKeepAliveTimeInNanos,
+      int maxRstCount,
+      long maxRstPeriodNanos,
+      Attributes eagAttributes,
+      MetricRecorder metricRecorder) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
     this.channelUnused = channelUnused;
     this.protocolNegotiator = Preconditions.checkNotNull(protocolNegotiator, "protocolNegotiator");
@@ -102,9 +120,13 @@ class NettyServerTransport implements ServerTransport {
         Preconditions.checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     this.maxStreams = maxStreams;
+    this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
+    this.neverIndexedMetadataKeys =
+        Preconditions.checkNotNull(neverIndexedMetadataKeys, "neverIndexedMetadataKeys");
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
+    this.softLimitHeaderListSize = softLimitHeaderListSize;
     this.keepAliveTimeInNanos = keepAliveTimeInNanos;
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
     this.maxConnectionIdleInNanos = maxConnectionIdleInNanos;
@@ -112,6 +134,10 @@ class NettyServerTransport implements ServerTransport {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
+    this.maxRstCount = maxRstCount;
+    this.maxRstPeriodNanos = maxRstPeriodNanos;
+    this.eagAttributes = Preconditions.checkNotNull(eagAttributes, "eagAttributes");
+    this.metricRecorder = metricRecorder;
     SocketAddress remote = channel.remoteAddress();
     this.logId = InternalLogId.allocate(getClass(), remote != null ? remote.toString() : null);
   }
@@ -122,7 +148,6 @@ class NettyServerTransport implements ServerTransport {
 
     // Create the Netty handler for the pipeline.
     grpcHandler = createHandler(listener, channelUnused);
-    NettyHandlerSettings.setAutoWindow(grpcHandler);
 
     // Notify when the channel closes.
     final class TerminationNotifier implements ChannelFutureListener {
@@ -137,12 +162,14 @@ class NettyServerTransport implements ServerTransport {
       }
     }
 
+    ChannelHandler negotiationHandler = protocolNegotiator.newHandler(grpcHandler);
+    ChannelHandler bufferingHandler = new WriteBufferingAndExceptionHandler(negotiationHandler);
+
     ChannelFutureListener terminationNotifier = new TerminationNotifier();
     channelUnused.addListener(terminationNotifier);
     channel.closeFuture().addListener(terminationNotifier);
 
-    ChannelHandler negotiationHandler = protocolNegotiator.newHandler(grpcHandler);
-    channel.pipeline().addLast(negotiationHandler);
+    channel.pipeline().addLast(bufferingHandler);
   }
 
   @Override
@@ -182,12 +209,10 @@ class NettyServerTransport implements ServerTransport {
    */
   @VisibleForTesting
   static Level getLogLevel(Throwable t) {
-    if (t instanceof IOException && t.getMessage() != null) {
-      for (String msg : QUIET_ERRORS) {
-        if (t.getMessage().equals(msg)) {
-          return Level.FINE;
-        }
-      }
+    if (t.getClass().equals(IOException.class)
+        || t.getClass().equals(SocketException.class)
+        || QUIET_EXCEPTIONS.contains(t.getClass().getSimpleName())) {
+      return Level.FINE;
     }
     return Level.INFO;
   }
@@ -260,8 +285,11 @@ class NettyServerTransport implements ServerTransport {
         streamTracerFactories,
         transportTracer,
         maxStreams,
+        autoFlowControl,
         flowControlWindow,
+        neverIndexedMetadataKeys,
         maxHeaderListSize,
+        softLimitHeaderListSize,
         maxMessageSize,
         keepAliveTimeInNanos,
         keepAliveTimeoutInNanos,
@@ -269,6 +297,10 @@ class NettyServerTransport implements ServerTransport {
         maxConnectionAgeInNanos,
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
-        permitKeepAliveTimeInNanos);
+        permitKeepAliveTimeInNanos,
+        maxRstCount,
+        maxRstPeriodNanos,
+        eagAttributes,
+        metricRecorder);
   }
 }

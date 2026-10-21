@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import javax.annotation.Nullable;
 
 /**
@@ -46,7 +48,10 @@ public abstract class ServerCall<ReqT, RespT> {
    * close, which is guaranteed before completion.
    *
    * <p>Implementations are free to block for extended periods of time. Implementations are not
-   * required to be thread-safe.
+   * required to be thread-safe, but they must not be thread-hostile. The caller is free to call
+   * an instance from multiple threads, but only one call simultaneously. A single thread may
+   * interleave calls to multiple instances, so implementations using ThreadLocals must be careful
+   * to avoid leaking inappropriate state (e.g., clearing the ThreadLocal before returning).
    */
   // TODO(ejona86): We need to decide what to do in the case of server closing with non-cancellation
   // before client half closes. It may be that we treat such a case as an error. If we permit such
@@ -95,6 +100,28 @@ public abstract class ServerCall<ReqT, RespT> {
      * <em>another</em> {@code onReady()} callback.
      */
     public void onReady() {}
+
+    /**
+     * A custom event has been triggered by the call.
+     *
+     * <p>This callback is guaranteed to run on the call's executor, serialized with other
+     * callbacks (like {@link #onMessage}, {@link #onHalfClose}). This means the implementation
+     * does not need internal synchronization to access call-specific state.
+     *
+     * <p><strong>Deadlock avoidance:</strong> In some transports (such as Binder transport)
+     * or when using a direct executor, this callback may be invoked while transport-level
+     * locks are held. Implementations should avoid acquiring locks that are held by callers of
+     * {@link ServerCall} methods (such as {@link ServerCall#triggerEvent},
+     * {@link ServerCall#close}, or {@link ServerCall#request}), and should avoid calling
+     * {@link ServerCall} methods while holding application-level locks, as this can lead to
+     * deadlocks from lock-order inversion.
+     *
+     * @param event the triggered event.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12979")
+    public void onEvent(Object event) {
+      // Default no-op
+    }
   }
 
   /**
@@ -160,6 +187,13 @@ public abstract class ServerCall<ReqT, RespT> {
    * <p>Since {@link Metadata} is not thread-safe, the caller must not access (read or write) {@code
    * trailers} after this point.
    *
+   * <p>This method implies the caller completed processing the RPC, but it does not imply the RPC
+   * is complete. The call implementation will need additional time to complete the RPC and during
+   * this time the client is still able to cancel the request or a network error might cause the
+   * RPC to fail. If you wish to know when the call is actually completed/closed, you have to use
+   * {@link Listener#onComplete} or {@link Listener#onCancel} instead. This method is not
+   * necessarily invoked when Listener.onCancel() is called.
+   *
    * @throws IllegalStateException if call is already {@code close}d
    */
   public abstract void close(Status status, Metadata trailers);
@@ -179,16 +213,15 @@ public abstract class ServerCall<ReqT, RespT> {
    * encoding has been negotiated, this is a no-op. By default per-message compression is enabled,
    * but may not have any effect if compression is not enabled on the call.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public void setMessageCompression(boolean enabled) {
     // noop
   }
 
   /**
-   * Sets the compression algorithm for this call.  If the server does not support the compression
-   * algorithm, the call will fail.  This method may only be called before {@link #sendHeaders}.
-   * The compressor to use will be looked up in the {@link CompressorRegistry}.  Default gRPC
-   * servers support the "gzip" compressor.
+   * Sets the compression algorithm for this call.  This compression is utilized for sending.  If
+   * the server does not support the compression algorithm, the call will fail.  This method may
+   * only be called before {@link #sendHeaders}.  The compressor to use will be looked up in the
+   * {@link CompressorRegistry}.  Default gRPC servers support the "gzip" compressor.
    *
    * <p>It is safe to call this even if the client does not support the compression format chosen.
    * The implementation will handle negotiation with the client and may fall back to no compression.
@@ -196,9 +229,36 @@ public abstract class ServerCall<ReqT, RespT> {
    * @param compressor the name of the compressor to use.
    * @throws IllegalArgumentException if the compressor name can not be found.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public void setCompression(String compressor) {
     // noop
+  }
+
+  /**
+   * A hint to the call that specifies how many bytes must be queued before
+   * {@link #isReady()} will return false. A call may ignore this property if
+   * unsupported. This may only be set before any messages are sent.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  public void setOnReadyThreshold(int numBytes) {
+    checkArgument(numBytes > 0, "numBytes must be positive: %s", numBytes);
+  }
+
+  /**
+   * Returns the level of security guarantee in communications
+   *
+   * <p>Determining the level of security offered by the transport for RPCs on server-side.
+   * This can be approximated by looking for the SSLSession, but that doesn't work for ALTS and
+   * maybe some future TLS approaches. May return a lower security level when it cannot be
+   * determined precisely.
+   *
+   * @return non-{@code null} SecurityLevel enum
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4692")
+  public SecurityLevel getSecurityLevel() {
+    return SecurityLevel.NONE;
   }
 
   /**
@@ -219,10 +279,34 @@ public abstract class ServerCall<ReqT, RespT> {
    *
    * @return the authority string. {@code null} if not available.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2924")
   @Nullable
   public String getAuthority() {
     return null;
+  }
+
+  /**
+   * Triggers a custom event to be processed by the listener.
+   * The event will be delivered to {@link Listener#onEvent(Object)} on the call's executor.
+   *
+   * <p>This method is safe to call from multiple threads without external synchronization. No
+   * events will be delivered after the RPC is cancelled or completed.
+   *
+   * <p><strong>Deadlock avoidance:</strong> Callers should avoid holding application-level or
+   * interceptor locks when calling this method. Depending on the transport and executor
+   * configuration (such as {@code directExecutor()} or transports like Binder),
+   * {@code triggerEvent} may acquire transport-level locks and may dispatch
+   * {@link Listener#onEvent(Object)} synchronously on the calling thread.
+   * If the caller holds an application lock while calling {@code triggerEvent}, and
+   * {@code onEvent} or a concurrent transport operation (such as {@link #close} or
+   * {@link #request}) attempts to acquire that same lock, a deadlock can occur from
+   * lock-order inversion. Applications should mutate internal state under lock, release
+   * the lock, and only then invoke {@code triggerEvent}.
+   *
+   * @param event the event to trigger.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12979")
+  public void triggerEvent(Object event) {
+    // Default no-op
   }
 
   /**

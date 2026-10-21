@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import javax.annotation.Nullable;
+
 /**
  * Accesses internal data.  Do not use this.
  */
@@ -34,4 +36,13 @@ public final class InternalStatus {
    */
   @Internal
   public static final Metadata.Key<Status> CODE_KEY = Status.CODE_KEY;
+
+  /**
+   * Create a new {@link StatusRuntimeException} skipping the filling of the stack trace.
+   */
+  @Internal
+  public static StatusRuntimeException asRuntimeExceptionWithoutStacktrace(Status status,
+      @Nullable Metadata trailers) {
+    return new InternalStatusRuntimeException(status, trailers);
+  }
 }

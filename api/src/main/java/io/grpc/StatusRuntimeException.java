@@ -26,13 +26,13 @@ import javax.annotation.Nullable;
 public class StatusRuntimeException extends RuntimeException {
 
   private static final long serialVersionUID = 1950934672280720624L;
+  @SuppressWarnings("serial")   // https://github.com/grpc/grpc-java/issues/1913
   private final Status status;
+  @SuppressWarnings("serial")
   private final Metadata trailers;
 
-  private final boolean fillInStackTrace;
-
   /**
-   * Constructs the exception with both a status.  See also {@link Status#asException()}.
+   * Constructs the exception with a status. See also {@link Status#asRuntimeException()}.
    *
    * @since 1.0.0
    */
@@ -41,31 +41,15 @@ public class StatusRuntimeException extends RuntimeException {
   }
 
   /**
-   * Constructs the exception with both a status and trailers.  See also
-   * {@link Status#asException(Metadata)}.
+   * Constructs the exception with both a status and trailers. See also {@link
+   * Status#asRuntimeException(Metadata)}.
    *
    * @since 1.0.0
    */
   public StatusRuntimeException(Status status, @Nullable Metadata trailers) {
-    this(status, trailers, /*fillInStackTrace=*/ true);
-  }
-
-  StatusRuntimeException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
     super(Status.formatThrowableMessage(status), status.getCause());
     this.status = status;
     this.trailers = trailers;
-    this.fillInStackTrace = fillInStackTrace;
-    fillInStackTrace();
-  }
-
-  @Override
-  public synchronized Throwable fillInStackTrace() {
-    // Let's observe final variables in two states!  This works because Throwable will invoke this
-    // method before fillInStackTrace is set, thus doing nothing.  After the constructor has set
-    // fillInStackTrace, this method will properly fill it in.  Additionally, sub classes may call
-    // this normally, because fillInStackTrace will either be set, or this method will be
-    // overriden.
-    return fillInStackTrace ? super.fillInStackTrace() : this;
   }
 
   /**
@@ -82,6 +66,7 @@ public class StatusRuntimeException extends RuntimeException {
    *
    * @since 1.0.0
    */
+  @Nullable
   public final Metadata getTrailers() {
     return trailers;
   }

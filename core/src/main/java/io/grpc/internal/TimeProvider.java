@@ -16,8 +16,6 @@
 
 package io.grpc.internal;
 
-import java.util.concurrent.TimeUnit;
-
 /**
  * Time source representing the current system time in nanos. Used to inject a fake clock
  * into unit tests.
@@ -26,10 +24,5 @@ public interface TimeProvider {
   /** Returns the current nano time. */
   long currentTimeNanos();
 
-  TimeProvider SYSTEM_TIME_PROVIDER = new TimeProvider() {
-    @Override
-    public long currentTimeNanos() {
-      return TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
-    }
-  };
+  TimeProvider SYSTEM_TIME_PROVIDER = TimeProviderResolverFactory.resolveTimeProvider();
 }

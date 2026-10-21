@@ -19,15 +19,86 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
-import io.grpc.Grpc;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * {@link StreamTracer} for the client-side.
+ *
+ * <p>This class is thread-safe.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
-@ThreadSafe
 public abstract class ClientStreamTracer extends StreamTracer {
+  /**
+   * Indicates how long the call was delayed, in nanoseconds, due to waiting for name resolution
+   * result. If the call option is not set, the call did not experience name resolution delay.
+   */
+  public static final CallOptions.Key<Long> NAME_RESOLUTION_DELAYED =
+      CallOptions.Key.create("io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED");
+
+  /**
+   * The stream is being created on a ready transport.
+   *
+   * @param headers the mutable initial metadata. Modifications to it will be sent to the socket but
+   *     not be seen by client interceptors and the application.
+   *
+   * @since 1.40.0
+   */
+  public void streamCreated(@Grpc.TransportAttr Attributes transportAttrs, Metadata headers) {
+  }
+
+  /**
+   * Name resolution is completed and the connection starts getting established. This method is only
+   * invoked on the streams that encounter such delay.
+   *
+   * </p>gRPC buffers the client call if the remote address and configurations, e.g. timeouts and
+   * retry policy, are not ready. Asynchronously gRPC internally does the name resolution to get
+   * this information. The streams that are processed immediately on ready transports by the time
+   * the RPC comes do not go through the pending process, thus this callback will not be invoked.
+   */
+  public void createPendingStream() {
+  }
+
+  /**
+   * Called when an attempt-level delay (such as waiting for a load balancing pick or connection
+   * establishment) starts, or when the {@code delayType} of the ongoing delay changes, in which
+   * case {@link #recordDelayEnd} is called for the previous delay first.
+   *
+   * <p>Implementations should start a timer and open a child tracing span (named strictly
+   * {@code "Delay"}) carrying the canonical {@code grpc.delay_type} attribute.
+   *
+   * @param delayType canonical low-cardinality label categorizing the delay (e.g., "connecting")
+   * @param delayReason high-cardinality diagnostic string describing granular runtime conditions
+   * @since 1.86.0
+   */
+  public void recordDelayStart(String delayType, String delayReason) {
+  }
+
+  /**
+   * Called when an attempt-level delay reason changes while the delay type remains constant (for
+   * example, when a load balancing policy updates its connection status detail).
+   *
+   * <p>Implementations should record a structured event (such as {@code "Delay triggered"}) on
+   * the active delay span without recreating the span or resetting cumulative timers.
+   *
+   * @param delayType canonical low-cardinality label of the ongoing delay
+   * @param delayReason updated high-cardinality diagnostic string describing new conditions
+   * @since 1.86.0
+   */
+  public void recordDelayReasonChanged(String delayType, String delayReason) {
+  }
+
+  /**
+   * Called when an attempt-level delay ends upon successful pick or stream creation, or when the
+   * attempt is cancelled or reaches its deadline while still waiting.
+   *
+   * <p>Implementations should close the active child tracing span and record the elapsed duration
+   * to the {@code grpc.client.attempt.delay.duration} histogram labeled with {@code delayType}.
+   *
+   * @param delayType canonical low-cardinality label of the delay being ended
+   * @since 1.86.0
+   */
+  public void recordDelayEnd(String delayType) {
+  }
+
   /**
    * Headers has been sent to the socket.
    */
@@ -41,34 +112,39 @@ public abstract class ClientStreamTracer extends StreamTracer {
   }
 
   /**
-   * Trailing metadata has been received from the server.
+   * Headers has been received from the server. This method does not pass ownership to {@code
+   * headers}, so implementations must not access the metadata after returning. Modifications to the
+   * metadata within this method will be seen by interceptors and the application.
    *
-   * @param trailers the mutable trailing metadata.  Modifications to it will be seen by
-   *                 interceptors and the application.
+   * @param headers the received header metadata
+   */
+  public void inboundHeaders(Metadata headers) {
+    inboundHeaders();
+  }
+
+  /**
+   * Trailing metadata has been received from the server. This method does not pass ownership to
+   * {@code trailers}, so implementations must not access the metadata after returning.
+   * Modifications to the metadata within this method will be seen by interceptors and the
+   * application.
+   *
+   * @param trailers the received trailing metadata
    * @since 1.17.0
    */
   public void inboundTrailers(Metadata trailers) {
   }
 
   /**
+   * Information providing context to the call became available.
+   */
+  @Internal
+  public void addOptionalLabel(String key, String value) {
+  }
+
+  /**
    * Factory class for {@link ClientStreamTracer}.
    */
   public abstract static class Factory {
-    /**
-     * Creates a {@link ClientStreamTracer} for a new client stream.
-     *
-     * @param callOptions the effective CallOptions of the call
-     * @param headers the mutable headers of the stream. It can be safely mutated within this
-     *        method.  It should not be saved because it is not safe for read or write after the
-     *        method returns.
-     *
-     * @deprecated use {@link #newClientStreamTracer(StreamInfo, Metadata)} instead
-     */
-    @Deprecated
-    public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
-      throw new UnsupportedOperationException("Not implemented");
-    }
-
     /**
      * Creates a {@link ClientStreamTracer} for a new client stream.  This is called inside the
      * transport when it's creating the stream.
@@ -80,9 +156,49 @@ public abstract class ClientStreamTracer extends StreamTracer {
      *
      * @since 1.20.0
      */
-    @SuppressWarnings("deprecation")
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-      return newClientStreamTracer(info.getCallOptions(), headers);
+      throw new UnsupportedOperationException("Not implemented");
+    }
+
+    /**
+     * Called when a call-level delay (such as waiting for name resolution) starts before any
+     * individual RPC attempt is created, or when the {@code delayType} of the ongoing delay
+     * changes, in which case {@link #recordDelayEnd} is called for the previous delay first.
+     *
+     * <p>Implementations should start a timer and open a child tracing span (named strictly
+     * {@code "Delay"}) carrying the canonical {@code grpc.delay_type} attribute.
+     *
+     * @param delayType canonical low-cardinality label categorizing the delay (e.g., "resolving")
+     * @param delayReason high-cardinality diagnostic string describing granular runtime conditions
+     * @since 1.86.0
+     */
+    public void recordDelayStart(String delayType, String delayReason) {
+    }
+
+    /**
+     * Called when a call-level delay reason changes while the delay type remains constant.
+     *
+     * <p>Implementations should record a structured event (such as {@code "Delay triggered"}) on
+     * the active call delay span without recreating the span or resetting timers.
+     *
+     * @param delayType canonical low-cardinality label of the ongoing delay
+     * @param delayReason updated high-cardinality diagnostic string describing new conditions
+     * @since 1.86.0
+     */
+    public void recordDelayReasonChanged(String delayType, String delayReason) {
+    }
+
+    /**
+     * Called when a call-level delay ends upon successful name resolution, or when the RPC is
+     * cancelled or reaches its deadline before resolution completes.
+     *
+     * <p>Implementations should close the active call delay span and record the elapsed duration
+     * to the {@code grpc.client.call.delay.duration} histogram labeled with {@code delayType}.
+     *
+     * @param delayType canonical low-cardinality label of the delay being ended
+     * @since 1.86.0
+     */
+    public void recordDelayEnd(String delayType) {
     }
   }
 
@@ -96,20 +212,18 @@ public abstract class ClientStreamTracer extends StreamTracer {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
   public static final class StreamInfo {
-    private final Attributes transportAttrs;
     private final CallOptions callOptions;
+    private final int previousAttempts;
+    private final boolean isTransparentRetry;
+    private final boolean isHedging;
 
-    StreamInfo(Attributes transportAttrs, CallOptions callOptions) {
-      this.transportAttrs = checkNotNull(transportAttrs, "transportAttrs");
+    StreamInfo(
+        CallOptions callOptions, int previousAttempts, boolean isTransparentRetry,
+        boolean isHedging) {
       this.callOptions = checkNotNull(callOptions, "callOptions");
-    }
-
-    /**
-     * Returns the attributes of the transport that this stream was created on.
-     */
-    @Grpc.TransportAttr
-    public Attributes getTransportAttrs() {
-      return transportAttrs;
+      this.previousAttempts = previousAttempts;
+      this.isTransparentRetry = isTransparentRetry;
+      this.isHedging = isHedging;
     }
 
     /**
@@ -120,15 +234,44 @@ public abstract class ClientStreamTracer extends StreamTracer {
     }
 
     /**
+     * Returns the number of preceding attempts for the RPC.
+     *
+     * @since 1.40.0
+     */
+    public int getPreviousAttempts() {
+      return previousAttempts;
+    }
+
+    /**
+     * Whether the stream is a transparent retry.
+     *
+     * @since 1.40.0
+     */
+    public boolean isTransparentRetry() {
+      return isTransparentRetry;
+    }
+
+    /**
+     * Whether the stream is hedging.
+     *
+     * @since 1.74.0
+     */
+    public boolean isHedging() {
+      return isHedging;
+    }
+
+    /**
      * Converts this StreamInfo into a new Builder.
      *
      * @since 1.21.0
      */
     public Builder toBuilder() {
-      Builder builder = new Builder();
-      builder.setTransportAttrs(transportAttrs);
-      builder.setCallOptions(callOptions);
-      return builder;
+      return new Builder()
+          .setCallOptions(callOptions)
+          .setPreviousAttempts(previousAttempts)
+          .setIsTransparentRetry(isTransparentRetry)
+          .setIsHedging(isHedging);
+
     }
 
     /**
@@ -143,8 +286,10 @@ public abstract class ClientStreamTracer extends StreamTracer {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("transportAttrs", transportAttrs)
           .add("callOptions", callOptions)
+          .add("previousAttempts", previousAttempts)
+          .add("isTransparentRetry", isTransparentRetry)
+          .add("isHedging", isHedging)
           .toString();
     }
 
@@ -154,20 +299,12 @@ public abstract class ClientStreamTracer extends StreamTracer {
      * @since 1.21.0
      */
     public static final class Builder {
-      private Attributes transportAttrs = Attributes.EMPTY;
       private CallOptions callOptions = CallOptions.DEFAULT;
+      private int previousAttempts;
+      private boolean isTransparentRetry;
+      private boolean isHedging;
 
       Builder() {
-      }
-
-      /**
-       * Sets the attributes of the transport that this stream was created on.  This field is
-       * optional.
-       */
-      @Grpc.TransportAttr
-      public Builder setTransportAttrs(Attributes transportAttrs) {
-        this.transportAttrs = checkNotNull(transportAttrs, "transportAttrs cannot be null");
-        return this;
       }
 
       /**
@@ -179,10 +316,40 @@ public abstract class ClientStreamTracer extends StreamTracer {
       }
 
       /**
+       * Set the number of preceding attempts of the RPC.
+       *
+       * @since 1.40.0
+       */
+      public Builder setPreviousAttempts(int previousAttempts) {
+        this.previousAttempts = previousAttempts;
+        return this;
+      }
+
+      /**
+       * Sets whether the stream is a transparent retry.
+       *
+       * @since 1.40.0
+       */
+      public Builder setIsTransparentRetry(boolean isTransparentRetry) {
+        this.isTransparentRetry = isTransparentRetry;
+        return this;
+      }
+
+      /**
+       * Sets whether the stream is hedging.
+       *
+       * @since 1.74.0
+       */
+      public Builder setIsHedging(boolean isHedging) {
+        this.isHedging = isHedging;
+        return this;
+      }
+
+      /**
        * Builds a new StreamInfo.
        */
       public StreamInfo build() {
-        return new StreamInfo(transportAttrs, callOptions);
+        return new StreamInfo(callOptions, previousAttempts, isTransparentRetry, isHedging);
       }
     }
   }

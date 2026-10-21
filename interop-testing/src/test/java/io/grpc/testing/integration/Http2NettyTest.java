@@ -16,19 +16,18 @@
 
 package io.grpc.testing.integration;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-
-import io.grpc.ManagedChannel;
-import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.ChannelCredentials;
+import io.grpc.ServerBuilder;
+import io.grpc.ServerCredentials;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.TlsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
+import io.grpc.testing.TlsTesting;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -41,57 +40,43 @@ import org.junit.runners.JUnit4;
 public class Http2NettyTest extends AbstractInteropTest {
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
+  protected ServerBuilder<?> getServerBuilder() {
     // Starts the server with HTTPS.
     try {
-      return NettyServerBuilder.forPort(0)
-          .flowControlWindow(65 * 1024)
-          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-          .sslContext(GrpcSslContexts
-              .forServer(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
-              .clientAuth(ClientAuth.REQUIRE)
-              .trustManager(TestUtils.loadCert("ca.pem"))
-              .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
-              .build());
+      ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+          .keyManager(TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"))
+          .trustManager(TlsTesting.loadCert("ca.pem"))
+          .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
+          .build();
+      NettyServerBuilder builder = NettyServerBuilder.forPort(0, serverCreds)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
+          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+      // Disable the default census stats tracer, use testing tracer instead.
+      InternalNettyServerBuilder.setStatsEnabled(builder, false);
+      return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected NettyChannelBuilder createChannelBuilder() {
     try {
+      ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+          .keyManager(TlsTesting.loadCert("client.pem"), TlsTesting.loadCert("client.key"))
+          .trustManager(TlsTesting.loadCert("ca.pem"))
+          .build();
       NettyChannelBuilder builder = NettyChannelBuilder
-          .forAddress(TestUtils.testServerAddress((InetSocketAddress) getListenAddress()))
-          .flowControlWindow(65 * 1024)
-          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-          .sslContext(GrpcSslContexts
-              .forClient()
-              .keyManager(TestUtils.loadCert("client.pem"), TestUtils.loadCert("client.key"))
-              .trustManager(TestUtils.loadX509Cert("ca.pem"))
-              .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
-              .build());
-      io.grpc.internal.TestingAccessor.setStatsImplementation(
-          builder, createClientCensusStatsModule());
-      return builder.build();
+          .forAddress("localhost", ((InetSocketAddress) getListenAddress()).getPort(), channelCreds)
+          .overrideAuthority(TestUtils.TEST_SERVER_HOST)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
+          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+      // Disable the default census stats interceptor, use testing interceptor instead.
+      InternalNettyChannelBuilder.setStatsEnabled(builder, false);
+      return builder.intercept(createCensusStatsClientInterceptor());
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
-  }
-
-  @Test
-  public void remoteAddr() {
-    InetSocketAddress isa = (InetSocketAddress) obtainRemoteClientAddr();
-    assertEquals(InetAddress.getLoopbackAddress(), isa.getAddress());
-    // It should not be the same as the server
-    assertNotEquals(((InetSocketAddress) getListenAddress()).getPort(), isa.getPort());
-  }
-
-  @Test
-  public void localAddr() throws Exception {
-    InetSocketAddress isa = (InetSocketAddress) obtainLocalClientAddr();
-    assertEquals(InetAddress.getLoopbackAddress(), isa.getAddress());
-    assertEquals(((InetSocketAddress) getListenAddress()).getPort(), isa.getPort());
   }
 
   @Test

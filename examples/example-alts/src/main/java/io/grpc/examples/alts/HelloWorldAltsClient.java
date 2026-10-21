@@ -16,7 +16,8 @@
 
 package io.grpc.examples.alts;
 
-import io.grpc.alts.AltsChannelBuilder;
+import io.grpc.alts.AltsChannelCredentials;
+import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -81,7 +82,8 @@ public final class HelloWorldAltsClient {
   private void run(String[] args) throws InterruptedException {
     parseArgs(args);
     ExecutorService executor = Executors.newFixedThreadPool(1);
-    ManagedChannel channel = AltsChannelBuilder.forTarget(serverAddress).executor(executor).build();
+    ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, AltsChannelCredentials.create())
+        .executor(executor).build();
     try {
       GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
       HelloReply resp = stub.sayHello(HelloRequest.newBuilder().setName("Waldo").build());

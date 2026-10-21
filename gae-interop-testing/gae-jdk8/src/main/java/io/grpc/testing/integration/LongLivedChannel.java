@@ -17,8 +17,9 @@
 package io.grpc.testing.integration;
 
 import com.google.protobuf.ByteString;
+import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
@@ -40,7 +41,7 @@ import javax.servlet.http.HttpServletResponse;
 public final class LongLivedChannel extends HttpServlet {
   private static final String INTEROP_TEST_ADDRESS = "grpc-test.sandbox.googleapis.com:443";
   private final ManagedChannel channel =
-      ManagedChannelBuilder.forTarget(INTEROP_TEST_ADDRESS).build();
+      Grpc.newChannelBuilder(INTEROP_TEST_ADDRESS, TlsChannelCredentials.create()).build();
 
   @Override
   public void destroy() {

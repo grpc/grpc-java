@@ -20,6 +20,8 @@ import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.SocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import javax.net.ssl.SSLSession;
 
 /**
@@ -36,7 +38,7 @@ public final class Grpc {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
   @TransportAttr
   public static final Attributes.Key<SocketAddress> TRANSPORT_ATTR_REMOTE_ADDR =
-      Attributes.Key.create("remote-addr");
+      Attributes.Key.create("io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR");
 
   /**
    * Attribute key for the local address of a transport.
@@ -44,7 +46,7 @@ public final class Grpc {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
   @TransportAttr
   public static final Attributes.Key<SocketAddress> TRANSPORT_ATTR_LOCAL_ADDR =
-      Attributes.Key.create("local-addr");
+      Attributes.Key.create("io.grpc.Grpc.TRANSPORT_ATTR_LOCAL_ADDR");
 
   /**
    * Attribute key for SSL session of a transport.
@@ -52,7 +54,14 @@ public final class Grpc {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
   @TransportAttr
   public static final Attributes.Key<SSLSession> TRANSPORT_ATTR_SSL_SESSION =
-      Attributes.Key.create("ssl-session");
+      Attributes.Key.create("io.grpc.Grpc.TRANSPORT_ATTR_SSL_SESSION");
+
+  /**
+   * The value for the custom label of per-RPC metrics. Defaults to empty string when unset. Must
+   * not be set to {@code null}.
+   */
+  public static final CallOptions.Key<String> CALL_OPTION_CUSTOM_LABEL =
+      CallOptions.Key.createWithDefault("io.grpc.Grpc.CALL_OPTION_CUSTOM_LABEL", "");
 
   /**
    * Annotation for transport attributes. It follows the annotation semantics defined
@@ -62,4 +71,105 @@ public final class Grpc {
   @Retention(RetentionPolicy.SOURCE)
   @Documented
   public @interface TransportAttr {}
+
+  /**
+   * Creates a channel builder with a target string and credentials. The target can be either an RFC
+   * 3986 URI, or an authority string.
+   *
+   * <p>Example URIs:
+   * <ul>
+   *   <li>{@code "dns:///foo.googleapis.com:8080"}</li>
+   *   <li>{@code "dns:///foo.googleapis.com"}</li>
+   *   <li>{@code "dns:///%5B2001:db8:85a3:8d3:1319:8a2e:370:7348%5D:443"}</li>
+   *   <li>{@code "dns://8.8.8.8/foo.googleapis.com:8080"}</li>
+   *   <li>{@code "dns://8.8.8.8/foo.googleapis.com"}</li>
+   *   <li>{@code "zookeeper://zk.example.com:9900/example_service"}</li>
+   *   <li>{@code "intent:#Intent;package=com.some.app;action=a;category=c;end;"}</li>
+   * </ul>
+   *
+   * <p>An authority string will be converted to a URI having the scheme of the name resolver with
+   * the highest priority (e.g. {@code "dns"}), the empty string as the authority, and
+   * {@code target} as its absolute path. We recommend libraries specify {@code target} as a URI
+   * instead since they cannot know which NameResolver will be default at runtime.
+   * Example authority strings:
+   * <ul>
+   *   <li>{@code "localhost"}</li>
+   *   <li>{@code "127.0.0.1"}</li>
+   *   <li>{@code "localhost:8080"}</li>
+   *   <li>{@code "foo.googleapis.com:8080"}</li>
+   *   <li>{@code "127.0.0.1:8080"}</li>
+   *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]"}</li>
+   *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:443"}</li>
+   * </ul>
+   *
+   * <p>The URI form of {@code target} is preferred because it is less ambiguous. For example, the
+   * target string {@code foo:8080} is a valid authority string with host {@code foo} and port
+   * {@code 8080} but it is also a valid RFC 3986 URI with scheme {@code foo} and path {@code 8080}.
+   * gRPC prioritizes the URI form, which means {@code foo:8080} will be treated as a URI with
+   * scheme {@code foo}. Using {@code dns:///foo:8080} avoids this ambiguity.
+   */
+  public static ManagedChannelBuilder<?> newChannelBuilder(
+      String target, ChannelCredentials creds) {
+    return ManagedChannelRegistry.getDefaultRegistry().newChannelBuilder(target, creds);
+  }
+
+  /**
+   * Creates a channel builder with a target string, credentials, and a specific
+   * name resolver registry.
+   *
+   * <p>The provided {@code nameResolverRegistry} is used to resolve the target address
+   * into physical addresses (e.g., DNS or custom schemes).
+   *
+   * @param target the target URI for the channel, such as {@code "localhost:8080"}
+   *     or {@code "dns:///example.com"}
+   * @param creds the channel credentials to use for secure communication
+   * @param nameResolverRegistry the registry used to look up {@link NameResolver}
+   *     providers for the target
+   * @return a {@link ManagedChannelBuilder} instance configured with the given parameters
+   * @throws IllegalArgumentException if no provider is available for the given target
+   *     or credentials
+   * @since 1.83.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12694")
+  public static ManagedChannelBuilder<?> newChannelBuilder(
+      String target,
+      ChannelCredentials creds,
+      NameResolverRegistry nameResolverRegistry) {
+    return ManagedChannelRegistry.getDefaultRegistry().newChannelBuilder(
+        nameResolverRegistry,
+        target,
+        creds);
+  }
+
+  /**
+   * Creates a channel builder from a host, port, and credentials. The host and port are combined to
+   * form an authority string and then passed to {@link #newChannelBuilder(String,
+   * ChannelCredentials)}. IPv6 addresses are properly surrounded by square brackets ("[]").
+   */
+  public static ManagedChannelBuilder<?> newChannelBuilderForAddress(
+      String host, int port, ChannelCredentials creds) {
+    return newChannelBuilder(authorityFromHostAndPort(host, port), creds);
+  }
+
+  /**
+   * Combine a host and port into an authority string.
+   */
+  // A copy of GrpcUtil.authorityFromHostAndPort
+  private static String authorityFromHostAndPort(String host, int port) {
+    try {
+      return new URI(null, null, host, port, null, null, null).getAuthority();
+    } catch (URISyntaxException ex) {
+      throw new IllegalArgumentException("Invalid host or port: " + host + " " + port, ex);
+    }
+  }
+
+  /**
+   * Static factory for creating a new ServerBuilder.
+   *
+   * @param port the port to listen on
+   * @param creds the server identity
+   */
+  public static ServerBuilder<?> newServerBuilderForPort(int port, ServerCredentials creds) {
+    return ServerRegistry.getDefaultRegistry().newServerBuilderForPort(port, creds);
+  }
 }

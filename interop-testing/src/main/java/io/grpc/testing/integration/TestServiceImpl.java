@@ -16,16 +16,25 @@
 
 package io.grpc.testing.integration;
 
+import static io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.ByteString;
+import io.grpc.Context;
+import io.grpc.Contexts;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.LogExceptionRunnable;
+import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.MetricRecorder;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
@@ -36,34 +45,49 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.grpc.testing.integration.Messages.TestOrcaReport;
+import io.grpc.testing.integration.TestServiceGrpc.AsyncService;
+import java.net.SocketAddress;
 import java.util.ArrayDeque;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Implementation of the business logic for the TestService. Uses an executor to schedule chunks
  * sent in response streams.
  */
-public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
+public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
+  static final Context.Key<SocketAddress> PEER_ADDRESS_CONTEXT_KEY = Context.key("peer-address");
   private final Random random = new Random();
-
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
+  private final MetricRecorder metricRecorder;
+  final Semaphore lock = new Semaphore(1);
 
   /**
    * Constructs a controller using the given executor for scheduling response stream chunks.
    */
-  public TestServiceImpl(ScheduledExecutorService executor) {
+  public TestServiceImpl(ScheduledExecutorService executor, MetricRecorder metricRecorder) {
     this.executor = executor;
     this.compressableBuffer = ByteString.copyFrom(new byte[1024]);
+    this.metricRecorder = metricRecorder;
+  }
+
+  public TestServiceImpl(ScheduledExecutorService executor) {
+    this(executor, MetricRecorder.newInstance());
+  }
+
+  @Override
+  public final io.grpc.ServerServiceDefinition bindService() {
+    return TestServiceGrpc.bindService(this);
   }
 
   @Override
@@ -112,8 +136,32 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       return;
     }
 
+    if (req.hasOrcaPerQueryReport()) {
+      echoCallMetricsFromPayload(req.getOrcaPerQueryReport());
+    }
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
+  }
+
+  private static void echoCallMetricsFromPayload(TestOrcaReport report) {
+    CallMetricRecorder recorder = CallMetricRecorder.getCurrent()
+        .recordCpuUtilizationMetric(report.getCpuUtilization())
+        .recordMemoryUtilizationMetric(report.getMemoryUtilization());
+    for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
+      recorder.recordUtilizationMetric(entry.getKey(), entry.getValue());
+    }
+    for (Map.Entry<String, Double> entry : report.getRequestCostMap().entrySet()) {
+      recorder.recordRequestCostMetric(entry.getKey(), entry.getValue());
+    }
+  }
+
+  private void echoMetricsFromPayload(TestOrcaReport report) {
+    metricRecorder.setCpuUtilizationMetric(report.getCpuUtilization());
+    metricRecorder.setMemoryUtilizationMetric(report.getMemoryUtilization());
+    metricRecorder.setAllUtilizationMetrics(new HashMap<>());
+    for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
+      metricRecorder.putUtilizationMetric(entry.getKey(), entry.getValue());
+    }
   }
 
   /**
@@ -165,8 +213,25 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       final StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
     final ResponseDispatcher dispatcher = new ResponseDispatcher(responseObserver);
     return new StreamObserver<StreamingOutputCallRequest>() {
+      boolean oobTestLocked;
+
       @Override
       public void onNext(StreamingOutputCallRequest request) {
+        // to facilitate multiple clients running orca_oob test in parallel, the server allows
+        // only one orca_oob test client to run at a time to avoid conflicts.
+        if (request.hasOrcaOobReport()) {
+          if (!oobTestLocked) {
+            try {
+              lock.acquire();
+            } catch (InterruptedException ex) {
+              responseObserver.onError(new StatusRuntimeException(
+                  Status.ABORTED.withDescription("server service interrupted").withCause(ex)));
+              return;
+            }
+            oobTestLocked = true;
+          }
+          echoMetricsFromPayload(request.getOrcaOobReport());
+        }
         if (request.hasResponseStatus()) {
           dispatcher.cancel();
           dispatcher.onError(Status.fromCodeValue(request.getResponseStatus().getCode())
@@ -179,6 +244,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onCompleted() {
+        if (oobTestLocked) {
+          lock.release();
+          oobTestLocked = false;
+        }
         if (!dispatcher.isCancelled()) {
           // Tell the dispatcher that all input has been received.
           dispatcher.completeInput();
@@ -187,6 +256,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onError(Throwable cause) {
+        if (oobTestLocked) {
+          lock.release();
+          oobTestLocked = false;
+        }
         dispatcher.onError(cause);
       }
     };
@@ -351,12 +424,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
         // Schedule the next response chunk if there is one.
         Chunk nextChunk = chunks.peek();
-        if (nextChunk != null) {
+        if (nextChunk != null && !executor.isShutdown()) {
           scheduled = true;
           // TODO(ejona): cancel future if RPC is cancelled
           Future<?> unused = executor.schedule(new LogExceptionRunnable(dispatchTask),
               nextChunk.delayMicroseconds, TimeUnit.MICROSECONDS);
-          return;
         }
       }
     }
@@ -375,7 +447,13 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     Queue<Chunk> chunkQueue = new ArrayDeque<>();
     int offset = 0;
     for (ResponseParameters params : request.getResponseParametersList()) {
-      chunkQueue.add(new Chunk(params.getIntervalUs(), offset, params.getSize()));
+      String peerSocketAddress = null;
+      if (params.getFillPeerSocketAddress().getValue()) {
+        SocketAddress peerAddress = PEER_ADDRESS_CONTEXT_KEY.get();
+        peerSocketAddress = peerAddress != null ? peerAddress.toString() : "";
+      }
+      chunkQueue.add(
+          new Chunk(params.getIntervalUs(), offset, params.getSize(), peerSocketAddress));
 
       // Increment the offset past this chunk. Buffer need to be circular.
       offset = (offset + params.getSize()) % compressableBuffer.size();
@@ -393,11 +471,17 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     private final int delayMicroseconds;
     private final int offset;
     private final int length;
+    private final String peerSocketAddress;
 
     public Chunk(int delayMicroseconds, int offset, int length) {
+      this(delayMicroseconds, offset, length, null);
+    }
+
+    public Chunk(int delayMicroseconds, int offset, int length, String peerSocketAddress) {
       this.delayMicroseconds = delayMicroseconds;
       this.offset = offset;
       this.length = length;
+      this.peerSocketAddress = peerSocketAddress;
     }
 
     /**
@@ -406,10 +490,15 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     private StreamingOutputCallResponse toResponse() {
       StreamingOutputCallResponse.Builder responseBuilder =
           StreamingOutputCallResponse.newBuilder();
-      ByteString payload = generatePayload(compressableBuffer, offset, length);
-      responseBuilder.setPayload(
-          Payload.newBuilder()
-              .setBody(payload));
+      if (length > 0) {
+        ByteString payload = generatePayload(compressableBuffer, offset, length);
+        responseBuilder.setPayload(
+            Payload.newBuilder()
+                .setBody(payload));
+      }
+      if (peerSocketAddress != null) {
+        responseBuilder.setPeerSocketAddress(peerSocketAddress);
+      }
       return responseBuilder.build();
     }
   }
@@ -439,31 +528,35 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     return Arrays.asList(
         echoRequestHeadersInterceptor(Util.METADATA_KEY),
         echoRequestMetadataInHeaders(Util.ECHO_INITIAL_METADATA_KEY),
-        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY));
+        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY),
+        new AddPeerAddressToContextInterceptor());
   }
 
   /**
-   * Echo the request headers from a client into response headers and trailers. Useful for
+   * Echo a request header from a client into response headers and trailers. Useful for
    * testing end-to-end metadata propagation.
    */
-  private static ServerInterceptor echoRequestHeadersInterceptor(final Metadata.Key<?>... keys) {
-    final Set<Metadata.Key<?>> keySet = new HashSet<>(Arrays.asList(keys));
+  private static <T> ServerInterceptor echoRequestHeadersInterceptor(final Metadata.Key<T> key) {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call,
-          final Metadata requestHeaders,
+          Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
+        if (!requestHeaders.containsKey(key)) {
+          return next.startCall(call, requestHeaders);
+        }
+        T value = requestHeaders.get(key);
         return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
               @Override
               public void sendHeaders(Metadata responseHeaders) {
-                responseHeaders.merge(requestHeaders, keySet);
+                responseHeaders.put(key, value);
                 super.sendHeaders(responseHeaders);
               }
 
               @Override
               public void close(Status status, Metadata trailers) {
-                trailers.merge(requestHeaders, keySet);
+                trailers.put(key, value);
                 super.close(status, trailers);
               }
             }, requestHeaders);
@@ -471,27 +564,41 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     };
   }
 
+  static class AddPeerAddressToContextInterceptor implements ServerInterceptor {
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+        Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      SocketAddress peerAddress = call.getAttributes().get(TRANSPORT_ATTR_REMOTE_ADDR);
+
+      // Create a new context with the peer address value
+      Context newContext = Context.current().withValue(PEER_ADDRESS_CONTEXT_KEY, peerAddress);
+      try {
+        return Contexts.interceptCall(newContext, call, headers, next);
+      } catch (Exception ex) {
+        throw new RuntimeException(ex);
+      }
+    }
+  }
+
   /**
-   * Echoes request headers with the specified key(s) from a client into response headers only.
+   * Echoes request headers with the specified key from a client into response headers only.
    */
-  private static ServerInterceptor echoRequestMetadataInHeaders(final Metadata.Key<?>... keys) {
-    final Set<Metadata.Key<?>> keySet = new HashSet<>(Arrays.asList(keys));
+  private static <T> ServerInterceptor echoRequestMetadataInHeaders(final Metadata.Key<T> key) {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call,
           final Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
+        if (!requestHeaders.containsKey(key)) {
+          return next.startCall(call, requestHeaders);
+        }
+        T value = requestHeaders.get(key);
         return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void sendHeaders(Metadata responseHeaders) {
-            responseHeaders.merge(requestHeaders, keySet);
+            responseHeaders.put(key, value);
             super.sendHeaders(responseHeaders);
-          }
-
-          @Override
-          public void close(Status status, Metadata trailers) {
-            super.close(status, trailers);
           }
         }, requestHeaders);
       }
@@ -499,25 +606,23 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   }
 
   /**
-   * Echoes request headers with the specified key(s) from a client into response trailers only.
+   * Echoes request headers with the specified key from a client into response trailers only.
    */
-  private static ServerInterceptor echoRequestMetadataInTrailers(final Metadata.Key<?>... keys) {
-    final Set<Metadata.Key<?>> keySet = new HashSet<>(Arrays.asList(keys));
+  private static <T> ServerInterceptor echoRequestMetadataInTrailers(final Metadata.Key<T> key) {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call,
           final Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
+        if (!requestHeaders.containsKey(key)) {
+          return next.startCall(call, requestHeaders);
+        }
+        T value = requestHeaders.get(key);
         return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
-          public void sendHeaders(Metadata responseHeaders) {
-            super.sendHeaders(responseHeaders);
-          }
-
-          @Override
           public void close(Status status, Metadata trailers) {
-            trailers.merge(requestHeaders, keySet);
+            trailers.put(key, value);
             super.close(status, trailers);
           }
         }, requestHeaders);

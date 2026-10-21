@@ -17,39 +17,63 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
+import com.google.common.base.Objects;
+import io.grpc.ChannelConfigurator;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.NameResolver.Listener2;
+import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.net.URI;
+import java.net.SocketAddress;
 import java.util.Collections;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
-import org.junit.Before;
+import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Unit tests for the inner classes in {@link NameResolver}. */
 @RunWith(JUnit4.class)
 public class NameResolverTest {
+  private static final List<EquivalentAddressGroup> ADDRESSES =
+      Collections.singletonList(
+          new EquivalentAddressGroup(new FakeSocketAddress("fake-address-1"), Attributes.EMPTY));
+  private static final Attributes.Key<String> YOLO_ATTR_KEY = Attributes.Key.create("yolo");
+  private static Attributes ATTRIBUTES =
+      Attributes.newBuilder().set(YOLO_ATTR_KEY, "To be, or not to be?").build();
+  private static final NameResolver.Args.Key<Integer> FOO_ARG_KEY =
+      NameResolver.Args.Key.create("foo");
+  private static final NameResolver.Args.Key<Integer> BAR_ARG_KEY =
+          NameResolver.Args.Key.create("bar");
+  private static ConfigOrError CONFIG = ConfigOrError.fromConfig("foo");
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   private final int defaultPort = 293;
   private final ProxyDetector proxyDetector = mock(ProxyDetector.class);
   private final SynchronizationContext syncContext =
       new SynchronizationContext(mock(UncaughtExceptionHandler.class));
   private final ServiceConfigParser parser = mock(ServiceConfigParser.class);
-  private URI uri;
-  private final NameResolver nameResolver = mock(NameResolver.class);
+  private final ScheduledExecutorService scheduledExecutorService =
+      mock(ScheduledExecutorService.class);
+  private final ChannelLogger channelLogger = mock(ChannelLogger.class);
+  private final Executor executor = Executors.newSingleThreadExecutor();
+  private final String overrideAuthority = "grpc.io";
+  private final MetricRecorder metricRecorder = new MetricRecorder() {};
+  private final int customArgValue = 42;
+  @Mock NameResolver.Listener mockListener;
 
-  @Before
-  public void setUp() throws Exception {
-    uri = new URI("fake://service");
-  }
+  private final ChannelConfigurator channelConfigurator = builder -> { };
 
   @Test
   public void args() {
@@ -58,186 +82,31 @@ public class NameResolverTest {
     assertThat(args.getProxyDetector()).isSameInstanceAs(proxyDetector);
     assertThat(args.getSynchronizationContext()).isSameInstanceAs(syncContext);
     assertThat(args.getServiceConfigParser()).isSameInstanceAs(parser);
+    assertThat(args.getScheduledExecutorService()).isSameInstanceAs(scheduledExecutorService);
+    assertThat(args.getChannelLogger()).isSameInstanceAs(channelLogger);
+    assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
+    assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
+    assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
+    assertThat(args.getChildChannelConfigurator()).isSameInstanceAs(channelConfigurator);
+    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
+    assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
     NameResolver.Args args2 = args.toBuilder().build();
     assertThat(args2.getDefaultPort()).isEqualTo(defaultPort);
     assertThat(args2.getProxyDetector()).isSameInstanceAs(proxyDetector);
     assertThat(args2.getSynchronizationContext()).isSameInstanceAs(syncContext);
     assertThat(args2.getServiceConfigParser()).isSameInstanceAs(parser);
+    assertThat(args2.getScheduledExecutorService()).isSameInstanceAs(scheduledExecutorService);
+    assertThat(args2.getChannelLogger()).isSameInstanceAs(channelLogger);
+    assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
+    assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
+    assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
+    assertThat(args2.getChildChannelConfigurator()).isSameInstanceAs(channelConfigurator);
+    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
+    assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
     assertThat(args2).isNotSameInstanceAs(args);
     assertThat(args2).isNotEqualTo(args);
-  }
-
-  @Deprecated
-  @Test
-  public void newNameResolver_Api2DelegatesToApi1() {
-    final AtomicReference<Attributes> paramsCapture = new AtomicReference<>();
-    NameResolver.Factory factory = new NameResolver.Factory() {
-        @Deprecated
-        @Override
-        public NameResolver newNameResolver(URI targetUri, Attributes params) {
-          assertThat(targetUri).isSameInstanceAs(uri);
-          paramsCapture.set(params);
-          return nameResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          throw new AssertionError();
-        }
-      };
-    assertThat(factory.newNameResolver(uri, new NameResolver.Helper() {
-        @Override
-        public int getDefaultPort() {
-          return defaultPort;
-        }
-
-        @Override
-        public ProxyDetector getProxyDetector() {
-          return proxyDetector;
-        }
-
-        @Override
-        public SynchronizationContext getSynchronizationContext() {
-          return syncContext;
-        }
-      })).isSameInstanceAs(nameResolver);
-    Attributes params = paramsCapture.get();
-    assertThat(params.get(NameResolver.Factory.PARAMS_DEFAULT_PORT)).isEqualTo(defaultPort);
-    assertThat(params.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR))
-        .isSameInstanceAs(proxyDetector);
-  }
-
-  @Deprecated
-  @SuppressWarnings("unchecked")
-  @Test
-  public void newNameResolver_Api3DelegatesToApi2() {
-    final AtomicReference<NameResolver.Helper> helperCapture = new AtomicReference<>();
-    NameResolver.Factory factory = new NameResolver.Factory() {
-        @Deprecated
-        @Override
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
-          assertThat(targetUri).isSameInstanceAs(uri);
-          helperCapture.set(helper);
-          return nameResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          return "fake";
-        }
-      };
-    assertThat(factory.newNameResolver(uri, createArgs())).isSameInstanceAs(nameResolver);
-    NameResolver.Helper helper = helperCapture.get();
-    assertThat(helper.getDefaultPort()).isEqualTo(defaultPort);
-    assertThat(helper.getProxyDetector()).isSameInstanceAs(proxyDetector);
-    assertThat(helper.getSynchronizationContext()).isSameInstanceAs(syncContext);
-
-    // Test service config parsing
-    ConfigOrError coe = ConfigOrError.fromConfig("A config");
-    when(parser.parseServiceConfig(any(Map.class))).thenReturn(coe);
-    Map<String, ?> rawConfig = Collections.singletonMap("Key", "value");
-    assertThat(helper.parseServiceConfig(rawConfig)).isSameInstanceAs(coe);
-    verify(parser).parseServiceConfig(same(rawConfig));
-  }
-
-  // Tests that a forwarding factory on API1 can correctly delegate to a factory already migrated
-  // to API3 without losing information.
-  @Deprecated
-  @SuppressWarnings("unchecked")
-  @Test
-  public void newNameResolver_forwardingFactory1DelegatesToApi3() {
-    final AtomicReference<NameResolver.Args> argsCapture = new AtomicReference<>();
-    final NameResolver.Factory delegate = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-          assertThat(targetUri).isSameInstanceAs(uri);
-          argsCapture.set(args);
-          return nameResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          throw new AssertionError();
-        }
-      };
-
-    NameResolver.Factory forwarding = new NameResolver.Factory() {
-        @Deprecated
-        public NameResolver newNameResolver(URI targetUri, Attributes attrs) {
-          return delegate.newNameResolver(targetUri, attrs);
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          throw new AssertionError();
-        }
-      };
-
-    // gRPC channel is calling forwarding with API3.
-    assertThat(forwarding.newNameResolver(uri, createArgs())).isSameInstanceAs(nameResolver);
-
-    NameResolver.Args args = argsCapture.get();
-    assertThat(args.getDefaultPort()).isEqualTo(defaultPort);
-    assertThat(args.getProxyDetector()).isSameInstanceAs(proxyDetector);
-    assertThat(args.getSynchronizationContext()).isSameInstanceAs(syncContext);
-
-    ServiceConfigParser passedParser = args.getServiceConfigParser();
-    ConfigOrError coe = ConfigOrError.fromConfig("A config");
-    when(parser.parseServiceConfig(any(Map.class))).thenReturn(coe);
-    Map<String, ?> rawConfig = Collections.singletonMap("Key", "value");
-    assertThat(passedParser.parseServiceConfig(rawConfig)).isSameInstanceAs(coe);
-    verify(parser).parseServiceConfig(same(rawConfig));
-  }
-
-  // Tests that a forwarding factory on API2 can correctly delegate to a factory already migrated
-  // to API3 without losing information.
-  @Deprecated
-  @SuppressWarnings("unchecked")
-  @Test
-  public void newNameResolver_forwardingFactory2DelegatesToApi3() {
-    final AtomicReference<NameResolver.Args> argsCapture = new AtomicReference<>();
-    final NameResolver.Factory delegate = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-          assertThat(targetUri).isSameInstanceAs(uri);
-          argsCapture.set(args);
-          return nameResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          throw new AssertionError();
-        }
-      };
-
-    NameResolver.Factory forwarding = new NameResolver.Factory() {
-        @Deprecated
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
-          return delegate.newNameResolver(targetUri, helper);
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          throw new AssertionError();
-        }
-      };
-
-    // gRPC channel is calling forwarding with API3.
-    assertThat(forwarding.newNameResolver(uri, createArgs())).isSameInstanceAs(nameResolver);
-
-    NameResolver.Args args = argsCapture.get();
-    assertThat(args.getDefaultPort()).isEqualTo(defaultPort);
-    assertThat(args.getProxyDetector()).isSameInstanceAs(proxyDetector);
-    assertThat(args.getSynchronizationContext()).isSameInstanceAs(syncContext);
-
-    ServiceConfigParser passedParser = args.getServiceConfigParser();
-    ConfigOrError coe = ConfigOrError.fromConfig("A config");
-    when(parser.parseServiceConfig(any(Map.class))).thenReturn(coe);
-    Map<String, ?> rawConfig = Collections.singletonMap("Key", "value");
-    assertThat(passedParser.parseServiceConfig(rawConfig)).isSameInstanceAs(coe);
-    verify(parser).parseServiceConfig(same(rawConfig));
   }
 
   private NameResolver.Args createArgs() {
@@ -246,6 +115,185 @@ public class NameResolverTest {
         .setProxyDetector(proxyDetector)
         .setSynchronizationContext(syncContext)
         .setServiceConfigParser(parser)
+        .setScheduledExecutorService(scheduledExecutorService)
+        .setChannelLogger(channelLogger)
+        .setOffloadExecutor(executor)
+        .setOverrideAuthority(overrideAuthority)
+        .setMetricRecorder(metricRecorder)
+        .setChildChannelConfigurator(channelConfigurator)
+        .setArg(FOO_ARG_KEY, customArgValue)
         .build();
+  }
+
+  @Test
+  public void args_childChannelConfigurator() {
+    final ManagedChannelBuilder<?>[] capturedBuilder = new ManagedChannelBuilder<?>[1];
+    ChannelConfigurator channelConfigurator = new ChannelConfigurator() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        capturedBuilder[0] = builder;
+      }
+    };
+
+    SynchronizationContext realSyncContext = new SynchronizationContext(
+        new Thread.UncaughtExceptionHandler() {
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            throw new AssertionError(e);
+          }
+        });
+
+    NameResolver.Args args = NameResolver.Args.newBuilder()
+        .setDefaultPort(8080)
+        .setProxyDetector(mock(ProxyDetector.class))
+        .setSynchronizationContext(realSyncContext)
+        .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
+        .setChannelLogger(mock(ChannelLogger.class))
+        .setChildChannelConfigurator(channelConfigurator)
+        .build();
+
+    ChannelConfigurator configurator = args.getChildChannelConfigurator();
+    assertThat(configurator).isSameInstanceAs(channelConfigurator);
+    
+    // Validate configurator accepts builders
+    ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
+    configurator.configureChannelBuilder(mockBuilder);
+    assertThat(capturedBuilder[0]).isSameInstanceAs(mockBuilder);
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void startOnOldListener_wrapperListener2UsedToStart() {
+    final Listener2[] listener2 = new Listener2[1];
+    NameResolver nameResolver = new NameResolver() {
+      @Override
+      public String getServiceAuthority() {
+        return null;
+      }
+
+      @Override
+      public void shutdown() {}
+
+      @Override
+      public void start(Listener2 listener2Arg) {
+        listener2[0] = listener2Arg;
+      }
+    };
+    nameResolver.start(mockListener);
+
+    listener2[0].onResult(ResolutionResult.newBuilder().setAddresses(ADDRESSES)
+        .setAttributes(ATTRIBUTES).build());
+    verify(mockListener).onAddresses(eq(ADDRESSES), eq(ATTRIBUTES));
+    listener2[0].onError(Status.CANCELLED);
+    verify(mockListener).onError(Status.CANCELLED);
+  }
+
+  @Test
+  @SuppressWarnings({"deprecation", "InlineMeInliner"})
+  public void listener2AddressesToListener2ResolutionResultConversion() {
+    final ResolutionResult[] resolutionResult = new ResolutionResult[1];
+    NameResolver.Listener2 listener2 = new Listener2() {
+      @Override
+      public void onResult(ResolutionResult resolutionResultArg) {
+        resolutionResult[0] = resolutionResultArg;
+      }
+
+      @Override
+      public void onError(Status error) {}
+    };
+
+    listener2.onAddresses(ADDRESSES, ATTRIBUTES);
+
+    assertThat(resolutionResult[0].getAddressesOrError().getValue()).isEqualTo(ADDRESSES);
+    assertThat(resolutionResult[0].getAttributes()).isEqualTo(ATTRIBUTES);
+  }
+
+  @Test
+  public void resolutionResult_toString_addressesAttributesAndConfig() {
+    ResolutionResult resolutionResult = ResolutionResult.newBuilder()
+        .setAddressesOrError(StatusOr.fromValue(ADDRESSES))
+        .setAttributes(ATTRIBUTES)
+        .setServiceConfig(CONFIG)
+        .build();
+
+    assertThat(resolutionResult.toString()).isEqualTo(
+        "ResolutionResult{addressesOrError=StatusOr{value="
+            + "[[[FakeSocketAddress-fake-address-1]/{}]]}, attributes={yolo=To be, or not to be?}, "
+            + "serviceConfigOrError=ConfigOrError{config=foo}}");
+  }
+
+  @Test
+  public void resolutionResult_hashCode() {
+    ResolutionResult resolutionResult = ResolutionResult.newBuilder()
+        .setAddressesOrError(StatusOr.fromValue(ADDRESSES))
+        .setAttributes(ATTRIBUTES)
+        .setServiceConfig(CONFIG)
+        .build();
+
+    assertThat(resolutionResult.hashCode()).isEqualTo(
+        Objects.hashCode(StatusOr.fromValue(ADDRESSES), ATTRIBUTES, CONFIG));
+  }
+
+  @Test
+  public void startOnOldListener_resolverReportsError() {
+    final boolean[] onErrorCalled = new boolean[1];
+    final Status[] receivedError = new Status[1];
+
+    NameResolver resolver = new NameResolver() {
+      @Override
+      public String getServiceAuthority() {
+        return "example.com";
+      }
+
+      @Override
+      public void shutdown() {
+      }
+
+      @Override
+      public void start(Listener2 listener2) {
+        ResolutionResult errorResult = ResolutionResult.newBuilder()
+            .setAddressesOrError(StatusOr.fromStatus(
+                Status.UNAVAILABLE
+                    .withDescription("DNS resolution failed with UNAVAILABLE")))
+            .build();
+
+        listener2.onResult(errorResult);
+      }
+    };
+
+    NameResolver.Listener listener = new NameResolver.Listener() {
+      @Override
+      public void onAddresses(
+          List<EquivalentAddressGroup> servers,
+          Attributes attributes) {
+        throw new AssertionError("Called onAddresses on error");
+      }
+
+      @Override
+      public void onError(Status error) {
+        onErrorCalled[0] = true;
+        receivedError[0] = error;
+      }
+    };
+
+    resolver.start(listener);
+
+    assertThat(onErrorCalled[0]).isTrue();
+    assertThat(receivedError[0].getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(receivedError[0].getDescription()).isEqualTo(
+        "DNS resolution failed with UNAVAILABLE");
+  }
+
+  private static class FakeSocketAddress extends SocketAddress {
+    final String name;
+
+    FakeSocketAddress(String name) {
+      this.name = name;
+    }
+
+    @Override
+    public String toString() {
+      return "FakeSocketAddress-" + name;
+    }
   }
 }

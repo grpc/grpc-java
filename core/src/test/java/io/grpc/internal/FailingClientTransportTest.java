@@ -22,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
@@ -41,8 +42,9 @@ public class FailingClientTransportTest {
     Status error = Status.UNAVAILABLE;
     RpcProgress rpcProgress = RpcProgress.DROPPED;
     FailingClientTransport transport = new FailingClientTransport(error, rpcProgress);
-    ClientStream stream = transport
-        .newStream(TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT);
+    ClientStream stream = transport.newStream(
+        TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+        new ClientStreamTracer[] { new ClientStreamTracer() {} });
     ClientStreamListener listener = mock(ClientStreamListener.class);
     stream.start(listener);
 

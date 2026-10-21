@@ -19,7 +19,9 @@ package io.grpc.alts.internal;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Preconditions;
+import io.grpc.ChannelLogger;
 import io.grpc.alts.internal.TsiPeer.Property;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.netty.buffer.ByteBufAllocator;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -37,7 +39,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
   private static final TsiHandshakerFactory clientHandshakerFactory =
       new TsiHandshakerFactory() {
         @Override
-        public TsiHandshaker newHandshaker(String authority) {
+        public TsiHandshaker newHandshaker(String authority, ChannelLogger logger) {
           return new FakeTsiHandshaker(true);
         }
       };
@@ -45,7 +47,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
   private static final TsiHandshakerFactory serverHandshakerFactory =
       new TsiHandshakerFactory() {
         @Override
-        public TsiHandshaker newHandshaker(String authority) {
+        public TsiHandshaker newHandshaker(String authority, ChannelLogger logger) {
           return new FakeTsiHandshaker(false);
         }
       };
@@ -66,6 +68,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
     SERVER_FINISHED;
 
     // Returns the next State. In order to advance to sendState=N, receiveState must be N-1.
+    @SuppressWarnings("EnumOrdinal")
     public State next() {
       if (ordinal() + 1 < values().length) {
         return values()[ordinal() + 1];
@@ -83,11 +86,13 @@ public class FakeTsiHandshaker implements TsiHandshaker {
   }
 
   public static TsiHandshaker newFakeHandshakerClient() {
-    return clientHandshakerFactory.newHandshaker(null);
+    NoopChannelLogger channelLogger = new NoopChannelLogger();
+    return clientHandshakerFactory.newHandshaker(null, channelLogger);
   }
 
   public static TsiHandshaker newFakeHandshakerServer() {
-    return serverHandshakerFactory.newHandshaker(null);
+    NoopChannelLogger channelLogger = new NoopChannelLogger();
+    return serverHandshakerFactory.newHandshaker(null, channelLogger);
   }
 
   protected FakeTsiHandshaker(boolean isClient) {
@@ -143,7 +148,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
       return;
     }
 
-    // Prepare the next message, if neeeded.
+    // Prepare the next message, if needed.
     if (sendBuffer == null) {
       if (sendState.next() != receiveState) {
         // We're still waiting for bytes from the peer, so bail.
@@ -210,7 +215,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
 
   @Override
   public Object extractPeerObject() {
-    return AltsAuthContext.getDefaultInstance();
+    return AltsInternalContext.getDefaultInstance();
   }
 
   @Override
@@ -224,6 +229,11 @@ public class FakeTsiHandshaker implements TsiHandshaker {
 
   @Override
   public TsiFrameProtector createFrameProtector(ByteBufAllocator alloc) {
-    return createFrameProtector(AltsTsiFrameProtector.getMaxAllowedFrameBytes(), alloc);
+    return createFrameProtector(AltsTsiFrameProtector.getMinFrameSize(), alloc);
+  }
+
+  @Override
+  public void close() {
+    // No-op
   }
 }

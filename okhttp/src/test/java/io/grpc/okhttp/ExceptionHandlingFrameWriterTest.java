@@ -16,9 +16,9 @@
 
 package io.grpc.okhttp;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.okhttp.ExceptionHandlingFrameWriter.getLogLevel;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -50,8 +50,7 @@ public class ExceptionHandlingFrameWriterTest {
   private final TransportExceptionHandler transportExceptionHandler =
       mock(TransportExceptionHandler.class);
   private final ExceptionHandlingFrameWriter exceptionHandlingFrameWriter =
-      new ExceptionHandlingFrameWriter(transportExceptionHandler, mockedFrameWriter,
-          new OkHttpFrameLogger(Level.FINE, logger));
+      new ExceptionHandlingFrameWriter(transportExceptionHandler, mockedFrameWriter);
 
   @Test
   public void exception() throws IOException {
@@ -71,18 +70,22 @@ public class ExceptionHandlingFrameWriterTest {
   }
 
   @Test
-  public void quiet() {
+  public void ioException() {
     assertThat(getLogLevel(new IOException("Socket closed"))).isEqualTo(Level.FINE);
   }
 
   @Test
-  public void nonquiet() {
-    assertThat(getLogLevel(new IOException("foo"))).isEqualTo(Level.INFO);
+  public void ioException_nullMessage() {
+    IOException e = new IOException();
+    assertThat(e.getMessage()).isNull();
+    assertThat(getLogLevel(e)).isEqualTo(Level.FINE);
   }
 
   @Test
-  public void nullMessage() {
-    IOException e = new IOException();
+  public void extendedIoException() {
+    class ExtendedIoException extends IOException {}
+
+    ExtendedIoException e = new ExtendedIoException();
     assertThat(e.getMessage()).isNull();
     assertThat(getLogLevel(e)).isEqualTo(Level.INFO);
   }

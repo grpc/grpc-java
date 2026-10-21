@@ -32,3 +32,7 @@ extend ThirdLevelType {
 service ReflectableService {
   rpc Method (Request) returns (Reply) {}
 }
+
+service AnotherReflectableService {
+  rpc Method (Request) returns (Reply) {}
+}

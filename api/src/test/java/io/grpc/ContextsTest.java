@@ -16,20 +16,18 @@
 
 package io.grpc;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.Contexts.interceptCall;
 import static io.grpc.Contexts.statusFromCancelled;
-import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.testing.TestingExecutors;
-import io.grpc.internal.NoopServerCall;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -84,6 +82,11 @@ public class ContextsTest {
         assertSame(uniqueContext, Context.current());
         methodCalls.add(5);
       }
+
+      @Override public void onEvent(Object event) {
+        assertSame(uniqueContext, Context.current());
+        methodCalls.add(6);
+      }
     };
     ServerCall.Listener<Object> wrapped = interceptCall(uniqueContext, call, headers,
         new ServerCallHandler<Object, Object>() {
@@ -103,7 +106,8 @@ public class ContextsTest {
     wrapped.onCancel();
     wrapped.onComplete();
     wrapped.onReady();
-    assertEquals(Arrays.asList(1, 2, 3, 4, 5), methodCalls);
+    wrapped.onEvent(new Object());
+    assertEquals(Arrays.asList(1, 2, 3, 4, 5, 6), methodCalls);
     assertSame(origContext, Context.current());
   }
 
@@ -147,6 +151,10 @@ public class ContextsTest {
       @Override public void onReady() {
         throw new RuntimeException();
       }
+
+      @Override public void onEvent(Object event) {
+        throw new RuntimeException();
+      }
     };
     ServerCall.Listener<Object> wrapped = interceptCall(uniqueContext, call, headers,
         new ServerCallHandler<Object, Object>() {
@@ -179,6 +187,11 @@ public class ContextsTest {
     }
     try {
       wrapped.onReady();
+      fail("Exception expected");
+    } catch (RuntimeException expected) {
+    }
+    try {
+      wrapped.onEvent(new Object());
       fail("Exception expected");
     } catch (RuntimeException expected) {
     }
@@ -240,7 +253,7 @@ public class ContextsTest {
     executorService.command.run();
 
     assertTrue(cancellableContext.isCancelled());
-    assertThat(cancellableContext.cancellationCause(), instanceOf(TimeoutException.class));
+    assertThat(cancellableContext.cancellationCause()).isInstanceOf(TimeoutException.class);
 
     Status status = statusFromCancelled(cancellableContext);
     assertNotNull(status);

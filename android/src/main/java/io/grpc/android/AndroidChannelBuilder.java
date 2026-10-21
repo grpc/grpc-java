@@ -16,33 +16,30 @@
 
 package io.grpc.android;
 
-import android.annotation.TargetApi;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.Network;
-import android.net.NetworkInfo;
-import android.os.Build;
 import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.InlineMe;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
+import io.grpc.InternalManagedChannelProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.ManagedChannelProvider;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.GrpcUtil;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
-import javax.net.ssl.SSLSocketFactory;
 
 /**
  * Builds a {@link ManagedChannel} that, when provided with a {@link Context}, will automatically
@@ -54,123 +51,117 @@ import javax.net.ssl.SSLSocketFactory;
  *
  * @since 1.12.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4056")
 public final class AndroidChannelBuilder extends ForwardingChannelBuilder<AndroidChannelBuilder> {
 
   private static final String LOG_TAG = "AndroidChannelBuilder";
 
-  @Nullable private static final Class<?> OKHTTP_CHANNEL_BUILDER_CLASS = findOkHttp();
+  @Nullable private static final ManagedChannelProvider OKHTTP_CHANNEL_PROVIDER = findOkHttp();
 
-  private static final Class<?> findOkHttp() {
+  private static ManagedChannelProvider findOkHttp() {
+    Class<?> klassRaw;
     try {
-      return Class.forName("io.grpc.okhttp.OkHttpChannelBuilder");
+      klassRaw = Class.forName("io.grpc.okhttp.OkHttpChannelProvider");
     } catch (ClassNotFoundException e) {
+      Log.w(LOG_TAG, "Failed to find OkHttpChannelProvider", e);
       return null;
     }
+    Class<? extends ManagedChannelProvider> klass;
+    try {
+      klass = klassRaw.asSubclass(ManagedChannelProvider.class);
+    } catch (ClassCastException e) {
+      Log.w(LOG_TAG, "Couldn't cast OkHttpChannelProvider to ManagedChannelProvider", e);
+      return null;
+    }
+    ManagedChannelProvider provider;
+    try {
+      provider = klass.getConstructor().newInstance();
+    } catch (Exception e) {
+      Log.w(LOG_TAG, "Failed to construct OkHttpChannelProvider", e);
+      return null;
+    }
+    if (!InternalManagedChannelProvider.isAvailable(provider)) {
+      Log.w(LOG_TAG, "OkHttpChannelProvider.isAvailable() returned false");
+      return null;
+    }
+    return provider;
   }
 
   private final ManagedChannelBuilder<?> delegateBuilder;
 
   @Nullable private Context context;
 
-  public static final AndroidChannelBuilder forTarget(String target) {
+  /**
+   * Creates a new builder with the given target string that will be resolved by
+   * {@link io.grpc.NameResolver}.
+   */
+  public static AndroidChannelBuilder forTarget(String target) {
     return new AndroidChannelBuilder(target);
   }
 
+  /**
+   * Creates a new builder with the given host and port.
+   */
   public static AndroidChannelBuilder forAddress(String name, int port) {
     return forTarget(GrpcUtil.authorityFromHostAndPort(name, port));
   }
 
+  /**
+   * Creates a new builder, which delegates to the given ManagedChannelBuilder.
+   *
+   * @deprecated Use {@link #usingBuilder(ManagedChannelBuilder)} instead.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6043")
+  @Deprecated
+  @InlineMe(
+      replacement = "AndroidChannelBuilder.usingBuilder(builder)",
+      imports = "io.grpc.android.AndroidChannelBuilder")
   public static AndroidChannelBuilder fromBuilder(ManagedChannelBuilder<?> builder) {
+    return usingBuilder(builder);
+  }
+
+  /**
+   * Creates a new builder, which delegates to the given ManagedChannelBuilder.
+   *
+   * <p>The provided {@code builder} becomes "owned" by AndroidChannelBuilder. The caller should
+   * not modify the provided builder and AndroidChannelBuilder may modify it. That implies reusing
+   * the provided builder to build another channel may result with unexpected configurations. That
+   * usage should be discouraged.
+   *
+   * @since 1.24.0
+   */
+  public static AndroidChannelBuilder usingBuilder(ManagedChannelBuilder<?> builder) {
     return new AndroidChannelBuilder(builder);
   }
 
   private AndroidChannelBuilder(String target) {
-    if (OKHTTP_CHANNEL_BUILDER_CLASS == null) {
-      throw new UnsupportedOperationException("No ManagedChannelBuilder found on the classpath");
+    if (OKHTTP_CHANNEL_PROVIDER == null) {
+      throw new UnsupportedOperationException("Unable to load OkHttpChannelProvider");
     }
-    try {
-      delegateBuilder =
-          (ManagedChannelBuilder)
-              OKHTTP_CHANNEL_BUILDER_CLASS
-                  .getMethod("forTarget", String.class)
-                  .invoke(null, target);
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to create ManagedChannelBuilder", e);
-    }
+    delegateBuilder =
+        InternalManagedChannelProvider.builderForTarget(OKHTTP_CHANNEL_PROVIDER, target);
   }
 
   private AndroidChannelBuilder(ManagedChannelBuilder<?> delegateBuilder) {
     this.delegateBuilder = Preconditions.checkNotNull(delegateBuilder, "delegateBuilder");
   }
 
-  /** Enables automatic monitoring of the device's network state. */
+  /**
+   * Enables automatic monitoring of the device's network state.
+   */
   public AndroidChannelBuilder context(Context context) {
     this.context = context;
     return this;
   }
 
-  /**
-   * Set the delegate channel builder's transportExecutor.
-   *
-   * @deprecated Use {@link #fromBuilder(ManagedChannelBuilder)} with a pre-configured
-   *     ManagedChannelBuilder instead.
-   */
-  @Deprecated
-  public AndroidChannelBuilder transportExecutor(@Nullable Executor transportExecutor) {
-    try {
-      OKHTTP_CHANNEL_BUILDER_CLASS
-          .getMethod("transportExecutor", Executor.class)
-          .invoke(delegateBuilder, transportExecutor);
-      return this;
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to invoke transportExecutor on delegate builder", e);
-    }
-  }
-
-  /**
-   * Set the delegate channel builder's sslSocketFactory.
-   *
-   * @deprecated Use {@link #fromBuilder(ManagedChannelBuilder)} with a pre-configured
-   *     ManagedChannelBuilder instead.
-   */
-  @Deprecated
-  public AndroidChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
-    try {
-      OKHTTP_CHANNEL_BUILDER_CLASS
-          .getMethod("sslSocketFactory", SSLSocketFactory.class)
-          .invoke(delegateBuilder, factory);
-      return this;
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to invoke sslSocketFactory on delegate builder", e);
-    }
-  }
-
-  /**
-   * Set the delegate channel builder's scheduledExecutorService.
-   *
-   * @deprecated Use {@link #fromBuilder(ManagedChannelBuilder)} with a pre-configured
-   *     ManagedChannelBuilder instead.
-   */
-  @Deprecated
-  public AndroidChannelBuilder scheduledExecutorService(
-      ScheduledExecutorService scheduledExecutorService) {
-    try {
-      OKHTTP_CHANNEL_BUILDER_CLASS
-          .getMethod("scheduledExecutorService", ScheduledExecutorService.class)
-          .invoke(delegateBuilder, scheduledExecutorService);
-      return this;
-    } catch (Exception e) {
-      throw new RuntimeException(
-          "Failed to invoke scheduledExecutorService on delegate builder", e);
-    }
-  }
-
   @Override
+  @SuppressWarnings("deprecation") // Not extending ForwardingChannelBuilder2 to preserve ABI.
   protected ManagedChannelBuilder<?> delegate() {
     return delegateBuilder;
   }
 
+  /**
+   * Builds a channel with current configurations.
+   */
   @Override
   public ManagedChannel build() {
     return new AndroidChannel(delegateBuilder.build(), context);
@@ -178,7 +169,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
   /**
    * Wraps an OkHttp channel and handles invoking the appropriate methods (e.g., {@link
-   * ManagedChannel#resetConnectBackoff}) when the device network state changes.
+   * ManagedChannel#enterIdle}) when the device network state changes.
    */
   @VisibleForTesting
   static final class AndroidChannel extends ManagedChannel {
@@ -219,12 +210,11 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     private void configureNetworkMonitoring() {
       // Android N added the registerDefaultNetworkCallback API to listen to changes in the device's
       // default network. For earlier Android API levels, use the BroadcastReceiver API.
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && connectivityManager != null) {
+      if (connectivityManager != null) {
         final DefaultNetworkCallback defaultNetworkCallback = new DefaultNetworkCallback();
         connectivityManager.registerDefaultNetworkCallback(defaultNetworkCallback);
         unregisterRunnable =
             new Runnable() {
-              @TargetApi(Build.VERSION_CODES.LOLLIPOP)
               @Override
               public void run() {
                 connectivityManager.unregisterNetworkCallback(defaultNetworkCallback);
@@ -232,12 +222,12 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
             };
       } else {
         final NetworkReceiver networkReceiver = new NetworkReceiver();
+        @SuppressWarnings("deprecation")
         IntentFilter networkIntentFilter =
             new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         context.registerReceiver(networkReceiver, networkIntentFilter);
         unregisterRunnable =
             new Runnable() {
-              @TargetApi(Build.VERSION_CODES.LOLLIPOP)
               @Override
               public void run() {
                 context.unregisterReceiver(networkReceiver);
@@ -314,44 +304,32 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     }
 
     /** Respond to changes in the default network. Only used on API levels 24+. */
-    @TargetApi(Build.VERSION_CODES.N)
     private class DefaultNetworkCallback extends ConnectivityManager.NetworkCallback {
-      // Registering a listener may immediate invoke onAvailable/onLost: the API docs do not specify
-      // if the methods are always invoked once, then again on any change, or only on change. When
-      // onAvailable() is invoked immediately without an actual network change, it's preferable to
-      // (spuriously) resetConnectBackoff() rather than enterIdle(), as the former is a no-op if the
-      // channel has already moved to CONNECTING.
-      private boolean isConnected = false;
-
       @Override
       public void onAvailable(Network network) {
-        if (isConnected) {
-          delegate.enterIdle();
-        } else {
-          delegate.resetConnectBackoff();
-        }
-        isConnected = true;
+        delegate.enterIdle();
       }
 
       @Override
-      public void onLost(Network network) {
-        isConnected = false;
+      public void onBlockedStatusChanged(Network network, boolean blocked) {
+        if (!blocked) {
+          delegate.enterIdle();
+        }
       }
     }
 
     /** Respond to network changes. Only used on API levels < 24. */
     private class NetworkReceiver extends BroadcastReceiver {
-      private boolean isConnected = false;
 
+      @SuppressWarnings("deprecation")
       @Override
       public void onReceive(Context context, Intent intent) {
         ConnectivityManager conn =
             (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = conn.getActiveNetworkInfo();
-        boolean wasConnected = isConnected;
-        isConnected = networkInfo != null && networkInfo.isConnected();
-        if (isConnected && !wasConnected) {
-          delegate.resetConnectBackoff();
+        android.net.NetworkInfo networkInfo = conn.getActiveNetworkInfo();
+
+        if (networkInfo != null && networkInfo.isConnected()) {
+          delegate.enterIdle();
         }
       }
     }

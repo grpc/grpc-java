@@ -16,10 +16,14 @@
 
 package io.grpc.okhttp;
 
+import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
-import io.grpc.internal.GrpcUtil;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
+import java.net.SocketAddress;
+import java.util.Collection;
 
 /**
  * Provider for {@link OkHttpChannelBuilder} instances.
@@ -34,8 +38,7 @@ public final class OkHttpChannelProvider extends ManagedChannelProvider {
 
   @Override
   public int priority() {
-    return (GrpcUtil.IS_RESTRICTED_APPENGINE
-        || InternalServiceProviders.isAndroid(getClass().getClassLoader())) ? 8 : 3;
+    return InternalServiceProviders.isAndroid(getClass().getClassLoader()) ? 8 : 3;
   }
 
   @Override
@@ -46,5 +49,36 @@ public final class OkHttpChannelProvider extends ManagedChannelProvider {
   @Override
   public OkHttpChannelBuilder builderForTarget(String target) {
     return OkHttpChannelBuilder.forTarget(target);
+  }
+
+  @Override
+  public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
+    if (result.error != null) {
+      return NewChannelBuilderResult.error(result.error);
+    }
+    return NewChannelBuilderResult.channelBuilder(new OkHttpChannelBuilder(
+        target, creds, result.callCredentials, result.factory));
+  }
+
+  @Override
+  public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds,
+                                                   NameResolverRegistry nameResolverRegistry,
+                                                   NameResolverProvider nameResolverProvider) {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
+    if (result.error != null) {
+      return NewChannelBuilderResult.error(result.error);
+    }
+    OkHttpChannelBuilder builder = new OkHttpChannelBuilder(
+        target, creds, result.callCredentials, result.factory,
+        nameResolverRegistry, nameResolverProvider);
+    return NewChannelBuilderResult.channelBuilder(builder);
+  }
+
+  @Override
+  protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+    return OkHttpChannelBuilder.getSupportedSocketAddressTypes();
   }
 }

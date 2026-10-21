@@ -195,12 +195,55 @@ public class ServerCallsTest {
     } catch (StatusRuntimeException expected) {
       // Expected
     }
-    try {
-      callObserver.get().onCompleted();
-      fail("Expected cancellation exception when onCallHandler not set");
-    } catch (StatusRuntimeException expected) {
-      // Expected
-    }
+    // No exception
+    callObserver.get().onCompleted();
+  }
+
+  @Test
+  public void onCloseHandlerCalledIfSetInStreamingClientCall() throws Exception {
+    final AtomicBoolean onCloseHandlerCalled = new AtomicBoolean();
+    ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncBidiStreamingCall(
+        new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
+          @Override
+          public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+            ServerCallStreamObserver<Integer> serverCallObserver =
+                (ServerCallStreamObserver<Integer>) responseObserver;
+            serverCallObserver.setOnCloseHandler(new Runnable() {
+              @Override
+              public void run() {
+                onCloseHandlerCalled.set(true);
+              }
+            });
+            return new ServerCalls.NoopStreamObserver<>();
+          }
+        });
+    ServerCall.Listener<Integer> callListener = callHandler.startCall(serverCall, new Metadata());
+    callListener.onComplete();
+    assertTrue(onCloseHandlerCalled.get());
+  }
+
+  @Test
+  public void onCloseHandlerCalledIfSetInUnaryClientCall() throws Exception {
+    final AtomicBoolean onCloseHandlerCalled = new AtomicBoolean();
+    ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncServerStreamingCall(
+        new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
+          @Override
+          public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+            ServerCallStreamObserver<Integer> serverCallObserver =
+                (ServerCallStreamObserver<Integer>) responseObserver;
+            serverCallObserver.setOnCloseHandler(new Runnable() {
+              @Override
+              public void run() {
+                onCloseHandlerCalled.set(true);
+              }
+            });
+          }
+        });
+    ServerCall.Listener<Integer> callListener = callHandler.startCall(serverCall, new Metadata());
+    callListener.onMessage(0);
+    callListener.onHalfClose();
+    callListener.onComplete();
+    assertTrue(onCloseHandlerCalled.get());
   }
 
   @Test
@@ -260,7 +303,32 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void cannotDisableAutoFlowControlAfterServiceInvocation() throws Exception {
+  public void cannotSetOnCloseHandlerAfterServiceInvocation() throws Exception {
+    final AtomicReference<ServerCallStreamObserver<Integer>> callObserver = new AtomicReference<>();
+    ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncBidiStreamingCall(
+        new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
+          @Override
+          public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+            callObserver.set((ServerCallStreamObserver<Integer>) responseObserver);
+            return new ServerCalls.NoopStreamObserver<>();
+          }
+        });
+    ServerCall.Listener<Integer> callListener = callHandler.startCall(serverCall, new Metadata());
+    callListener.onMessage(1);
+    try {
+      callObserver.get().setOnCloseHandler(new Runnable() {
+        @Override
+        public void run() {
+        }
+      });
+      fail("Cannot set onReady after service invocation");
+    } catch (IllegalStateException expected) {
+      // Expected
+    }
+  }
+
+  @Test
+  public void cannotDisableAutoRequestAfterServiceInvocation() throws Exception {
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
         new AtomicReference<>();
     ServerCallHandler<Integer, Integer> callHandler =
@@ -276,7 +344,7 @@ public class ServerCallsTest {
         callHandler.startCall(serverCall, new Metadata());
     callListener.onMessage(1);
     try {
-      callObserver.get().disableAutoInboundFlowControl();
+      callObserver.get().disableAutoRequest();
       fail("Cannot set onCancel handler after service invocation");
     } catch (IllegalStateException expected) {
       // Expected
@@ -292,7 +360,7 @@ public class ServerCallsTest {
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoInboundFlowControl();
+                serverCallObserver.disableAutoRequest();
                 return new ServerCalls.NoopStreamObserver<>();
               }
             });
@@ -307,7 +375,30 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void disablingInboundAutoFlowControlForUnaryHasNoEffect() throws Exception {
+  public void disablingInboundAutoRequestSuppressesRequestsForMoreMessages() throws Exception {
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncBidiStreamingCall(
+            new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
+              @Override
+              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+                ServerCallStreamObserver<Integer> serverCallObserver =
+                    (ServerCallStreamObserver<Integer>) responseObserver;
+                serverCallObserver.disableAutoRequest();
+                return new ServerCalls.NoopStreamObserver<>();
+              }
+            });
+    ServerCall.Listener<Integer> callListener =
+        callHandler.startCall(serverCall, new Metadata());
+    callListener.onReady();
+    // Transport should not call this if nothing has been requested but forcing it here
+    // to verify that message delivery does not trigger a call to request(1).
+    callListener.onMessage(1);
+    // Should never be called
+    assertThat(serverCall.requestCalls).isEmpty();
+  }
+
+  @Test
+  public void disablingInboundAutoRequestForUnaryHasNoEffect() throws Exception {
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncUnaryCall(
             new ServerCalls.UnaryMethod<Integer, Integer>() {
@@ -315,7 +406,7 @@ public class ServerCallsTest {
               public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoInboundFlowControl();
+                serverCallObserver.disableAutoRequest();
               }
             });
     callHandler.startCall(serverCall, new Metadata());
@@ -358,6 +449,31 @@ public class ServerCallsTest {
     // Next on ready event from the transport triggers listener
     callListener.onReady();
     assertEquals(2, onReadyCalled.get());
+  }
+
+  @Test
+  public void setOnReadyThreshold() throws Exception {
+    final int testThreshold = Integer.MAX_VALUE;
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncServerStreamingCall(
+            new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                ServerCallStreamObserver<Integer> serverCallObserver =
+                    (ServerCallStreamObserver<Integer>) responseObserver;
+                serverCallObserver.setOnReadyThreshold(req);
+              }
+            });
+    ServerCall.Listener<Integer> callListener =
+        callHandler.startCall(serverCall, new Metadata());
+    serverCall.isReady = true;
+    serverCall.isCancelled = false;
+    callListener.onReady();
+    callListener.onMessage(testThreshold);
+    // half-closing triggers the unary request delivery and onReady
+    callListener.onHalfClose();
+    
+    assertEquals(testThreshold, serverCall.getOnReadyThreshold());
   }
 
   @Test
@@ -440,6 +556,35 @@ public class ServerCallsTest {
   }
 
   @Test
+  public void clientSendsOne_serverOnErrorWithTrailers_serverStreaming() {
+    Metadata trailers = new Metadata();
+    Metadata.Key<String> key = Metadata.Key.of("trailers-test-key1",
+            Metadata.ASCII_STRING_MARSHALLER);
+    trailers.put(key, "trailers-test-value1");
+
+    ServerCallRecorder serverCall = new ServerCallRecorder(SERVER_STREAMING_METHOD);
+    ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncServerStreamingCall(
+        new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
+          @Override
+          public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+            responseObserver.onError(
+                    Status.fromCode(Status.Code.INTERNAL)
+                            .asRuntimeException(trailers)
+            );
+          }
+        });
+    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
+    serverCall.isReady = true;
+    serverCall.isCancelled = false;
+    listener.onReady();
+    listener.onMessage(1);
+    listener.onHalfClose();
+    // verify trailers key is set
+    assertTrue(serverCall.trailers.containsKey(key));
+    assertTrue(serverCall.status.equals(Status.INTERNAL));
+  }
+
+  @Test
   public void inprocessTransportManualFlow() throws Exception {
     final Semaphore semaphore = new Semaphore(1);
     ServerServiceDefinition service = ServerServiceDefinition.builder(
@@ -498,7 +643,7 @@ public class ServerCallsTest {
     semaphore.acquire();
     clientCall.request(3);
     clientCall.halfClose();
-    latch.await(5, TimeUnit.SECONDS);
+    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
     // Very that number of messages produced in each onReady handler call matches the number
     // requested by the client.
     assertArrayEquals(new int[]{0, 1, 1, 2, 2, 2}, receivedMessages);
@@ -532,11 +677,11 @@ public class ServerCallsTest {
     private final MethodDescriptor<Integer, Integer> methodDescriptor;
     private final List<Integer> requestCalls = new ArrayList<>();
     private final List<Integer> responses = new ArrayList<>();
-    private Metadata headers;
-    private Metadata trailers;
     private Status status;
     private boolean isCancelled;
     private boolean isReady;
+    private int onReadyThreshold;
+    private Metadata trailers;
 
     public ServerCallRecorder(MethodDescriptor<Integer, Integer> methodDescriptor) {
       this.methodDescriptor = methodDescriptor;
@@ -549,7 +694,6 @@ public class ServerCallsTest {
 
     @Override
     public void sendHeaders(Metadata headers) {
-      this.headers = headers;
     }
 
     @Override
@@ -574,8 +718,18 @@ public class ServerCallsTest {
     }
 
     @Override
+    public void setOnReadyThreshold(int numBytes) {
+      super.setOnReadyThreshold(numBytes);
+      onReadyThreshold = numBytes;
+    }
+
+    @Override
     public MethodDescriptor<Integer, Integer> getMethodDescriptor() {
       return methodDescriptor;
+    }
+
+    public int getOnReadyThreshold() {
+      return onReadyThreshold;
     }
   }
 }

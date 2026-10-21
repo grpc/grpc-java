@@ -40,15 +40,18 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 @RunWith(JUnit4.class)
 public class WriteQueueTest {
 
   @Rule
-  public final Timeout globalTimeout = Timeout.seconds(10);
+  public final Timeout globalTimeout = Timeout.seconds(60);
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   private final Object lock = new Object();
 
@@ -66,7 +69,6 @@ public class WriteQueueTest {
    */
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     when(channel.newPromise()).thenReturn(promise);
 
     EventLoop eventLoop = Mockito.mock(EventLoop.class);

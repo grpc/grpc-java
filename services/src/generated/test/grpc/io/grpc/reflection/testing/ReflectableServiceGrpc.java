@@ -1,30 +1,15 @@
 package io.grpc.reflection.testing;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: io/grpc/reflection/testing/reflection_test.proto")
+@io.grpc.stub.annotations.GrpcGenerated
 public final class ReflectableServiceGrpc {
 
   private ReflectableServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.reflection.testing.ReflectableService";
+  public static final java.lang.String SERVICE_NAME = "grpc.reflection.testing.ReflectableService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.reflection.testing.Request,
@@ -41,29 +26,50 @@ public final class ReflectableServiceGrpc {
     if ((getMethodMethod = ReflectableServiceGrpc.getMethodMethod) == null) {
       synchronized (ReflectableServiceGrpc.class) {
         if ((getMethodMethod = ReflectableServiceGrpc.getMethodMethod) == null) {
-          ReflectableServiceGrpc.getMethodMethod = getMethodMethod = 
+          ReflectableServiceGrpc.getMethodMethod = getMethodMethod =
               io.grpc.MethodDescriptor.<io.grpc.reflection.testing.Request, io.grpc.reflection.testing.Reply>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.reflection.testing.ReflectableService", "Method"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Method"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.testing.Request.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.testing.Reply.getDefaultInstance()))
-                  .setSchemaDescriptor(new ReflectableServiceMethodDescriptorSupplier("Method"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ReflectableServiceMethodDescriptorSupplier("Method"))
+              .build();
         }
-     }
-     return getMethodMethod;
+      }
+    }
+    return getMethodMethod;
   }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static ReflectableServiceStub newStub(io.grpc.Channel channel) {
-    return new ReflectableServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceStub>() {
+        @java.lang.Override
+        public ReflectableServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReflectableServiceStub(channel, callOptions);
+        }
+      };
+    return ReflectableServiceStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static ReflectableServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public ReflectableServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReflectableServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return ReflectableServiceBlockingV2Stub.newStub(factory, channel);
   }
 
   /**
@@ -71,7 +77,14 @@ public final class ReflectableServiceGrpc {
    */
   public static ReflectableServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new ReflectableServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceBlockingStub>() {
+        @java.lang.Override
+        public ReflectableServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReflectableServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return ReflectableServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -79,48 +92,52 @@ public final class ReflectableServiceGrpc {
    */
   public static ReflectableServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new ReflectableServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceFutureStub>() {
+        @java.lang.Override
+        public ReflectableServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReflectableServiceFutureStub(channel, callOptions);
+        }
+      };
+    return ReflectableServiceFutureStub.newStub(factory, channel);
   }
 
   /**
    */
-  public static abstract class ReflectableServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      */
-    public void method(io.grpc.reflection.testing.Request request,
+    default void method(io.grpc.reflection.testing.Request request,
         io.grpc.stub.StreamObserver<io.grpc.reflection.testing.Reply> responseObserver) {
-      asyncUnimplementedUnaryCall(getMethodMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getMethodMethod(),
-            asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.reflection.testing.Request,
-                io.grpc.reflection.testing.Reply>(
-                  this, METHODID_METHOD)))
-          .build();
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getMethodMethod(), responseObserver);
     }
   }
 
   /**
+   * Base class for the server implementation of the service ReflectableService.
    */
-  public static final class ReflectableServiceStub extends io.grpc.stub.AbstractStub<ReflectableServiceStub> {
-    private ReflectableServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
+  public static abstract class ReflectableServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
 
-    private ReflectableServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return ReflectableServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service ReflectableService.
+   */
+  public static final class ReflectableServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<ReflectableServiceStub> {
+    private ReflectableServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReflectableServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ReflectableServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ReflectableServiceStub(channel, callOptions);
     }
 
@@ -128,52 +145,72 @@ public final class ReflectableServiceGrpc {
      */
     public void method(io.grpc.reflection.testing.Request request,
         io.grpc.stub.StreamObserver<io.grpc.reflection.testing.Reply> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getMethodMethod(), getCallOptions()), request, responseObserver);
     }
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service ReflectableService.
    */
-  public static final class ReflectableServiceBlockingStub extends io.grpc.stub.AbstractStub<ReflectableServiceBlockingStub> {
-    private ReflectableServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ReflectableServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ReflectableServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<ReflectableServiceBlockingV2Stub> {
+    private ReflectableServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReflectableServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ReflectableServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new ReflectableServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.reflection.testing.Reply method(io.grpc.reflection.testing.Request request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
+          getChannel(), getMethodMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do limited synchronous rpc calls to service ReflectableService.
+   */
+  public static final class ReflectableServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<ReflectableServiceBlockingStub> {
+    private ReflectableServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected ReflectableServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ReflectableServiceBlockingStub(channel, callOptions);
     }
 
     /**
      */
     public io.grpc.reflection.testing.Reply method(io.grpc.reflection.testing.Request request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getMethodMethod(), getCallOptions(), request);
     }
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ReflectableService.
    */
-  public static final class ReflectableServiceFutureStub extends io.grpc.stub.AbstractStub<ReflectableServiceFutureStub> {
-    private ReflectableServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ReflectableServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ReflectableServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<ReflectableServiceFutureStub> {
+    private ReflectableServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReflectableServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ReflectableServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ReflectableServiceFutureStub(channel, callOptions);
     }
 
@@ -181,7 +218,7 @@ public final class ReflectableServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.reflection.testing.Reply> method(
         io.grpc.reflection.testing.Request request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getMethodMethod(), getCallOptions()), request);
     }
   }
@@ -193,10 +230,10 @@ public final class ReflectableServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ReflectableServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ReflectableServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -225,6 +262,18 @@ public final class ReflectableServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getMethodMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.reflection.testing.Request,
+              io.grpc.reflection.testing.Reply>(
+                service, METHODID_METHOD)))
+        .build();
+  }
+
   private static abstract class ReflectableServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     ReflectableServiceBaseDescriptorSupplier() {}
@@ -248,9 +297,9 @@ public final class ReflectableServiceGrpc {
   private static final class ReflectableServiceMethodDescriptorSupplier
       extends ReflectableServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    ReflectableServiceMethodDescriptorSupplier(String methodName) {
+    ReflectableServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

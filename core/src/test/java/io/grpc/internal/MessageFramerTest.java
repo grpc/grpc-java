@@ -23,8 +23,8 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
 import io.grpc.Codec;
 import io.grpc.StreamTracer;
@@ -34,6 +34,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.Locale;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -177,7 +178,7 @@ public class MessageFramerTest {
   @Test
   public void emptyUnknownLengthPayloadYieldsFrame() {
     writeUnknownLength(framer, new byte[0]);
-    verifyZeroInteractions(sink);
+    verifyNoInteractions(sink);
     framer.flush();
     verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 0}), false, true, 1);
     // One alloc for the header
@@ -372,6 +373,8 @@ public class MessageFramerTest {
   }
 
   /**
+   * Verify stats were published through the tracer.
+   *
    * @param sizes in the format {wire0, uncompressed0, wire1, uncompressed1, ...}
    */
   private void checkStats(long... sizes) {
@@ -382,7 +385,8 @@ public class MessageFramerTest {
     for (int i = 0; i < count; i++) {
       assertEquals("outboundMessage(" + i + ")", tracer.nextOutboundEvent());
       assertEquals(
-          String.format("outboundMessageSent(%d, %d, %d)", i, sizes[i * 2], sizes[i * 2 + 1]),
+          String.format(
+              Locale.US, "outboundMessageSent(%d, %d, %d)", i, sizes[i * 2], sizes[i * 2 + 1]),
           tracer.nextOutboundEvent());
       expectedWireSize += sizes[i * 2];
       expectedUncompressedSize += sizes[i * 2 + 1];

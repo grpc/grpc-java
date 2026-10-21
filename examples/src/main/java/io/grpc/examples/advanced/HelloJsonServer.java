@@ -19,8 +19,9 @@ package io.grpc.examples.advanced;
 import static io.grpc.stub.ServerCalls.asyncUnaryCall;
 
 import io.grpc.BindableService;
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -28,6 +29,7 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.ServerCalls.UnaryMethod;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
@@ -49,7 +51,7 @@ public class HelloJsonServer {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         .build()
         .start();
@@ -59,15 +61,19 @@ public class HelloJsonServer {
       public void run() {
         // Use stderr here since the logger may have been reset by its JVM shutdown hook.
         System.err.println("*** shutting down gRPC server since JVM is shutting down");
-        HelloJsonServer.this.stop();
+        try {
+          HelloJsonServer.this.stop();
+        } catch (InterruptedException e) {
+          e.printStackTrace(System.err);
+        }
         System.err.println("*** server shut down");
       }
     });
   }
 
-  private void stop() {
+  private void stop() throws InterruptedException {
     if (server != null) {
-      server.shutdown();
+      server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
     }
   }
 

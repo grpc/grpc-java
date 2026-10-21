@@ -59,7 +59,7 @@ if [ -z "$USERNAME" -o -z "$PASSWORD" ]; then
   exit 1
 fi
 
-STAGING_URL="https://oss.sonatype.org/service/local/staging"
+STAGING_URL="https://ossrh-staging-api.central.sonatype.com/service/local/staging"
 
 # We go through the effort of using deloyByRepositoryId/ because it is
 # _substantially_ faster to upload files than deploy/maven2/. When using
@@ -85,7 +85,7 @@ REPOID="$(
       <description>Release upload</description>
     </data>
   </promoteRequest>"
-  curl -s -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
+  curl -f -s -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
     "$STAGING_URL/profiles/$PROFILE_ID/start" |
   grep stagedRepositoryId |
   sed 's/.*<stagedRepositoryId>\(.*\)<\/stagedRepositoryId>.*/\1/'
@@ -94,7 +94,7 @@ echo "Repository id: $REPOID"
 
 for X in $(cd "$DIR" && find -type f | cut -b 3-); do
   echo "Uploading $X"
-  curl -T "$DIR/$X" -u "$USERPASS" -H "Content-Type: application/octet-stream" \
+  curl --fail-with-body -T "$DIR/$X" -u "$USERPASS" -H "Content-Type: application/octet-stream" \
     "$STAGING_URL/deployByRepositoryId/$REPOID/$X"
 done
 
@@ -106,5 +106,20 @@ XML="
     <description>Auto-close via upload script</description>
   </data>
 </promoteRequest>"
-curl -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
+curl --fail-with-body -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
   "$STAGING_URL/profiles/$PROFILE_ID/finish"
+
+# TODO (okshiva): After 2-3 releases make it automatic.
+# After closing the repository on the staging API, we must manually trigger
+# its upload to the main Central Publisher Portal. We set publishing_type=automatic
+# to have it release automatically upon passing validation.
+# echo "Triggering release of repository ${REPOID} to the Central Portal"
+
+# MANUAL_API_URL="https://ossrh-staging-api.central.sonatype.com/service/local/manual"
+
+#curl --fail-with-body -X POST \
+#  -H "Authorization: Bearer ${USERPASS}" \
+#  -H "Content-Type: application/json" \
+#  "${MANUAL_API_URL}/upload/repository/${REPOID}?publishing_type=automatic"
+
+# echo "Release triggered. Monitor progress at https://central.sonatype.com/publishing/deployments"

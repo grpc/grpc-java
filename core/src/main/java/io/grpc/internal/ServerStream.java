@@ -36,7 +36,7 @@ public interface ServerStream extends Stream {
    *
    * @param headers to send to client.
    */
-  void writeHeaders(Metadata headers);
+  void writeHeaders(Metadata headers, boolean flush);
 
   /**
    * Closes the stream for both reading and writing. A status code of
@@ -88,7 +88,29 @@ public interface ServerStream extends Stream {
   void setListener(ServerStreamListener serverStreamListener);
 
   /**
+   * Triggers a custom event. Implementations must ensure this is propagated to the
+   * listener on the transport thread.
+   */
+  void triggerEvent(Object event);
+
+  /**
    * The context for recording stats and traces for this stream.
    */
   StatsTraceContext statsTraceContext();
+
+  /**
+   * The HTTP/2 stream id, or {@code -1} if not supported.
+   */
+  int streamId();
+
+  /**
+   * A hint to the stream that specifies how many bytes must be queued before
+   * {@link #isReady()} will return false. A stream may ignore this property if
+   * unsupported. This may only be set during stream initialization before
+   * any messages are set.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  void setOnReadyThreshold(int numBytes);
 }

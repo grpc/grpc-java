@@ -16,17 +16,16 @@
 
 package io.grpc.testing.integration;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-import io.grpc.ManagedChannel;
+import io.grpc.Grpc;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.netty.NettyChannelBuilder;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Locale;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.logging.Handler;
@@ -80,7 +79,7 @@ public final class NettyClientInteropServlet extends HttpServlet {
     LogEntryRecorder handler = new LogEntryRecorder();
     Logger.getLogger("").addHandler(handler);
     try {
-      doGetHelper(req, resp);
+      doGetHelper(resp);
     } finally {
       Logger.getLogger("").removeHandler(handler);
     }
@@ -89,7 +88,7 @@ public final class NettyClientInteropServlet extends HttpServlet {
         .append(handler.getLogOutput());
   }
 
-  private void doGetHelper(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+  private void doGetHelper(HttpServletResponse resp) throws IOException {
     resp.setContentType("text/plain");
     PrintWriter writer = resp.getWriter();
     writer.println("Test invoked at: ");
@@ -101,6 +100,7 @@ public final class NettyClientInteropServlet extends HttpServlet {
       resp.setStatus(200);
       writer.println(
           String.format(
+              Locale.US,
               "PASS! Tests ran %d, tests ignored %d",
               result.getRunCount(),
               result.getIgnoreCount()));
@@ -108,6 +108,7 @@ public final class NettyClientInteropServlet extends HttpServlet {
       resp.setStatus(500);
       writer.println(
           String.format(
+              Locale.US,
               "FAILED! Tests ran %d, tests failed %d, tests ignored %d",
               result.getRunCount(),
               result.getFailureCount(),
@@ -126,17 +127,13 @@ public final class NettyClientInteropServlet extends HttpServlet {
 
   public static final class Tester extends AbstractInteropTest {
     @Override
-    protected ManagedChannel createChannel() {
-      assertEquals(
-          "jdk8 required",
-          "1.8",
-          System.getProperty("java.specification.version"));
+    protected ManagedChannelBuilder<?> createChannelBuilder() {
       ManagedChannelBuilder<?> builder =
-          ManagedChannelBuilder.forTarget(INTEROP_TEST_ADDRESS)
+          Grpc.newChannelBuilder(INTEROP_TEST_ADDRESS, TlsChannelCredentials.create())
               .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-      assertTrue(builder instanceof NettyChannelBuilder);
-      ((NettyChannelBuilder) builder).flowControlWindow(65 * 1024);
-      return builder.build();
+      ((NettyChannelBuilder) builder)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
+      return builder;
     }
 
     @Override

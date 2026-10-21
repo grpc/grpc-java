@@ -17,6 +17,7 @@
 package io.grpc.alts.internal;
 
 import com.google.common.base.Preconditions;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.GeneralSecurityException;
@@ -63,10 +64,10 @@ public final class AltsFraming {
     }
     Producer producer = new Producer();
     ByteBuffer inputAlias = input.duplicate();
-    inputAlias.limit(input.position() + dataSize);
+    ((Buffer) inputAlias).limit(input.position() + dataSize);
     producer.readBytes(inputAlias);
     producer.flush();
-    input.position(inputAlias.position());
+    ((Buffer) input).position(inputAlias.position());
     ByteBuffer output = producer.getRawFrame();
     return output;
   }
@@ -166,10 +167,10 @@ public final class AltsFraming {
       int frameLength = buffer.position() + getFrameSuffixLength();
 
       // Set the limit and move to the start.
-      buffer.flip();
+      ((Buffer) buffer).flip();
 
       // Advance the limit to allow a crypto suffix.
-      buffer.limit(buffer.limit() + getFrameSuffixLength());
+      ((Buffer) buffer).limit(buffer.limit() + getFrameSuffixLength());
 
       // Write the data length and the message type.
       int dataLength = frameLength - FRAME_LENGTH_HEADER_SIZE;
@@ -178,17 +179,17 @@ public final class AltsFraming {
       buffer.putInt(MESSAGE_TYPE);
 
       // Move the position back to 0, the frame is ready.
-      buffer.position(0);
+      ((Buffer) buffer).position(0);
       isComplete = true;
     }
 
     /** Resets the state, preparing to construct a new frame. Must be called between frames. */
     private void reset() {
-      buffer.clear();
+      ((Buffer) buffer).clear();
 
       // Save some space for framing, we'll fill that in later.
-      buffer.position(getFramePrefixLength());
-      buffer.limit(buffer.limit() - getFrameSuffixLength());
+      ((Buffer) buffer).position(getFramePrefixLength());
+      ((Buffer) buffer).limit(buffer.limit() - getFrameSuffixLength());
 
       isComplete = false;
     }
@@ -279,7 +280,7 @@ public final class AltsFraming {
       // internal buffer is large enough.
       if (buffer.position() == FRAME_LENGTH_HEADER_SIZE && input.hasRemaining()) {
         ByteBuffer bufferAlias = buffer.duplicate();
-        bufferAlias.flip();
+        ((Buffer) bufferAlias).flip();
         bufferAlias.order(ByteOrder.LITTLE_ENDIAN);
         int dataLength = bufferAlias.getInt();
         if (dataLength < FRAME_MESSAGE_TYPE_HEADER_SIZE || dataLength > MAX_DATA_LENGTH) {
@@ -292,7 +293,7 @@ public final class AltsFraming {
           buffer.order(ByteOrder.LITTLE_ENDIAN);
           buffer.putInt(dataLength);
         }
-        buffer.limit(frameLength);
+        ((Buffer) buffer).limit(frameLength);
       }
 
       // TODO: Similarly extract and check message type.
@@ -300,7 +301,7 @@ public final class AltsFraming {
       // Read the remaining data into the internal buffer.
       copy(buffer, input);
       if (!buffer.hasRemaining()) {
-        buffer.flip();
+        ((Buffer) buffer).flip();
         isComplete = true;
       }
       return isComplete;
@@ -323,7 +324,7 @@ public final class AltsFraming {
 
     /** Resets the state, preparing to parse a new frame. Must be called between frames. */
     private void reset() {
-      buffer.clear();
+      ((Buffer) buffer).clear();
       isComplete = false;
     }
 
@@ -356,9 +357,9 @@ public final class AltsFraming {
       } else {
         int count = Math.min(dst.remaining(), src.remaining());
         ByteBuffer slice = src.slice();
-        slice.limit(count);
+        ((Buffer) slice).limit(count);
         dst.put(slice);
-        src.position(src.position() + count);
+        ((Buffer) src).position(src.position() + count);
       }
     }
   }

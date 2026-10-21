@@ -48,6 +48,11 @@ abstract class ForwardingClientStream implements ClientStream {
   }
 
   @Override
+  public void optimizeForDirectExecutor() {
+    delegate().optimizeForDirectExecutor();
+  }
+
+  @Override
   public void setCompressor(Compressor compressor) {
     delegate().setCompressor(compressor);
   }
@@ -110,5 +115,10 @@ abstract class ForwardingClientStream implements ClientStream {
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
+  }
+
+  @Override
+  public void appendTimeoutInsight(InsightBuilder insight) {
+    delegate().appendTimeoutInsight(insight);
   }
 }

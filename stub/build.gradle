@@ -1,10 +1,40 @@
-description = "gRPC: Stub"
-dependencies {
-    compile project(':grpc-api')
-    testCompile libraries.truth,
-            project(':grpc-testing')
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
 }
 
-javadoc.options.links "https://google.github.io/guava/releases/${guavaVersion}/api/docs/"
+description = "gRPC: Stub"
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.stub')
+    }
+}
+
+dependencies {
+    api project(':grpc-api'),
+        libraries.animalsniffer.annotations,
+        libraries.guava
+    implementation libraries.errorprone.annotations
+    testImplementation libraries.truth,
+            project(':grpc-inprocess'),
+            project(':grpc-testing'),
+            testFixtures(project(':grpc-api'))
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}
+
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/stub/Internal*'
+}

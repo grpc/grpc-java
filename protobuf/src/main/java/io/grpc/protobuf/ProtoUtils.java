@@ -18,7 +18,6 @@ package io.grpc.protobuf;
 
 import com.google.protobuf.ExtensionRegistry;
 import com.google.protobuf.Message;
-import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
@@ -43,7 +42,6 @@ public final class ProtoUtils {
    *
    * @since 1.16.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1787")
   public static void setExtensionRegistry(ExtensionRegistry registry) {
     ProtoLiteUtils.setExtensionRegistry(registry);
   }
@@ -55,6 +53,18 @@ public final class ProtoUtils {
    */
   public static <T extends Message> Marshaller<T> marshaller(final T defaultInstance) {
     return ProtoLiteUtils.marshaller(defaultInstance);
+  }
+
+  /**
+   * Creates a {@link Marshaller} for protos of the same type as {@code defaultInstance} and a
+   * custom limit for the recursion depth. Any negative number will leave the limit as its default
+   * value as defined by the protobuf library.
+   *
+   * @since 1.56.0
+   */
+  public static <T extends Message> Marshaller<T> marshallerWithRecursionLimit(T defaultInstance,
+      int recursionLimit) {
+    return ProtoLiteUtils.marshallerWithRecursionLimit(defaultInstance, recursionLimit);
   }
 
   /**
@@ -70,10 +80,9 @@ public final class ProtoUtils {
 
   /**
    * Produce a metadata marshaller for a protobuf type.
-   * 
+   *
    * @since 1.13.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4477")
   public static <T extends Message> Metadata.BinaryMarshaller<T> metadataMarshaller(T instance) {
     return ProtoLiteUtils.metadataMarshaller(instance);
   }

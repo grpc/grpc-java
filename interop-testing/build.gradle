@@ -1,118 +1,185 @@
-apply plugin: 'application'
+plugins {
+    id "application"
+    id "java-library"
+    id "maven-publish"
 
-description = "gRPC: Integration Testing"
-startScripts.enabled = false
-
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
+description = "gRPC: Integration Testing"
+
 dependencies {
-    compile project(':grpc-alts'),
+    implementation project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'),
-            project(':grpc-core'),
+            project(':grpc-census'),
+            project(':grpc-opentelemetry'),
+            project(':grpc-gcp-csm-observability'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
-            project(':grpc-protobuf'),
-            project(':grpc-stub'),
+            project(':grpc-services'),
             project(':grpc-testing'),
-            libraries.google_auth_oauth2_http,
-            libraries.junit,
-            libraries.truth
-    compileOnly libraries.javax_annotation
-    runtime libraries.opencensus_impl,
-            libraries.netty_tcnative,
-            project(':grpc-grpclb')
-    testCompile project(':grpc-context').sourceSets.test.output,
-            libraries.mockito
+            project(':grpc-protobuf-lite'),
+            project(path: ':grpc-xds', configuration: 'shadow'),
+            libraries.hdrhistogram,
+            libraries.truth,
+            libraries.opencensus.contrib.grpc.metrics,
+            libraries.google.auth.oauth2Http,
+            libraries.opentelemetry.sdk.extension.autoconfigure,
+            libraries.opentelemetry.exporter.otlp,
+            libraries.guava.jre // Fix checkUpperBoundDeps using -android
+    api project(':grpc-api'),
+            project(':grpc-stub'),
+            project(':grpc-protobuf'),
+            libraries.junit
+    // TODO(sergiitk): replace with com.google.cloud:google-cloud-logging
+    // Used instead of google-cloud-logging because it's failing
+    // due to a circular dependency on grpc.
+    // https://cloud.google.com/logging/docs/setup/java#the_javautillogging_handler
+    // Error example: "java.util.logging.ErrorManager: 1"
+    // Latest failing version com.google.cloud:google-cloud-logging:2.1.2
+    runtimeOnly group: 'io.github.devatherock', name: 'jul-jsonformatter', version: '1.1.0'
+    runtimeOnly libraries.opencensus.impl,
+            libraries.netty.tcnative,
+            libraries.netty.tcnative.classes,
+            libraries.opentelemetry.exporter.prometheus, // For xds interop client
+            project(':grpc-googleapis'),
+            project(':grpc-grpclb'),
+            project(':grpc-rls')
+    testImplementation testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-core')),
+            project(':grpc-inprocess'),
+            project(':grpc-core'),
+            libraries.mockito.core,
+            libraries.okhttp
+
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-compileJava {
+tasks.named("compileJava").configure {
     // This isn't a library; it can use beta APIs
     options.errorprone.check("BetaApi", CheckSeverity.OFF)
-}
-
-test {
-    // For the automated tests, use Jetty ALPN.
-    jvmArgs "-javaagent:" + configurations.alpnagent.asPath
 }
 
 // For the generated scripts, use Netty tcnative (i.e. OpenSSL).
 // Note that OkHttp currently only supports ALPN, so OpenSSL version >= 1.0.2 is required.
 
-task test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.TestServiceClient"
+def test_client = tasks.register("test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.TestServiceClient"
     applicationName = "test-client"
-    defaultJvmOpts = [
-        "-javaagent:JAVAAGENT_APP_HOME" + configurations.alpnagent.singleFile.name
-    ]
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
-    dependencies { runtime configurations.alpnagent }
-    doLast {
-        unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\$APP_HOME/lib/')
-        windowsScript.text = windowsScript.text.replace('JAVAAGENT_APP_HOME', '%APP_HOME%\\lib\\')
-    }
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
-task test_server(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.TestServiceServer"
+def test_server = tasks.register("test_server", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.TestServiceServer"
     applicationName = "test-server"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
-task reconnect_test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.ReconnectTestClient"
+def reconnect_test_client = tasks.register("reconnect_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.ReconnectTestClient"
     applicationName = "reconnect-test-client"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
-task stresstest_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.StressTestClient"
+def stresstest_client = tasks.register("stresstest_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.StressTestClient"
     applicationName = "stresstest-client"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
     defaultJvmOpts = [
         "-verbose:gc",
         "-XX:+PrintFlagsFinal"
     ]
 }
 
-task http2_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.Http2Client"
+def http2_client = tasks.register("http2_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.Http2Client"
     applicationName = "http2-client"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
-task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
+def grpclb_long_lived_affinity_test_client = tasks.register("grpclb_long_lived_affinity_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
     applicationName = "grpclb-long-lived-affinity-test-client"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
     defaultJvmOpts = [
-        "-Dio.grpc.internal.DnsNameResolverProvider.enable_grpclb=true",
         "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
     ]
 }
 
-applicationDistribution.into("bin") {
-    from(test_client)
-    from(test_server)
-    from(reconnect_test_client)
-    from(stresstest_client)
-    from(http2_client)
-    from(grpclb_long_lived_affinity_test_client)
-    fileMode = 0755
+def grpclb_fallback_test_client = tasks.register("grpclb_fallback_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.GrpclbFallbackTestClient"
+    applicationName = "grpclb-fallback-test-client"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+    defaultJvmOpts = [
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
+    ]
+}
+
+def xds_test_client = tasks.register("xds_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.XdsTestClient"
+    applicationName = "xds-test-client"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+def xds_test_server = tasks.register("xds_test_server", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.XdsTestServer"
+    applicationName = "xds-test-server"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+def xds_federation_test_client = tasks.register("xds_federation_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.XdsFederationTestClient"
+    applicationName = "xds-federation-test-client"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+application {
+    applicationDistribution.into("bin") {
+        from(test_client)
+        from(test_server)
+        from(reconnect_test_client)
+        from(stresstest_client)
+        from(http2_client)
+        from(grpclb_long_lived_affinity_test_client)
+        from(grpclb_fallback_test_client)
+        from(xds_test_client)
+        from(xds_test_server)
+        from(xds_federation_test_client)
+        filePermissions {
+            unix(0755)
+        }
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            artifact distZip
+            artifact distTar
+        }
+    }
 }

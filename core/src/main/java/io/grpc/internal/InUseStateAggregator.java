@@ -16,7 +16,9 @@
 
 package io.grpc.internal;
 
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -25,7 +27,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 @NotThreadSafe
 public abstract class InUseStateAggregator<T> {
 
-  private final HashSet<T> inUseObjects = new HashSet<>();
+  private final Set<T> inUseObjects = Collections.newSetFromMap(new IdentityHashMap<T,Boolean>());
 
   /**
    * Update the in-use state of an object. Initially no object is in use.
@@ -49,6 +51,21 @@ public abstract class InUseStateAggregator<T> {
 
   public final boolean isInUse() {
     return !inUseObjects.isEmpty();
+  }
+
+  /**
+   * Returns {@code true} if any of the given objects are in use.
+   *
+   * @param objects The objects to consider.
+   * @return {@code true} if any of the given objects are in use.
+   */
+  public final boolean anyObjectInUse(Object... objects) {
+    for (Object object : objects) {
+      if (inUseObjects.contains(object)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

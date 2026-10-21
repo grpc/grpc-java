@@ -25,45 +25,34 @@ import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
 import io.grpc.okhttp.internal.framed.Settings;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import okio.Buffer;
 import okio.ByteString;
 
+/**
+ * FrameWriter that propagates IOExceptions via callback instead of throwing. This allows
+ * centralized handling of errors. Exceptions only impact the single call that throws them; callers
+ * should be sure to kill the connection after an exception (potentially after sending a GOAWAY) as
+ * otherwise additional frames after the failed/omitted one could cause HTTP/2 confusion.
+ */
 final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
-
-  // Some exceptions are not very useful and add too much noise to the log
-  private static final Set<String> QUIET_ERRORS =
-      Collections.unmodifiableSet(new HashSet<>(Arrays.asList("Socket closed")));
 
   private final TransportExceptionHandler transportExceptionHandler;
 
   private final FrameWriter frameWriter;
 
-  private final OkHttpFrameLogger frameLogger;
+  private final OkHttpFrameLogger frameLogger =
+      new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class);
 
   ExceptionHandlingFrameWriter(
       TransportExceptionHandler transportExceptionHandler, FrameWriter frameWriter) {
-    this(transportExceptionHandler, frameWriter,
-        new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class));
-  }
-
-  @VisibleForTesting
-  ExceptionHandlingFrameWriter(
-      TransportExceptionHandler transportExceptionHandler,
-      FrameWriter frameWriter,
-      OkHttpFrameLogger frameLogger) {
     this.transportExceptionHandler =
         checkNotNull(transportExceptionHandler, "transportExceptionHandler");
     this.frameWriter = Preconditions.checkNotNull(frameWriter, "frameWriter");
-    this.frameLogger = Preconditions.checkNotNull(frameLogger, "frameLogger");
   }
 
   @Override
@@ -231,9 +220,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
    */
   @VisibleForTesting
   static Level getLogLevel(Throwable t) {
-    if (t instanceof IOException
-        && t.getMessage() != null
-        && QUIET_ERRORS.contains(t.getMessage())) {
+    if (t.getClass().equals(IOException.class)) {
       return Level.FINE;
     }
     return Level.INFO;

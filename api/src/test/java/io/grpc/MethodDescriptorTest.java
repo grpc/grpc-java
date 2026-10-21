@@ -26,9 +26,7 @@ import static org.junit.Assert.assertTrue;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.testing.TestMethodDescriptors;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -37,9 +35,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class MethodDescriptorTest {
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
-
   @Test
   public void createMethodDescriptor() {
     MethodDescriptor<String, String> descriptor = MethodDescriptor.<String, String>newBuilder()
@@ -66,7 +61,7 @@ public class MethodDescriptorTest {
 
     assertFalse(descriptor.isIdempotent());
 
-    // Create a new desriptor by setting idempotent to true
+    // Create a new descriptor by setting idempotent to true
     MethodDescriptor<String, String> newDescriptor =
         descriptor.toBuilder().setIdempotent(true).build();
     assertTrue(newDescriptor.isIdempotent());
@@ -85,12 +80,28 @@ public class MethodDescriptorTest {
         .build();
     assertFalse(descriptor.isSafe());
 
-    // Create a new desriptor by setting safe to true
+    // Create a new descriptor by setting safe to true
     MethodDescriptor<String, String> newDescriptor = descriptor.toBuilder().setSafe(true).build();
     assertTrue(newDescriptor.isSafe());
     // All other fields should staty the same
     assertEquals(MethodType.UNARY, newDescriptor.getType());
     assertEquals("package.service/method", newDescriptor.getFullMethodName());
+  }
+
+  @Test
+  public void safeImpliesIdempotent() {
+    MethodDescriptor<String, String> descriptor = MethodDescriptor.<String, String>newBuilder()
+        .setType(MethodType.UNARY)
+        .setFullMethodName("package.service/method")
+        .setRequestMarshaller(new StringMarshaller())
+        .setResponseMarshaller(new StringMarshaller())
+        .setSafe(true)
+        .build();
+    assertTrue(descriptor.isSafe());
+    assertTrue(descriptor.isIdempotent());
+    descriptor = descriptor.toBuilder().setIdempotent(false).build();
+    assertFalse(descriptor.isSafe());
+    assertFalse(descriptor.isIdempotent());
   }
 
   @Test
@@ -102,8 +113,9 @@ public class MethodDescriptorTest {
         .setResponseMarshaller(new StringMarshaller())
         .build();
 
-    thrown.expect(IllegalArgumentException.class);
-    MethodDescriptor<String, String> unused = descriptor.toBuilder().setSafe(true).build();
+    // Verify it does not throw
+    MethodDescriptor<String, String> newDescriptor = descriptor.toBuilder().setSafe(true).build();
+    assertTrue(newDescriptor.isSafe());
   }
 
   @Test
@@ -158,6 +170,39 @@ public class MethodDescriptorTest {
         .build();
 
     assertNull(md.getServiceName());
+  }
+
+  @Test
+  public void getBareMethodName_extractsMethod() {
+    Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
+    MethodDescriptor<?, ?> md = MethodDescriptor.newBuilder(marshaller, marshaller)
+        .setType(MethodType.UNARY)
+        .setFullMethodName("foo/bar")
+        .build();
+
+    assertEquals("bar", md.getBareMethodName());
+  }
+
+  @Test
+  public void getBareMethodName_returnsNull() {
+    Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
+    MethodDescriptor<?, ?> md = MethodDescriptor.newBuilder(marshaller, marshaller)
+        .setType(MethodType.UNARY)
+        .setFullMethodName("foo-bar")
+        .build();
+
+    assertNull(md.getBareMethodName());
+  }
+
+  @Test
+  public void getBareMethodName_returnsEmptyStringWithMethodMissing() {
+    Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
+    MethodDescriptor<?, ?> md = MethodDescriptor.newBuilder(marshaller, marshaller)
+        .setType(MethodType.UNARY)
+        .setFullMethodName("foo/")
+        .build();
+
+    assertTrue(md.getBareMethodName().isEmpty());
   }
 
   @Test

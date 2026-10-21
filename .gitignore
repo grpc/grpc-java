@@ -15,10 +15,14 @@ bazel-genfiles
 bazel-grpc-java
 bazel-out
 bazel-testlogs
+MODULE.bazel.lock
 
 # IntelliJ IDEA
 .idea
 *.iml
+*.ipr
+*.iws
+.ijwb
 
 # Eclipse
 .classpath
@@ -27,9 +31,18 @@ bazel-testlogs
 .gitignore
 bin
 
+# VsCode
+.vscode
+
 # OS X
 .DS_Store
 
 # Emacs
 *~
 \#*\#
+
+# ARM tests
+qemu-arm-static
+
+# Temporary output dir for artifacts
+mvn-artifacts

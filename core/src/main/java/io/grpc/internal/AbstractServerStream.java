@@ -41,7 +41,7 @@ public abstract class AbstractServerStream extends AbstractStream
      *
      * @param headers the headers to be sent to client.
      */
-    void writeHeaders(Metadata headers);
+    void writeHeaders(Metadata headers, boolean flush);
 
     /**
      * Sends an outbound frame to the remote end point.
@@ -50,7 +50,7 @@ public abstract class AbstractServerStream extends AbstractStream
      * @param flush {@code true} if more data may not be arriving soon
      * @param numMessages the number of messages this frame represents
      */
-    void writeFrame(@Nullable WritableBuffer frame, boolean flush, int numMessages);
+    void writeFrame(WritableBuffer frame, boolean flush, int numMessages);
 
     /**
      * Sends trailers to the remote end point. This call implies end of stream.
@@ -60,12 +60,6 @@ public abstract class AbstractServerStream extends AbstractStream
      * @param status the status that the call ended with
      */
     void writeTrailers(Metadata trailers, boolean headersSent, Status status);
-
-    /**
-     * Requests up to the given number of messages from the call to be delivered. This should end up
-     * triggering {@link TransportState#requestMessagesFromDeframer(int)} on the transport thread.
-     */
-    void request(int numMessages);
 
     /**
      * Tears down the stream, typically in the event of a timeout. This method may be called
@@ -81,10 +75,11 @@ public abstract class AbstractServerStream extends AbstractStream
   private boolean outboundClosed;
   private boolean headersSent;
 
+  @SuppressWarnings("this-escape")
   protected AbstractServerStream(
       WritableBufferAllocator bufferAllocator, StatsTraceContext statsTraceCtx) {
     this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
-    framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
+    this.framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
   }
 
   @Override
@@ -102,16 +97,11 @@ public abstract class AbstractServerStream extends AbstractStream
   }
 
   @Override
-  public final void request(int numMessages) {
-    abstractServerStreamSink().request(numMessages);
-  }
-
-  @Override
-  public final void writeHeaders(Metadata headers) {
+  public final void writeHeaders(Metadata headers, boolean flush) {
     Preconditions.checkNotNull(headers, "headers");
 
     headersSent = true;
-    abstractServerStreamSink().writeHeaders(headers);
+    abstractServerStreamSink().writeHeaders(headers, flush);
   }
 
   @Override
@@ -119,7 +109,14 @@ public abstract class AbstractServerStream extends AbstractStream
       WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages) {
     // Since endOfStream is triggered by the sending of trailers, avoid flush here and just flush
     // after the trailers.
-    abstractServerStreamSink().writeFrame(frame, endOfStream ? false : flush, numMessages);
+    if (frame == null) {
+      assert endOfStream;
+      return;
+    }
+    if (endOfStream) {
+      flush = false;
+    }
+    abstractServerStreamSink().writeFrame(frame, flush, numMessages);
   }
 
   @Override
@@ -177,12 +174,35 @@ public abstract class AbstractServerStream extends AbstractStream
   }
 
   @Override
+  public final void triggerEvent(final Object event) {
+    transportState().runOnTransportThread(new Runnable() {
+      @Override
+      public void run() {
+        transportState().triggerEvent(event);
+      }
+    });
+  }
+
+  @Override
   public StatsTraceContext statsTraceContext() {
     return statsTraceCtx;
   }
 
   /**
-   * This should only called from the transport thread (except for private interactions with
+   * A hint to the stream that specifies how many bytes must be queued before
+   * {@link #isReady()} will return false. A stream may ignore this property
+   * if unsupported. This may only be set before any messages are sent.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  @Override
+  public void setOnReadyThreshold(int numBytes) {
+    super.setOnReadyThreshold(numBytes);
+  }
+
+  /**
+   * This should only be called from the transport thread (except for private interactions with
    * {@code AbstractServerStream}).
    */
   protected abstract static class TransportState extends AbstractStream.TransportState {
@@ -228,8 +248,8 @@ public abstract class AbstractServerStream extends AbstractStream
     @Override
     public void deframerClosed(boolean hasPartialMessage) {
       deframerClosed = true;
-      if (endOfStream) {
-        if (!immediateCloseRequested && hasPartialMessage) {
+      if (endOfStream && !immediateCloseRequested) {
+        if (hasPartialMessage) {
           // We've received the entire stream and have data available but we don't have
           // enough to read the next frame ... this is bad.
           deframeFailed(
@@ -245,6 +265,15 @@ public abstract class AbstractServerStream extends AbstractStream
         deframerClosedTask.run();
         deframerClosedTask = null;
       }
+    }
+
+
+
+    public final void triggerEvent(Object event) {
+      if (listenerClosed) {
+        return;
+      }
+      listener().triggerEvent(event);
     }
 
     @Override
@@ -282,6 +311,7 @@ public abstract class AbstractServerStream extends AbstractStream
      */
     public final void transportReportStatus(final Status status) {
       Preconditions.checkArgument(!status.isOk(), "status must not be OK");
+      onStreamDeallocated();
       if (deframerClosed) {
         deframerClosedTask = null;
         closeListener(status);
@@ -304,6 +334,7 @@ public abstract class AbstractServerStream extends AbstractStream
      * #transportReportStatus}.
      */
     public void complete() {
+      onStreamDeallocated();
       if (deframerClosed) {
         deframerClosedTask = null;
         closeListener(Status.OK);
@@ -339,7 +370,6 @@ public abstract class AbstractServerStream extends AbstractStream
           getTransportTracer().reportStreamClosed(closedStatus.isOk());
         }
         listenerClosed = true;
-        onStreamDeallocated();
         listener().closed(newStatus);
       }
     }

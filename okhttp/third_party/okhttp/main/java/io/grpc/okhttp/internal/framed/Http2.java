@@ -19,9 +19,11 @@
 
 package io.grpc.okhttp.internal.framed;
 
+import com.google.errorprone.annotations.FormatMethod;
 import io.grpc.okhttp.internal.Protocol;
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Logger;
 
 import okio.Buffer;
@@ -218,7 +220,7 @@ public final class Http2 implements Variant {
       return hpackReader.getAndResetHeaderList();
     }
 
-    private void readData(Handler handler, int length, byte flags, int streamId)
+    private void readData(Handler handler, int paddedLength, byte flags, int streamId)
         throws IOException {
       // TODO: checkState open or half-closed (local) or raise STREAM_CLOSED
       boolean inFinished = (flags & FLAG_END_STREAM) != 0;
@@ -228,13 +230,15 @@ public final class Http2 implements Variant {
       }
 
       short padding = (flags & FLAG_PADDED) != 0 ? (short) (source.readByte() & 0xff) : 0;
-      length = lengthWithoutPadding(length, flags, padding);
+      int length = lengthWithoutPadding(paddedLength, flags, padding);
 
-      handler.data(inFinished, streamId, source, length);
+      // FIXME: pass padding length to handler because it should be included for flow control
+      handler.data(inFinished, streamId, source, length, paddedLength);
       source.skip(padding);
     }
 
-    private void readPriority(Handler handler, int length, byte flags, int streamId)
+    private void readPriority(
+        Handler handler, int length, @SuppressWarnings("UnusedVariable") byte flags, int streamId)
         throws IOException {
       if (length != 5) throw ioException("TYPE_PRIORITY length: %d != 5", length);
       if (streamId == 0) throw ioException("TYPE_PRIORITY streamId == 0");
@@ -249,7 +253,8 @@ public final class Http2 implements Variant {
       handler.priority(streamId, streamDependency, weight, exclusive);
     }
 
-    private void readRstStream(Handler handler, int length, byte flags, int streamId)
+    private void readRstStream(
+        Handler handler, int length, @SuppressWarnings("UnusedVariable") byte flags, int streamId)
         throws IOException {
       if (length != 4) throw ioException("TYPE_RST_STREAM length: %d != 4", length);
       if (streamId == 0) throw ioException("TYPE_RST_STREAM streamId == 0");
@@ -335,7 +340,8 @@ public final class Http2 implements Variant {
       handler.ping(ack, payload1, payload2);
     }
 
-    private void readGoAway(Handler handler, int length, byte flags, int streamId)
+    private void readGoAway(
+        Handler handler, int length, @SuppressWarnings("UnusedVariable") byte flags, int streamId)
         throws IOException {
       if (length < 8) throw ioException("TYPE_GOAWAY length < 8: %s", length);
       if (streamId != 0) throw ioException("TYPE_GOAWAY streamId != 0");
@@ -353,11 +359,12 @@ public final class Http2 implements Variant {
       handler.goAway(lastStreamId, errorCode, debugData);
     }
 
-    private void readWindowUpdate(Handler handler, int length, byte flags, int streamId)
+    private void readWindowUpdate(
+        Handler handler, int length, @SuppressWarnings("UnusedVariable") byte flags, int streamId)
         throws IOException {
       if (length != 4) throw ioException("TYPE_WINDOW_UPDATE length !=4: %s", length);
       long increment = (source.readInt() & 0x7fffffffL);
-      if (increment == 0) throw ioException("windowSizeIncrement was 0", increment);
+      if (increment == 0) throw ioException("windowSizeIncrement was 0");
       handler.windowUpdate(streamId, increment);
     }
 
@@ -582,12 +589,14 @@ public final class Http2 implements Variant {
     }
   }
 
+  @FormatMethod
   private static IllegalArgumentException illegalArgument(String message, Object... args) {
-    throw new IllegalArgumentException(format(message, args));
+    throw new IllegalArgumentException(format(Locale.US, message, args));
   }
 
+  @FormatMethod
   private static IOException ioException(String message, Object... args) throws IOException {
-    throw new IOException(format(message, args));
+    throw new IOException(format(Locale.US, message, args));
   }
 
   /**
@@ -676,7 +685,7 @@ public final class Http2 implements Variant {
     static String formatHeader(boolean inbound, int streamId, int length, byte type, byte flags) {
       String formattedType = type < TYPES.length ? TYPES[type] : format("0x%02x", type);
       String formattedFlags = formatFlags(type, flags);
-      return format("%s 0x%08x %5d %-13s %s", inbound ? "<<" : ">>", streamId, length,
+      return format(Locale.US, "%s 0x%08x %5d %-13s %s", inbound ? "<<" : ">>", streamId, length,
           formattedType, formattedFlags);
     }
 

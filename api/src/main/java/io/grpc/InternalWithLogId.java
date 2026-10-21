@@ -28,7 +28,7 @@ public interface InternalWithLogId {
    * numeric ID that is unique among the instances.
    *
    * <p>The subclasses of this interface usually want to include the log ID in their {@link
-   * #toString} results.
+   * Object#toString} results.
    */
   InternalLogId getLogId();
 }

@@ -19,16 +19,20 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -44,12 +48,27 @@ public final class NameResolverRegistry {
   private static NameResolverRegistry instance;
 
   private final NameResolver.Factory factory = new NameResolverFactory();
+  private static final String UNKNOWN_SCHEME = "unknown";
+  @GuardedBy("this")
+  private String defaultScheme = UNKNOWN_SCHEME;
 
   @GuardedBy("this")
   private final LinkedHashSet<NameResolverProvider> allProviders = new LinkedHashSet<>();
-  /** Immutable, sorted version of {@code allProviders}. Is replaced instead of mutating. */
+  /** Generated from {@code allProviders}. Is mapping from scheme key to the highest priority
+   * {@link NameResolverProvider}. Is replaced instead of mutating. */
   @GuardedBy("this")
-  private List<NameResolverProvider> effectiveProviders = Collections.emptyList();
+  private ImmutableMap<String, NameResolverProvider> effectiveProviders = ImmutableMap.of();
+
+  public synchronized String getDefaultScheme() {
+    return defaultScheme;
+  }
+
+  public NameResolverProvider getProviderForScheme(String scheme) {
+    if (scheme == null) {
+      return null;
+    }
+    return providers().get(scheme.toLowerCase(Locale.US));
+  }
 
   /**
    * Register a provider.
@@ -81,16 +100,23 @@ public final class NameResolverRegistry {
   }
 
   private synchronized void refreshProviders() {
-    List<NameResolverProvider> providers = new ArrayList<>(allProviders);
-    // Sort descending based on priority.
-    // sort() must be stable, as we prefer first-registered providers
-    Collections.sort(providers, Collections.reverseOrder(new Comparator<NameResolverProvider>() {
-      @Override
-      public int compare(NameResolverProvider o1, NameResolverProvider o2) {
-        return o1.priority() - o2.priority();
+    Map<String, NameResolverProvider> refreshedProviders = new HashMap<>();
+    int maxPriority = Integer.MIN_VALUE;
+    String refreshedDefaultScheme = UNKNOWN_SCHEME;
+    // We prefer first-registered providers
+    for (NameResolverProvider provider : allProviders) {
+      String scheme = provider.getScheme();
+      NameResolverProvider existing = refreshedProviders.get(scheme);
+      if (existing == null || existing.priority() < provider.priority()) {
+        refreshedProviders.put(scheme, provider);
       }
-    }));
-    effectiveProviders = Collections.unmodifiableList(providers);
+      if (maxPriority < provider.priority()) {
+        maxPriority = provider.priority();
+        refreshedDefaultScheme = provider.getScheme();
+      }
+    }
+    effectiveProviders = ImmutableMap.copyOf(refreshedProviders);
+    defaultScheme = refreshedDefaultScheme;
   }
 
   /**
@@ -100,8 +126,10 @@ public final class NameResolverRegistry {
     if (instance == null) {
       List<NameResolverProvider> providerList = ServiceProviders.loadAll(
           NameResolverProvider.class,
-          getHardCodedClasses(),
-          NameResolverProvider.class.getClassLoader(),
+          ServiceLoader
+            .load(NameResolverProvider.class, NameResolverProvider.class.getClassLoader())
+            .iterator(),
+          NameResolverRegistry::getHardCodedClasses,
           new NameResolverPriorityAccessor());
       if (providerList.isEmpty()) {
         logger.warning("No NameResolverProviders found via ServiceLoader, including for DNS. This "
@@ -110,9 +138,7 @@ public final class NameResolverRegistry {
       instance = new NameResolverRegistry();
       for (NameResolverProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
-        if (provider.isAvailable()) {
-          instance.addProvider(provider);
-        }
+        instance.addProvider(provider);
       }
       instance.refreshProviders();
     }
@@ -120,10 +146,11 @@ public final class NameResolverRegistry {
   }
 
   /**
-   * Returns effective providers, in priority order.
+   * Returns effective providers map from scheme to the highest priority NameResolverProvider of
+   * that scheme.
    */
   @VisibleForTesting
-  synchronized List<NameResolverProvider> providers() {
+  synchronized Map<String, NameResolverProvider> providers() {
     return effectiveProviders;
   }
 
@@ -142,6 +169,11 @@ public final class NameResolverRegistry {
     } catch (ClassNotFoundException e) {
       logger.log(Level.FINE, "Unable to find DNS NameResolver", e);
     }
+    try {
+      list.add(Class.forName("io.grpc.binder.internal.IntentNameResolverProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find IntentNameResolverProvider", e);
+    }
     return Collections.unmodifiableList(list);
   }
 
@@ -149,23 +181,20 @@ public final class NameResolverRegistry {
     @Override
     @Nullable
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      List<NameResolverProvider> providers = providers();
-      for (NameResolverProvider provider : providers) {
-        NameResolver resolver = provider.newNameResolver(targetUri, args);
-        if (resolver != null) {
-          return resolver;
-        }
-      }
-      return null;
+      NameResolverProvider provider = getProviderForScheme(targetUri.getScheme());
+      return provider == null ? null : provider.newNameResolver(targetUri, args);
+    }
+
+    @Override
+    @Nullable
+    public NameResolver newNameResolver(io.grpc.Uri targetUri, NameResolver.Args args) {
+      NameResolverProvider provider = getProviderForScheme(targetUri.getScheme());
+      return provider == null ? null : provider.newNameResolver(targetUri, args);
     }
 
     @Override
     public String getDefaultScheme() {
-      List<NameResolverProvider> providers = providers();
-      if (providers.isEmpty()) {
-        return "unknown";
-      }
-      return providers.get(0).getDefaultScheme();
+      return NameResolverRegistry.this.getDefaultScheme();
     }
   }
 

@@ -30,10 +30,12 @@ public final class InternalMethodDescriptor {
     this.transport = checkNotNull(transport, "transport");
   }
 
+  @SuppressWarnings("EnumOrdinal")
   public Object geRawMethodName(MethodDescriptor<?, ?> descriptor) {
     return descriptor.getRawMethodName(transport.ordinal());
   }
 
+  @SuppressWarnings("EnumOrdinal")
   public void setRawMethodName(MethodDescriptor<?, ?> descriptor, Object o) {
     descriptor.setRawMethodName(transport.ordinal(), o);
   }

@@ -70,6 +70,16 @@ service TestService {
   // An RPC method whose Java name collides with a keyword, and whose generated
   // method should have a '_' appended.
   rpc Import(stream StreamingInputCallRequest) returns (stream StreamingInputCallResponse);
+
+  // A unary call that is Safe.
+  rpc SafeCall(SimpleRequest) returns (SimpleResponse) {
+      option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // A unary call that is Idempotent.
+  rpc IdempotentCall(SimpleRequest) returns (SimpleResponse) {
+      option idempotency_level = IDEMPOTENT;
+  }
 }
 
 // Test service that has been deprecated and should generate with Java's @Deprecated annotation

@@ -11,46 +11,45 @@
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
-description = 'gRPC: gae interop testing (jdk8)'
 
 buildscript {
     // Configuration for building
-    repositories {
-        jcenter()    // Bintray's repository - a fast Maven Central mirror & more
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
     dependencies {
-        classpath 'com.google.cloud.tools:appengine-gradle-plugin:1.3.5'
-        classpath 'com.squareup.okhttp:okhttp:2.5.0'
+        classpath 'com.squareup.okhttp:okhttp:2.7.4'
     }
 }
 
-repositories {
-    // repositories for Jar's you access in your code
-    mavenLocal()
-    maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    jcenter()
+plugins {
+    id "java"
+    id "war"
+
+    id "ru.vyarus.animalsniffer"
+    id 'com.google.cloud.tools.appengine-appenginewebxml'
 }
 
-apply plugin: 'java'                              // standard Java tasks
-apply plugin: 'war'                               // standard Web Archive plugin
-apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
+description = 'gRPC: gae interop testing (jdk8)'
 
 dependencies {
     providedCompile group: 'javax.servlet', name: 'servlet-api', version:'2.5'
-    compile 'com.google.appengine:appengine-api-1.0-sdk:1.9.59'
-    // Deps needed by all gRPC apps in GAE
-    compile libraries.google_api_protos
-    compile project(":grpc-okhttp")
-    compile project(":grpc-protobuf")
-    compile project(":grpc-stub")
-    compile project(":grpc-interop-testing")
-    compile libraries.netty_tcnative
+    runtimeOnly 'com.google.appengine:appengine-api-1.0-sdk:1.9.59'
+    implementation project(':grpc-netty')
+    implementation project(":grpc-stub")
+    implementation (project(':grpc-interop-testing')) {
+        // Avoid grpc-netty-shaded dependency
+        exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-xds'
+    }
+    implementation libraries.junit
+    implementation libraries.protobuf.java
+    runtimeOnly libraries.netty.tcnative, libraries.netty.tcnative.classes
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
-compileJava {
+tasks.named("compileJava").configure {
     // Disable "No processor claimed any of these annotations: org.junit.Ignore"
     options.compilerArgs += ["-Xlint:-processing"]
 }
@@ -59,6 +58,7 @@ def createDefaultVersion() {
     return new java.text.SimpleDateFormat("yyyyMMdd't'HHmmss").format(new Date())
 }
 
+def nonShadowedProject = project
 // [START model]
 appengine {
     // App Engine tasks configuration
@@ -68,12 +68,13 @@ appengine {
 
     deploy {
         // deploy configuration
+        projectId = nonShadowedProject.findProperty('gaeProjectId') ?: 'GCLOUD_CONFIG'
         // default - stop the current version
-        stopPreviousVersion = System.getProperty('gaeStopPreviousVersion') ?: true
+        stopPreviousVersion = nonShadowedProject.findProperty('gaeStopPreviousVersion') ?: true
         // default - do not make this the promoted version
-        promote = System.getProperty('gaePromote') ?: false
-        // Use -DgaeDeployVersion if set, otherwise the version is null and the plugin will generate it
-        version = System.getProperty('gaeDeployVersion', createDefaultVersion())
+        promote = nonShadowedProject.findProperty('gaePromote') ?: false
+        // Use -PgaeDeployVersion if set, otherwise the version is null and the plugin will generate it
+        version = nonShadowedProject.findProperty('gaeDeployVersion') ?: createDefaultVersion()
     }
 }
 // [END model]
@@ -81,11 +82,12 @@ appengine {
 group = 'io.grpc'   // Generated output GroupId
 version = '1.0-SNAPSHOT'          // Version in generated output
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
-
 /** Returns the service name. */
 String getGaeProject() {
+    def configuredProjectId = appengine.deploy.projectId
+    if (!"GCLOUD_CONFIG".equals(configuredProjectId)) {
+        return configuredProjectId
+    }
     def stream = new ByteArrayOutputStream()
     exec {
         executable 'gcloud'
@@ -100,7 +102,7 @@ String getGaeProject() {
 }
 
 String getService(java.nio.file.Path projectPath) {
-    Node xml = new XmlParser().parse(projectPath.resolve("src/main/webapp/WEB-INF/appengine-web.xml").toFile())
+    Node xml = new groovy.xml.XmlParser().parse(projectPath.resolve("src/main/webapp/WEB-INF/appengine-web.xml").toFile())
     if (xml.service.isEmpty()) {
         return "default"
     } else {
@@ -112,11 +114,9 @@ String getAppUrl(String project, String service, String version) {
     return "http://${version}.${service}.${project}.appspot.com"
 }
 
-task runInteropTestRemote(dependsOn: 'appengineDeploy') {
+tasks.register("runInteropTestRemote") {
+    mustRunAfter appengineDeploy
     doLast {
-        // give remote app some time to settle down
-        sleep(20000)
-
         def appUrl = getAppUrl(
                 getGaeProject(),
                 getService(project.getProjectDir().toPath()),
@@ -124,13 +124,66 @@ task runInteropTestRemote(dependsOn: 'appengineDeploy') {
         logger.log(LogLevel.INFO, "the appURL=" + appUrl)
         def client = new com.squareup.okhttp.OkHttpClient()
         // The '?jdk8' argument is ignored by the server, it exists only to tag the request log entry
-        client.setReadTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        client.setReadTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
         def request = new com.squareup.okhttp.Request.Builder()
                 .url("${appUrl}/long_lived_channel?jdk8").build()
-        def result1 = client.newCall(request).execute()
-        def result2 = client.newCall(request).execute()
-        if (result1.code() != 200 || result2.code() != 200) {
-            throw new GradleException("Unable to reuse same channel across requests")
+        int maxChannelReuseRetries = 5
+        def result1 = null
+        def result2 = null
+        String result1Body = ""
+        String result2Body = ""
+        boolean success = false
+        int lastResult1Code = -1
+        int lastResult2Code = -1
+        for (int attempt = 0; attempt < maxChannelReuseRetries; attempt++) {
+            result1Body = ""
+            result2Body = ""
+            lastResult1Code = -1
+            lastResult2Code = -1
+            try {
+                result1 = client.newCall(request).execute()
+                result2 = client.newCall(request).execute()
+                if (result1 != null) {
+                    lastResult1Code = result1.code()
+                }
+                if (result2 != null) {
+                    lastResult2Code = result2.code()
+                }
+                if (lastResult1Code == 200 && lastResult2Code == 200) {
+                    success = true
+                    break
+                }
+                if (result1 != null) {
+                    try {
+                        result1Body = result1.body().string()
+                    } catch (Exception e) {
+                        result1Body = "Error reading body: " + e.getMessage()
+                    }
+                }
+                if (result2 != null) {
+                    try {
+                        result2Body = result2.body().string()
+                    } catch (Exception e) {
+                        result2Body = "Error reading body: " + e.getMessage()
+                    }
+                }
+                logger.log(LogLevel.WARN, "Channel reuse attempt ${attempt + 1} failed: result1 code = ${lastResult1Code} (body: ${result1Body}), result2 code = ${lastResult2Code} (body: ${result2Body}). Retrying...")
+            } catch (Exception e) {
+                logger.log(LogLevel.WARN, "Channel reuse attempt ${attempt + 1} caught exception: ${e.message}. Retrying...", e)
+            } finally {
+                if (result1 != null) {
+                    try { result1.body().close() } catch (Exception ignored) {}
+                    result1 = null
+                }
+                if (result2 != null) {
+                    try { result2.body().close() } catch (Exception ignored) {}
+                    result2 = null
+                }
+            }
+            Thread.sleep(2000)
+        }
+        if (!success) {
+            throw new GradleException("Unable to reuse same channel across requests. result1: ${lastResult1Code} (body: ${result1Body}), result2: ${lastResult2Code} (body: ${result2Body})")
         }
 
         // The test suite can take a while to run

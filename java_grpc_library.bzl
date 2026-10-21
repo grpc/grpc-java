@@ -1,71 +1,41 @@
 """Build rule for java_grpc_library."""
 
-load("@bazel_tools//tools/jdk:toolchain_utils.bzl", "find_java_runtime_toolchain", "find_java_toolchain")
+load("@com_google_protobuf//bazel/common:proto_common.bzl", "proto_common")
+load("@com_google_protobuf//bazel/common:proto_info.bzl", "ProtoInfo")
+load("@com_google_protobuf//bazel/common:proto_lang_toolchain_info.bzl", "ProtoLangToolchainInfo")
+load("@rules_java//java:defs.bzl", "JavaInfo", "JavaPluginInfo", "java_common")
 
-_JavaRpcToolchainInfo = provider(
-    fields = [
-        "host_javabase",
-        "java_toolchain",
-        "plugin",
-        "plugin_arg",
-        "protoc",
-        "runtime",
-    ],
+# Building a java_grpc_library happens in two phases: protoc generates Java
+# sources, then those sources are compiled. `proto_lang_toolchain` configures
+# the first phase, but it is language-agnostic and so cannot express anything
+# about the second. This provider carries that Java-specific configuration.
+_JavaRpcJavaConfigInfo = provider(
+    doc = "Java compilation settings for the sources protoc generates.",
+    fields = {
+        "java_plugins": "(list[Target]) JavaPluginInfo targets to run as " +
+                        "annotation processors over the generated sources.",
+    },
 )
 
-def _java_rpc_toolchain_impl(ctx):
-    return [
-        _JavaRpcToolchainInfo(
-            host_javabase = ctx.attr._host_javabase,
-            java_toolchain = ctx.attr._java_toolchain,
-            plugin = ctx.executable.plugin,
-            plugin_arg = ctx.attr.plugin_arg,
-            protoc = ctx.executable._protoc,
-            runtime = ctx.attr.runtime,
-        ),
-        platform_common.ToolchainInfo(),  # Magic for b/78647825
-    ]
+def _java_rpc_java_config_impl(ctx):
+    return [_JavaRpcJavaConfigInfo(java_plugins = ctx.attr.java_plugins)]
 
-java_rpc_toolchain = rule(
+java_rpc_java_config = rule(
+    doc = """Java compilation settings to accompany a `proto_lang_toolchain`.
+
+A `java_grpc_library` runs protoc and then compiles the generated sources.
+`proto_lang_toolchain` describes the protoc invocation; this rule describes the
+Java compilation that follows it.""",
     attrs = {
-        # This attribute has a "magic" name recognized by the native DexArchiveAspect (b/78647825).
-        "runtime": attr.label_list(
-            cfg = "target",
-            providers = [JavaInfo],
-        ),
-        "plugin": attr.label(
-            cfg = "host",
-            executable = True,
-        ),
-        "plugin_arg": attr.string(),
-        "_protoc": attr.label(
-            cfg = "host",
-            default = Label("@com_google_protobuf//:protoc"),
-            executable = True,
-        ),
-        "_java_toolchain": attr.label(
-            default = Label("@bazel_tools//tools/jdk:toolchain"),
-        ),
-        "_host_javabase": attr.label(
-            cfg = "host",
-            default = Label("@bazel_tools//tools/jdk:current_java_runtime"),
+        "java_plugins": attr.label_list(
+            default = [],
+            providers = [JavaPluginInfo],
+            doc = "Annotation processors to run over the generated sources.",
         ),
     },
-    provides = [
-        _JavaRpcToolchainInfo,
-        platform_common.ToolchainInfo,
-    ],
-    implementation = _java_rpc_toolchain_impl,
+    provides = [_JavaRpcJavaConfigInfo],
+    implementation = _java_rpc_java_config_impl,
 )
-
-# "repository" here is for Bazel builds that span multiple WORKSPACES.
-def _path_ignoring_repository(f):
-    if len(f.owner.workspace_root) == 0:
-        return f.short_path
-    return f.path[f.path.find(f.owner.workspace_root) + len(f.owner.workspace_root) + 1:]
-
-def _create_include_path(include):
-    return "-I{0}={1}".format(_path_ignoring_repository(include), include.path)
 
 def _java_rpc_library_impl(ctx):
     if len(ctx.attr.srcs) != 1:
@@ -74,37 +44,32 @@ def _java_rpc_library_impl(ctx):
         print(("in srcs attribute of {0}: Proto source with label {1} should be in " +
                "same package as consuming rule").format(ctx.label, ctx.attr.srcs[0].label))
 
-    toolchain = ctx.attr._toolchain[_JavaRpcToolchainInfo]
-    srcs = ctx.attr.srcs[0][ProtoInfo].direct_sources
-    includes = ctx.attr.srcs[0][ProtoInfo].transitive_imports
-
+    toolchain = ctx.attr._toolchain[ProtoLangToolchainInfo]
     srcjar = ctx.actions.declare_file("%s-proto-gensrc.jar" % ctx.label.name)
 
-    args = ctx.actions.args()
-    args.add(toolchain.plugin, format = "--plugin=protoc-gen-rpc-plugin=%s")
-    args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
-    args.add_all(includes, map_each = _create_include_path)
-    args.add_all(srcs, map_each = _path_ignoring_repository)
-
-    ctx.actions.run(
-        inputs = depset([toolchain.plugin] + srcs, transitive = [includes]),
-        outputs = [srcjar],
-        executable = toolchain.protoc,
-        arguments = [args],
+    proto_common.compile(
+        actions = ctx.actions,
+        proto_info = ctx.attr.srcs[0][ProtoInfo],
+        proto_lang_toolchain_info = toolchain,
+        generated_files = [srcjar],
     )
 
     deps_java_info = java_common.merge([dep[JavaInfo] for dep in ctx.attr.deps])
+    runtime_deps = [toolchain.runtime[JavaInfo]] if toolchain.runtime else []
 
     java_info = java_common.compile(
         ctx,
-        java_toolchain = find_java_toolchain(ctx, toolchain.java_toolchain),
-        host_javabase = find_java_runtime_toolchain(ctx, toolchain.host_javabase),
+        java_toolchain = ctx.toolchains["@bazel_tools//tools/jdk:toolchain_type"].java,
         source_jars = [srcjar],
         output = ctx.outputs.jar,
         output_source_jar = ctx.outputs.srcjar,
+        plugins = [
+            plugin[JavaPluginInfo]
+            for plugin in ctx.attr._java_config[_JavaRpcJavaConfigInfo].java_plugins
+        ],
         deps = [
             java_common.make_non_strict(deps_java_info),
-        ] + [dep[JavaInfo] for dep in toolchain.runtime],
+        ] + runtime_deps,
     )
 
     return [java_info]
@@ -123,8 +88,46 @@ _java_grpc_library = rule(
         ),
         "_toolchain": attr.label(
             default = Label("//compiler:java_grpc_library_toolchain"),
+            providers = [ProtoLangToolchainInfo],
+        ),
+        "_java_config": attr.label(
+            default = Label("//compiler:java_grpc_library_java_config"),
+            providers = [_JavaRpcJavaConfigInfo],
         ),
     },
+    toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
+    fragments = ["java"],
+    outputs = {
+        "jar": "lib%{name}.jar",
+        "srcjar": "lib%{name}-src.jar",
+    },
+    provides = [JavaInfo],
+    implementation = _java_rpc_library_impl,
+)
+
+# A copy of _java_grpc_library, except with a neverlink=1 _toolchain
+INTERNAL_java_grpc_library_for_xds = rule(
+    attrs = {
+        "srcs": attr.label_list(
+            mandatory = True,
+            allow_empty = False,
+            providers = [ProtoInfo],
+        ),
+        "deps": attr.label_list(
+            mandatory = True,
+            allow_empty = False,
+            providers = [JavaInfo],
+        ),
+        "_toolchain": attr.label(
+            default = Label("//xds:java_grpc_library_toolchain"),
+            providers = [ProtoLangToolchainInfo],
+        ),
+        "_java_config": attr.label(
+            default = Label("//xds:java_grpc_library_java_config"),
+            providers = [_JavaRpcJavaConfigInfo],
+        ),
+    },
+    toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
     fragments = ["java"],
     outputs = {
         "jar": "lib%{name}.jar",
@@ -139,7 +142,7 @@ _java_lite_grpc_library = rule(
         "srcs": attr.label_list(
             mandatory = True,
             allow_empty = False,
-            providers = ["proto"],
+            providers = [ProtoInfo],
         ),
         "deps": attr.label_list(
             mandatory = True,
@@ -149,8 +152,14 @@ _java_lite_grpc_library = rule(
         # This attribute has a "magic" name recognized by the native DexArchiveAspect (b/78647825).
         "_toolchain": attr.label(
             default = Label("//compiler:java_lite_grpc_library_toolchain"),
+            providers = [ProtoLangToolchainInfo],
+        ),
+        "_java_config": attr.label(
+            default = Label("//compiler:java_lite_grpc_library_java_config"),
+            providers = [_JavaRpcJavaConfigInfo],
         ),
     },
+    toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
     fragments = ["java"],
     outputs = {
         "jar": "lib%{name}.jar",

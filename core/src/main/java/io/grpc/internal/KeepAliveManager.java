@@ -22,11 +22,11 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Status;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Manages keepalive pings.
@@ -262,9 +262,25 @@ public class KeepAliveManager {
    * Default client side {@link KeepAlivePinger}.
    */
   public static final class ClientKeepAlivePinger implements KeepAlivePinger {
-    private final ConnectionClientTransport transport;
 
-    public ClientKeepAlivePinger(ConnectionClientTransport transport) {
+
+    /**
+     * A {@link ClientTransport} that has life-cycle management.
+     *
+     * <p>This interface is thread-safe.
+     */
+    public interface TransportWithDisconnectReason extends ClientTransport {
+
+      /**
+       * Initiates a forceful shutdown in which preexisting and new calls are closed. Existing calls
+       * should be closed with the provided {@code reason} and {@code disconnectError}.
+       */
+      void shutdownNow(Status reason, DisconnectError disconnectError);
+    }
+
+    private final TransportWithDisconnectReason transport;
+
+    public ClientKeepAlivePinger(TransportWithDisconnectReason transport) {
       this.transport = transport;
     }
 
@@ -275,9 +291,10 @@ public class KeepAliveManager {
         public void onSuccess(long roundTripTimeNanos) {}
 
         @Override
-        public void onFailure(Throwable cause) {
+        public void onFailure(Status cause) {
           transport.shutdownNow(Status.UNAVAILABLE.withDescription(
-              "Keepalive failed. The connection is likely gone"));
+                  "Keepalive failed. The connection is likely gone"),
+              SimpleDisconnectError.CONNECTION_TIMED_OUT);
         }
       }, MoreExecutors.directExecutor());
     }
@@ -285,8 +302,8 @@ public class KeepAliveManager {
     @Override
     public void onPingTimeout() {
       transport.shutdownNow(Status.UNAVAILABLE.withDescription(
-          "Keepalive failed. The connection is likely gone"));
+              "Keepalive failed. The connection is likely gone"),
+          SimpleDisconnectError.CONNECTION_TIMED_OUT);
     }
   }
 }
-

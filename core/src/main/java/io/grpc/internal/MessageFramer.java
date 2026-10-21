@@ -21,11 +21,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static java.lang.Math.min;
 
+import com.google.common.io.ByteStreams;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Drainable;
 import io.grpc.KnownLength;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,6 +35,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import javax.annotation.Nullable;
 
 /**
@@ -72,10 +75,14 @@ public class MessageFramer implements Framer {
   // effectively final.  Can only be set once.
   private int maxOutboundMessageSize = NO_MAX_OUTBOUND_MESSAGE_SIZE;
   private WritableBuffer buffer;
+  /**
+   * if &gt; 0 - the number of bytes to allocate for the current known-length message.
+   */
+  private int knownLengthPendingAllocation;
   private Compressor compressor = Codec.Identity.NONE;
   private boolean messageCompression = true;
   private final OutputStreamAdapter outputStreamAdapter = new OutputStreamAdapter();
-  private final byte[] headerScratch = new byte[HEADER_LENGTH];
+  private final ByteBuffer headerScratch = ByteBuffer.allocate(HEADER_LENGTH);
   private final WritableBufferAllocator bufferAllocator;
   private final StatsTraceContext statsTraceCtx;
   // transportTracer is nullable until it is integrated with client transports
@@ -145,6 +152,8 @@ public class MessageFramer implements Framer {
           .withDescription("Failed to frame message")
           .withCause(e)
           .asRuntimeException();
+    } catch (StatusRuntimeException e) {
+      throw e;
     } catch (RuntimeException e) {
       throw Status.INTERNAL
           .withDescription("Failed to frame message")
@@ -168,12 +177,6 @@ public class MessageFramer implements Framer {
     }
     BufferChainOutputStream bufferChain = new BufferChainOutputStream();
     int written = writeToOutputStream(message, bufferChain);
-    if (maxOutboundMessageSize >= 0 && written > maxOutboundMessageSize) {
-      throw Status.RESOURCE_EXHAUSTED
-          .withDescription(
-              String.format("message too large %d > %d", written , maxOutboundMessageSize))
-          .asRuntimeException();
-    }
     writeBufferChain(bufferChain, false);
     return written;
   }
@@ -191,7 +194,8 @@ public class MessageFramer implements Framer {
     if (maxOutboundMessageSize >= 0 && written > maxOutboundMessageSize) {
       throw Status.RESOURCE_EXHAUSTED
           .withDescription(
-              String.format("message too large %d > %d", written , maxOutboundMessageSize))
+              String.format(
+                  Locale.US, "message too large %d > %d", written , maxOutboundMessageSize))
           .asRuntimeException();
     }
 
@@ -214,18 +218,16 @@ public class MessageFramer implements Framer {
     if (maxOutboundMessageSize >= 0 && messageLength > maxOutboundMessageSize) {
       throw Status.RESOURCE_EXHAUSTED
           .withDescription(
-              String.format("message too large %d > %d", messageLength , maxOutboundMessageSize))
+              String.format(
+                  Locale.US, "message too large %d > %d", messageLength , maxOutboundMessageSize))
           .asRuntimeException();
     }
-    ByteBuffer header = ByteBuffer.wrap(headerScratch);
-    header.put(UNCOMPRESSED);
-    header.putInt(messageLength);
+    headerScratch.clear();
+    headerScratch.put(UNCOMPRESSED).putInt(messageLength);
     // Allocate the initial buffer chunk based on frame header + payload length.
     // Note that the allocator may allocate a buffer larger or smaller than this length
-    if (buffer == null) {
-      buffer = bufferAllocator.allocate(header.position() + messageLength);
-    }
-    writeRaw(headerScratch, 0, header.position());
+    knownLengthPendingAllocation = HEADER_LENGTH + messageLength;
+    writeRaw(headerScratch.array(), 0, headerScratch.position());
     return writeToOutputStream(message, outputStreamAdapter);
   }
 
@@ -233,12 +235,18 @@ public class MessageFramer implements Framer {
    * Write a message that has been serialized to a sequence of buffers.
    */
   private void writeBufferChain(BufferChainOutputStream bufferChain, boolean compressed) {
-    ByteBuffer header = ByteBuffer.wrap(headerScratch);
-    header.put(compressed ? COMPRESSED : UNCOMPRESSED);
     int messageLength = bufferChain.readableBytes();
-    header.putInt(messageLength);
+    if (maxOutboundMessageSize >= 0 && messageLength > maxOutboundMessageSize) {
+      throw Status.RESOURCE_EXHAUSTED
+          .withDescription(
+              String.format(
+                  Locale.US, "message too large %d > %d", messageLength , maxOutboundMessageSize))
+          .asRuntimeException();
+    }
+    headerScratch.clear();
+    headerScratch.put(compressed ? COMPRESSED : UNCOMPRESSED).putInt(messageLength);
     WritableBuffer writeableHeader = bufferAllocator.allocate(HEADER_LENGTH);
-    writeableHeader.write(headerScratch, 0, header.position());
+    writeableHeader.write(headerScratch.array(), 0, headerScratch.position());
     if (messageLength == 0) {
       // the payload had 0 length so make the header the current buffer.
       buffer = writeableHeader;
@@ -268,8 +276,9 @@ public class MessageFramer implements Framer {
       return ((Drainable) message).drainTo(outputStream);
     } else {
       // This makes an unnecessary copy of the bytes when bytebuf supports array(). However, we
-      // expect performance-critical code to support flushTo().
-      long written = IoUtils.copy(message, outputStream);
+      // expect performance-critical code to support drainTo().
+      @SuppressWarnings("BetaApi") // ByteStreams is not Beta in v27
+      long written = ByteStreams.copy(message, outputStream);
       checkArgument(written <= Integer.MAX_VALUE, "Message size overflow: %s", written);
       return (int) written;
     }
@@ -281,8 +290,9 @@ public class MessageFramer implements Framer {
         commitToSink(false, false);
       }
       if (buffer == null) {
-        // Request a buffer allocation using the message length as a hint.
-        buffer = bufferAllocator.allocate(len);
+        checkState(knownLengthPendingAllocation > 0, "knownLengthPendingAllocation reached 0");
+        buffer = bufferAllocator.allocate(knownLengthPendingAllocation);
+        knownLengthPendingAllocation -= min(knownLengthPendingAllocation, buffer.writableBytes());
       }
       int toWrite = min(len, buffer.writableBytes());
       buffer.write(b, off, toWrite);
@@ -381,6 +391,8 @@ public class MessageFramer implements Framer {
    * {@link OutputStream}.
    */
   private final class BufferChainOutputStream extends OutputStream {
+    private static final int FIRST_BUFFER_SIZE = 4096;
+
     private final List<WritableBuffer> bufferList = new ArrayList<>();
     private WritableBuffer current;
 
@@ -390,7 +402,7 @@ public class MessageFramer implements Framer {
      * {@link #write(byte[], int, int)}.
      */
     @Override
-    public void write(int b) throws IOException {
+    public void write(int b) {
       if (current != null && current.writableBytes() > 0) {
         current.write((byte)b);
         return;
@@ -403,7 +415,7 @@ public class MessageFramer implements Framer {
     public void write(byte[] b, int off, int len) {
       if (current == null) {
         // Request len bytes initially from the allocator, it may give us more.
-        current = bufferAllocator.allocate(len);
+        current = bufferAllocator.allocate(Math.max(FIRST_BUFFER_SIZE, len));
         bufferList.add(current);
       }
       while (len > 0) {

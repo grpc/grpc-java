@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@com_google_protobuf//bazel:java_proto_library.bzl", "java_proto_library")
+load("@rules_java//java:defs.bzl", "java_library", "java_plugin")
+load("@rules_jvm_external//:defs.bzl", "artifact")
 load(":java_grpc_library.bzl", "java_grpc_library")
 
 java_proto_library(
@@ -32,10 +35,9 @@ java_library(
         "//api",
         "//protobuf",
         "//stub",
-        "//stub:javax_annotation",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -46,8 +48,24 @@ java_library(
         "//api",
         "//protobuf-lite",
         "//stub",
-        "//stub:javax_annotation",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
+    ],
+)
+
+java_plugin(
+    name = "auto_value",
+    generates_api = 1,
+    processor_class = "com.google.auto.value.processor.AutoValueProcessor",
+    deps = [artifact("com.google.auto.value:auto-value")],
+)
+
+java_library(
+    name = "auto_value_annotations",
+    exported_plugins = [":auto_value"],
+    neverlink = 1,
+    visibility = ["//:__subpackages__"],
+    exports = [
+        artifact("com.google.auto.value:auto-value-annotations"),
     ],
 )

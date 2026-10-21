@@ -16,10 +16,20 @@
 
 package io.grpc;
 
-import java.util.List;
+import io.grpc.NameResolver.Factory;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.Collection;
+import java.util.Collections;
 
 /**
  * Provider of name resolvers for name agnostic consumption.
+ *
+ * <p>Implementations can be automatically discovered by gRPC via Java's SPI mechanism. For
+ * automatic discovery, the implementation must have a zero-argument constructor and include
+ * a resource named {@code META-INF/services/io.grpc.NameResolverProvider} in their JAR. The
+ * file's contents should be the implementation's class name. Implementations that need arguments in
+ * their constructor can be manually registered by {@link NameResolverRegistry#register}.
  *
  * <p>Implementations <em>should not</em> throw. If they do, it may interrupt class loading. If
  * exceptions may reasonably occur for implementation-specific reasons, implementations should
@@ -27,38 +37,6 @@ import java.util.List;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4159")
 public abstract class NameResolverProvider extends NameResolver.Factory {
-
-  /**
-   * The port number used in case the target or the underlying naming system doesn't provide a
-   * port number.
-   *
-   * @since 1.0.0
-   */
-  @SuppressWarnings("unused") // Avoids outside callers accidentally depending on the super class.
-  @Deprecated
-  public static final Attributes.Key<Integer> PARAMS_DEFAULT_PORT =
-      NameResolver.Factory.PARAMS_DEFAULT_PORT;
-
-  /**
-   * Returns non-{@code null} ClassLoader-wide providers, in preference order.
-   *
-   * @since 1.0.0
-   * @deprecated Has no replacement
-   */
-  @Deprecated
-  public static List<NameResolverProvider> providers() {
-    return NameResolverRegistry.getDefaultRegistry().providers();
-  }
-
-  /**
-   * @since 1.0.0
-   * @deprecated Use NameResolverRegistry.getDefaultRegistry().asFactory()
-   */
-  @Deprecated
-  public static NameResolver.Factory asFactory() {
-    return NameResolverRegistry.getDefaultRegistry().asFactory();
-  }
-
   /**
    * Whether this provider is available for use, taking the current environment into consideration.
    * If {@code false}, no other methods are safe to be called.
@@ -76,4 +54,28 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    * @since 1.0.0
    */
   protected abstract int priority();
+
+  /**
+   * Returns the scheme associated with the provider. The provider normally should only create a
+   * {@link NameResolver} when target URI scheme matches the provider scheme. It temporarily
+   * delegates to {@link Factory#getDefaultScheme()} before {@link NameResolver.Factory} is
+   * deprecated in https://github.com/grpc/grpc-java/issues/7133.
+   *
+   * <p>The scheme should be lower-case.
+   *
+   * @since 1.40.0
+   * */
+  public String getScheme() {
+    return getDefaultScheme();
+  }
+
+  /**
+   * Returns the {@link SocketAddress} types this provider's name-resolver is capable of producing.
+   * This enables selection of the appropriate {@link ManagedChannelProvider} for a channel.
+   *
+   * @return the {@link SocketAddress} types this provider's name-resolver is capable of producing.
+   */
+  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+    return Collections.singleton(InetSocketAddress.class);
+  }
 }

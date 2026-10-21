@@ -16,9 +16,12 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.InputStream;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -42,11 +45,12 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   }
 
   /**
-   * Execute application code directly in the transport thread.
-   *
-   * <p>Depending on the underlying transport, using a direct executor may lead to substantial
-   * performance improvements. However, it also requires the application to not block under
+   * Execute application code directly in the transport thread. The application must not block under
    * any circumstances.
+   *
+   * <p>Depending on the underlying transport and the application code, using a direct executor may
+   * lead to 10s of µs latency reduction but causes a substantial performance degradation when
+   * misused.
    *
    * <p>Calling this method is semantically equivalent to calling {@link #executor(Executor)} and
    * passing in a direct executor. However, this is the preferred way as it may allow the transport
@@ -58,10 +62,11 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public abstract T directExecutor();
 
   /**
-   * Provides a custom executor.
+   * Set the default executor for service callbacks.
    *
    * <p>It's an optional parameter. If the user has not provided an executor when the server is
-   * built, the builder will use a static cached thread pool.
+   * built, the builder will use a static cached thread pool. Users are encouraged to specify their
+   * own executor that limits the number of threads.
    *
    * <p>The server won't take ownership of the given executor. It's caller's responsibility to
    * shut down the executor when it's desired.
@@ -70,6 +75,29 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @since 1.0.0
    */
   public abstract T executor(@Nullable Executor executor);
+
+
+  /**
+   * Allows for defining a way to provide a custom executor to handle the server call.
+   * This executor is the result of calling
+   * {@link ServerCallExecutorSupplier#getExecutor(ServerCall, Metadata)} per RPC.
+   *
+   * <p>It's an optional parameter. If it is provided, the {@link #executor(Executor)} would still
+   * run necessary tasks before the {@link ServerCallExecutorSupplier} is ready to be called, then
+   * it switches over. But if calling {@link ServerCallExecutorSupplier} returns null, the server
+   * call is still handled by the default {@link #executor(Executor)} as a fallback.
+   *
+   * <p>If your {@code executorSupplier} runs quickly and always returns a non-{@code null}
+   * executor, then you may want to use {@link #directExecutor} to reduce latency.
+   *
+   * @param executorSupplier the server call executor provider
+   * @return this
+   * @since 1.39.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8274")
+  public T callExecutor(ServerCallExecutorSupplier executorSupplier) {
+    return thisT();
+  }
 
   /**
    * Adds a service implementation to the handler registry.
@@ -81,15 +109,31 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public abstract T addService(ServerServiceDefinition service);
 
   /**
-   * Adds a service implementation to the handler registry. If bindableService implements
-   * {@link InternalNotifyOnServerBuild}, the service will receive a reference to the generated
-   * server instance upon build().
+   * Adds a service implementation to the handler registry.
    *
    * @param bindableService BindableService object
    * @return this
    * @since 1.0.0
    */
   public abstract T addService(BindableService bindableService);
+
+  /**
+   * Adds a list of service implementations to the handler registry together. This exists for
+   * convenience - equivalent to repeatedly calling addService() with different services.
+   * If multiple services on the list use the same name, only the last one on the list will
+   * be added.
+   *
+   * @param services the list of ServerServiceDefinition objects
+   * @return this
+   * @since 1.37.0
+   */
+  public final T addServices(List<ServerServiceDefinition> services) {
+    checkNotNull(services, "services");
+    for (ServerServiceDefinition service : services) {
+      addService(service);
+    }
+    return thisT();
+  }
 
   /**
    * Adds a {@link ServerInterceptor} that is run for all services on the server.  Interceptors
@@ -101,7 +145,6 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @return this
    * @since 1.5.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3117")
   public T intercept(ServerInterceptor interceptor) {
     throw new UnsupportedOperationException();
   }
@@ -120,7 +163,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
 
   /**
    * Adds a {@link ServerStreamTracer.Factory} to measure server-side traffic.  The order of
-   * factories being added is the order they will be executed.  Tracers should not
+   * factories being added is the order they will be executed.
    *
    * @return this
    * @since 1.3.0
@@ -193,15 +236,139 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
 
   /**
    * Sets the permitted time for new connections to complete negotiation handshakes before being
-   * killed.
+   * killed. The default value is 2 minutes.
    *
    * @return this
    * @throws IllegalArgumentException if timeout is negative
    * @throws UnsupportedOperationException if unsupported
    * @since 1.8.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3706")
   public T handshakeTimeout(long timeout, TimeUnit unit) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets the time without read activity before sending a keepalive ping. An unreasonably small
+   * value might be increased, and {@code Long.MAX_VALUE} nano seconds or an unreasonably large
+   * value will disable keepalive. The typical default is two hours when supported.
+   *
+   * @throws IllegalArgumentException if time is not positive
+   * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
+   * @since 1.47.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
+  public T keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets a time waiting for read activity after sending a keepalive ping. If the time expires
+   * without any read activity on the connection, the connection is considered dead. An unreasonably
+   * small value might be increased. Defaults to 20 seconds when supported.
+   *
+   * <p>This value should be at least multiple times the RTT to allow for lost packets.
+   *
+   * @throws IllegalArgumentException if timeout is not positive
+   * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
+   * @since 1.47.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
+  public T keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets the maximum connection idle time, connections being idle for longer than which will be
+   * gracefully terminated. Idleness duration is defined since the most recent time the number of
+   * outstanding RPCs became zero or the connection establishment. An unreasonably small value might
+   * be increased. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
+   * max connection idle.
+   *
+   * @throws IllegalArgumentException if idle is not positive
+   * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
+   * @since 1.47.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
+  public T maxConnectionIdle(long maxConnectionIdle, TimeUnit timeUnit) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets the maximum connection age, connections lasting longer than which will be gracefully
+   * terminated. An unreasonably small value might be increased. A random jitter of +/-10% will be
+   * added to it. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
+   * max connection age.
+   *
+   * @throws IllegalArgumentException if age is not positive
+   * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
+   * @since 1.47.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
+  public T maxConnectionAge(long maxConnectionAge, TimeUnit timeUnit) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets the grace time for the graceful connection termination. Once the max connection age
+   * is reached, RPCs have the grace time to complete. RPCs that do not complete in time will be
+   * cancelled, allowing the connection to terminate. {@code Long.MAX_VALUE} nano seconds or an
+   * unreasonably large value are considered infinite.
+   *
+   * @throws IllegalArgumentException if grace is negative
+   * @throws UnsupportedOperationException if unsupported
+   * @see #maxConnectionAge(long, TimeUnit)
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
+   * @since 1.47.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
+  public T maxConnectionAgeGrace(long maxConnectionAgeGrace, TimeUnit timeUnit) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Specify the most aggressive keep-alive time clients are permitted to configure. The server will
+   * try to detect clients exceeding this rate and when detected will forcefully close the
+   * connection. The typical default is 5 minutes when supported.
+   *
+   * <p>Even though a default is defined that allows some keep-alives, clients must not use
+   * keep-alive without approval from the service owner. Otherwise, they may experience failures in
+   * the future if the service becomes more restrictive. When unthrottled, keep-alives can cause a
+   * significant amount of traffic and CPU usage, so clients and servers should be conservative in
+   * what they use and accept.
+   *
+   * @throws IllegalArgumentException if time is negative
+   * @throws UnsupportedOperationException if unsupported
+   * @see #permitKeepAliveWithoutCalls(boolean)
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
+   * @since 1.47.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
+  public T permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets whether to allow clients to send keep-alive HTTP/2 PINGs even if there are no outstanding
+   * RPCs on the connection. Defaults to {@code false} when supported.
+   *
+   * @throws UnsupportedOperationException if unsupported
+   * @see #permitKeepAliveTime(long, TimeUnit)
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
+   * @since 1.47.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
+  public T permitKeepAliveWithoutCalls(boolean permit) {
     throw new UnsupportedOperationException();
   }
 
@@ -271,6 +438,17 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @since 1.0.0
    */
   public abstract Server build();
+
+  /**
+   * Adds a metric sink to the server.
+   *
+   * @param metricSink the metric sink to add.
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12693")
+  public T addMetricSink(MetricSink metricSink) {
+    return thisT();
+  }
 
   /**
    * Returns the correctly typed version of the builder.

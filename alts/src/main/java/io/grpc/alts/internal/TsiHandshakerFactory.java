@@ -16,11 +16,12 @@
 
 package io.grpc.alts.internal;
 
+import io.grpc.ChannelLogger;
 import javax.annotation.Nullable;
 
 /** Factory that manufactures instances of {@link TsiHandshaker}. */
 public interface TsiHandshakerFactory {
 
   /** Creates a new handshaker. */
-  TsiHandshaker newHandshaker(@Nullable String authority);
+  TsiHandshaker newHandshaker(@Nullable String authority, ChannelLogger logger);
 }

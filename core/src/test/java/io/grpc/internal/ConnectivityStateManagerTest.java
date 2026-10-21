@@ -27,9 +27,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ConnectivityState;
 import java.util.LinkedList;
 import java.util.concurrent.Executor;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -38,9 +36,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class ConnectivityStateManagerTest {
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
-
   private final FakeClock executor = new FakeClock();
   private final ConnectivityStateManager state = new ConnectivityStateManager();
   private final LinkedList<ConnectivityState> sink = new LinkedList<>();
@@ -74,7 +69,7 @@ public class ConnectivityStateManagerTest {
     assertEquals(1, sink.size());
     assertEquals(TRANSIENT_FAILURE, sink.poll());
   }
-  
+
   @Test
   public void registerCallbackAfterStateChanged() {
     state.gotoState(CONNECTING);

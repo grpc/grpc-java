@@ -25,6 +25,7 @@ import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.io.BaseEncoding;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.InternalMetadata;
@@ -40,29 +41,40 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportFrameUtil;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import org.chromium.net.BidirectionalStream;
 import org.chromium.net.CronetException;
-import org.chromium.net.ExperimentalBidirectionalStream;
 import org.chromium.net.UrlResponseInfo;
 
 /**
  * Client stream for the cronet transport.
  */
 class CronetClientStream extends AbstractClientStream {
-  private static final int READ_BUFFER_CAPACITY = 4 * 1024;
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocateDirect(0);
   private static final String LOG_TAG = "grpc-java-cronet";
+
+  @Deprecated
+  static final CallOptions.Key<Object> CRONET_ANNOTATION_KEY =
+      CallOptions.Key.create("cronet-annotation");
+
+  static final CallOptions.Key<Collection<Object>> CRONET_ANNOTATIONS_KEY =
+      CallOptions.Key.create("cronet-annotations");
+  /**
+   * Sets the read buffer size which the GRPC layer will use to read data from Cronet. Higher buffer
+   * size leads to less overhead but more memory consumption. The current default value is 4KB.
+   */
+  static final CallOptions.Key<Integer> CRONET_READ_BUFFER_SIZE_KEY =
+      CallOptions.Key.createWithDefault("cronet-read-buffer-size", 4 * 1024);
+
   private final String url;
   private final String userAgent;
   private final StatsTraceContext statsTraceCtx;
@@ -78,6 +90,8 @@ class CronetClientStream extends AbstractClientStream {
   private final Collection<Object> annotations;
   private final TransportState state;
   private final Sink sink = new Sink();
+  @VisibleForTesting
+  final int readBufferSize;
   private StreamBuilderFactory streamFactory;
 
   CronetClientStream(
@@ -93,10 +107,12 @@ class CronetClientStream extends AbstractClientStream {
       MethodDescriptor<?, ?> method,
       StatsTraceContext statsTraceCtx,
       CallOptions callOptions,
-      TransportTracer transportTracer) {
+      TransportTracer transportTracer,
+      boolean useGetForSafeMethods,
+      boolean usePutForIdempotentMethods) {
     super(
         new CronetWritableBufferAllocator(), statsTraceCtx, transportTracer, headers, callOptions,
-        method.isSafe());
+        useGetForSafeMethods && method.isSafe());
     this.url = Preconditions.checkNotNull(url, "url");
     this.userAgent = Preconditions.checkNotNull(userAgent, "userAgent");
     this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
@@ -104,12 +120,18 @@ class CronetClientStream extends AbstractClientStream {
     this.headers = Preconditions.checkNotNull(headers, "headers");
     this.transport = Preconditions.checkNotNull(transport, "transport");
     this.startCallback = Preconditions.checkNotNull(startCallback, "startCallback");
-    this.idempotent = method.isIdempotent() || alwaysUsePut;
+    this.idempotent = (usePutForIdempotentMethods && method.isIdempotent()) || alwaysUsePut;
     // Only delay flushing header for unary rpcs.
     this.delayRequestHeader = (method.getType() == MethodDescriptor.MethodType.UNARY);
-    this.annotation = callOptions.getOption(CronetCallOptions.CRONET_ANNOTATION_KEY);
-    this.annotations = callOptions.getOption(CronetCallOptions.CRONET_ANNOTATIONS_KEY);
-    this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, transportTracer);
+    this.annotation = callOptions.getOption(CRONET_ANNOTATION_KEY);
+    this.annotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
+    this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, transportTracer,
+            callOptions);
+    this.readBufferSize = callOptions.getOption(CRONET_READ_BUFFER_SIZE_KEY);
+
+    // Tests expect the "plain" deframer behavior, not MigratingDeframer
+    // https://github.com/grpc/grpc-java/issues/7140
+    optimizeForDirectExecutor();
   }
 
   @Override
@@ -125,6 +147,28 @@ class CronetClientStream extends AbstractClientStream {
   @Override
   public void setAuthority(String authority) {
     throw new UnsupportedOperationException("Cronet does not support overriding authority");
+  }
+
+  /**
+   * Returns a copy of {@code callOptions} with {@code annotation} included as one of the Cronet
+   * annotation objects. When an RPC is made using a {@link CallOptions} instance returned by this
+   * method, the annotation objects will be attached to the underlying Cronet bidirectional stream.
+   * When the stream finishes, the user can retrieve the annotation objects via {@link
+   * org.chromium.net.RequestFinishedInfo.Listener}.
+   *
+   * @param annotation the object to attach to the Cronet stream
+   */
+  static CallOptions withAnnotation(CallOptions callOptions, Object annotation) {
+    Collection<Object> existingAnnotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
+    ArrayList<Object> newAnnotations;
+    if (existingAnnotations == null) {
+      newAnnotations = new ArrayList<>();
+    } else {
+      newAnnotations = new ArrayList<>(existingAnnotations);
+    }
+    newAnnotations.add(annotation);
+    return callOptions.withOption(
+        CRONET_ANNOTATIONS_KEY, Collections.unmodifiableList(newAnnotations));
   }
 
   class Sink implements AbstractClientStream.Sink {
@@ -151,12 +195,14 @@ class CronetClientStream extends AbstractClientStream {
       if (delayRequestHeader) {
         builder.delayRequestHeadersUntilFirstFlush(true);
       }
-      if (annotation != null) {
-        ((ExperimentalBidirectionalStream.Builder) builder).addRequestAnnotation(annotation);
-      }
-      if (annotations != null) {
-        for (Object o : annotations) {
-          ((ExperimentalBidirectionalStream.Builder) builder).addRequestAnnotation(o);
+      if (annotation != null || annotations != null) {
+        if (annotation != null) {
+          builder.addRequestAnnotation(annotation);
+        }
+        if (annotations != null) {
+          for (Object o : annotations) {
+            builder.addRequestAnnotation(o);
+          }
         }
       }
       setGrpcHeaders(builder);
@@ -174,7 +220,7 @@ class CronetClientStream extends AbstractClientStream {
         ByteBuffer byteBuffer;
         if (buffer != null) {
           byteBuffer = ((CronetWritableBuffer) buffer).buffer();
-          byteBuffer.flip();
+          ((Buffer) byteBuffer).flip();
         } else {
           byteBuffer = EMPTY_BUFFER;
         }
@@ -184,13 +230,6 @@ class CronetClientStream extends AbstractClientStream {
         } else {
           streamWrite(byteBuffer, endOfStream, flush);
         }
-      }
-    }
-
-    @Override
-    public void request(final int numMessages) {
-      synchronized (state.lock) {
-        state.requestMessagesFromDeframer(numMessages);
       }
     }
 
@@ -216,7 +255,7 @@ class CronetClientStream extends AbstractClientStream {
   class TransportState extends Http2ClientStreamTransportState {
     private final Object lock;
     @GuardedBy("lock")
-    private Queue<PendingData> pendingData = new LinkedList<PendingData>();
+    private final Collection<PendingData> pendingData = new ArrayList<>();
     @GuardedBy("lock")
     private boolean streamReady;
     @GuardedBy("lock")
@@ -232,8 +271,8 @@ class CronetClientStream extends AbstractClientStream {
 
     public TransportState(
         int maxMessageSize, StatsTraceContext statsTraceCtx, Object lock,
-        TransportTracer transportTracer) {
-      super(maxMessageSize, statsTraceCtx, transportTracer);
+        TransportTracer transportTracer, CallOptions options) {
+      super(maxMessageSize, statsTraceCtx, transportTracer, options);
       this.lock = Preconditions.checkNotNull(lock, "lock");
     }
 
@@ -278,7 +317,7 @@ class CronetClientStream extends AbstractClientStream {
         if (Log.isLoggable(LOG_TAG, Log.VERBOSE)) {
           Log.v(LOG_TAG, "BidirectionalStream.read");
         }
-        stream.read(ByteBuffer.allocateDirect(READ_BUFFER_CAPACITY));
+        stream.read(ByteBuffer.allocateDirect(readBufferSize));
       }
     }
 
@@ -331,7 +370,6 @@ class CronetClientStream extends AbstractClientStream {
   private void setGrpcHeaders(BidirectionalStream.Builder builder) {
     // Psuedo-headers are set by cronet.
     // All non-pseudo headers must come after pseudo headers.
-    // TODO(ericgribkoff): remove this and set it on CronetEngine after crbug.com/588204 gets fixed.
     builder.addHeader(USER_AGENT_KEY.name(), userAgent);
     builder.addHeader(CONTENT_TYPE_KEY.name(), GrpcUtil.CONTENT_TYPE_GRPC);
     builder.addHeader("te", GrpcUtil.TE_TRAILERS);
@@ -341,10 +379,10 @@ class CronetClientStream extends AbstractClientStream {
     // String and byte array.
     byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(headers);
     for (int i = 0; i < serializedHeaders.length; i += 2) {
-      String key = new String(serializedHeaders[i], Charset.forName("UTF-8"));
+      String key = new String(serializedHeaders[i], StandardCharsets.UTF_8);
       // TODO(ericgribkoff): log an error or throw an exception
       if (isApplicationHeader(key)) {
-        String value = new String(serializedHeaders[i + 1], Charset.forName("UTF-8"));
+        String value = new String(serializedHeaders[i + 1], StandardCharsets.UTF_8);
         builder.addHeader(key, value);
       }
     }
@@ -399,13 +437,13 @@ class CronetClientStream extends AbstractClientStream {
         Log.v(LOG_TAG, "BidirectionalStream.read");
       }
       reportHeaders(info.getAllHeadersAsList(), false);
-      stream.read(ByteBuffer.allocateDirect(READ_BUFFER_CAPACITY));
+      stream.read(ByteBuffer.allocateDirect(readBufferSize));
     }
 
     @Override
     public void onReadCompleted(BidirectionalStream stream, UrlResponseInfo info,
         ByteBuffer buffer, boolean endOfStream) {
-      buffer.flip();
+      ((Buffer) buffer).flip();
       if (Log.isLoggable(LOG_TAG, Log.VERBOSE)) {
         Log.v(LOG_TAG, "onReadCompleted. Size=" + buffer.remaining());
       }
@@ -521,8 +559,8 @@ class CronetClientStream extends AbstractClientStream {
 
       byte[][] headerValues = new byte[headerList.size()][];
       for (int i = 0; i < headerList.size(); i += 2) {
-        headerValues[i] = headerList.get(i).getBytes(Charset.forName("UTF-8"));
-        headerValues[i + 1] = headerList.get(i + 1).getBytes(Charset.forName("UTF-8"));
+        headerValues[i] = headerList.get(i).getBytes(StandardCharsets.UTF_8);
+        headerValues[i + 1] = headerList.get(i + 1).getBytes(StandardCharsets.UTF_8);
       }
       Metadata metadata =
           InternalMetadata.newMetadata(TransportFrameUtil.toRawSerializedHeaders(headerValues));

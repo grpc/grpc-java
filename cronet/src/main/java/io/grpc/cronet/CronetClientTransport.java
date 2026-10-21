@@ -19,8 +19,10 @@ package io.grpc.cronet;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -32,15 +34,16 @@ import io.grpc.cronet.CronetChannelBuilder.StreamBuilderFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A cronet-based {@link ConnectionClientTransport} implementation.
@@ -53,13 +56,16 @@ class CronetClientTransport implements ConnectionClientTransport {
   private Listener listener;
   private final Object lock = new Object();
   @GuardedBy("lock")
-  private final Set<CronetClientStream> streams =
-      new HashSet<CronetClientStream>();
+  private final Set<CronetClientStream> streams = Collections.newSetFromMap(
+          new IdentityHashMap<>());
   private final Executor executor;
   private final int maxMessageSize;
   private final boolean alwaysUsePut;
   private final TransportTracer transportTracer;
-  private final Attributes attrs;
+  private Attributes attrs;
+  private final boolean useGetForSafeMethods;
+  private final boolean usePutForIdempotentMethods;
+  private final StreamBuilderFactory streamFactory;
   // Indicates the transport is in go-away state: no new streams will be processed,
   // but existing streams may continue.
   @GuardedBy("lock")
@@ -75,7 +81,6 @@ class CronetClientTransport implements ConnectionClientTransport {
   @GuardedBy("lock")
   // Whether this transport has started.
   private boolean started;
-  private StreamBuilderFactory streamFactory;
 
   CronetClientTransport(
       StreamBuilderFactory streamFactory,
@@ -86,7 +91,9 @@ class CronetClientTransport implements ConnectionClientTransport {
       Executor executor,
       int maxMessageSize,
       boolean alwaysUsePut,
-      TransportTracer transportTracer) {
+      TransportTracer transportTracer,
+      boolean useGetForSafeMethods,
+      boolean usePutForIdempotentMethods) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.logId = InternalLogId.allocate(getClass(), address.toString());
     this.authority = authority;
@@ -100,6 +107,8 @@ class CronetClientTransport implements ConnectionClientTransport {
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
         .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs)
         .build();
+    this.useGetForSafeMethods = useGetForSafeMethods;
+    this.usePutForIdempotentMethods = usePutForIdempotentMethods;
   }
 
   @Override
@@ -111,7 +120,7 @@ class CronetClientTransport implements ConnectionClientTransport {
 
   @Override
   public CronetClientStream newStream(final MethodDescriptor<?, ?> method, final Metadata headers,
-      final CallOptions callOptions) {
+      final CallOptions callOptions, ClientStreamTracer[] tracers) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
 
@@ -119,11 +128,12 @@ class CronetClientTransport implements ConnectionClientTransport {
     final String url = "https://" + authority + defaultPath;
 
     final StatsTraceContext statsTraceCtx =
-        StatsTraceContext.newClientContext(callOptions, attrs, headers);
+        StatsTraceContext.newClientContext(tracers, attrs, headers);
     class StartCallback implements Runnable {
       final CronetClientStream clientStream = new CronetClientStream(
           url, userAgent, executor, headers, CronetClientTransport.this, this, lock, maxMessageSize,
-          alwaysUsePut, method, statsTraceCtx, callOptions, transportTracer);
+          alwaysUsePut, method, statsTraceCtx, callOptions, transportTracer, useGetForSafeMethods,
+          usePutForIdempotentMethods);
 
       @Override
       public void run() {
@@ -142,9 +152,12 @@ class CronetClientTransport implements ConnectionClientTransport {
     return new StartCallback().clientStream;
   }
 
+  @SuppressWarnings("GuardedBy")
   @GuardedBy("lock")
   private void startStream(CronetClientStream stream) {
     streams.add(stream);
+    // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock'; instead
+    // found: 'this.lock'
     stream.transportState().start(streamFactory);
   }
 
@@ -157,6 +170,7 @@ class CronetClientTransport implements ConnectionClientTransport {
     return new Runnable() {
       @Override
       public void run() {
+        attrs = CronetClientTransport.this.listener.filterTransport(attrs);
         // Listener callbacks should not be called simultaneously
         CronetClientTransport.this.listener.transportReady();
       }
@@ -192,9 +206,9 @@ class CronetClientTransport implements ConnectionClientTransport {
       // streams.remove()
       streamsCopy = new ArrayList<>(streams);
     }
-    for (int i = 0; i < streamsCopy.size(); i++) {
+    for (CronetClientStream cronetClientStream : streamsCopy) {
       // Avoid deadlock by calling into stream without lock held
-      streamsCopy.get(i).cancel(status);
+      cronetClientStream.cancel(status);
     }
     stopIfNecessary();
   }
@@ -216,7 +230,7 @@ class CronetClientTransport implements ConnectionClientTransport {
       startedGoAway = true;
     }
 
-    listener.transportShutdown(status);
+    listener.transportShutdown(status, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
 
     synchronized (lock) {
       goAway = true;
@@ -242,7 +256,7 @@ class CronetClientTransport implements ConnectionClientTransport {
    */
   void stopIfNecessary() {
     synchronized (lock) {
-      if (goAway && !stopped && streams.size() == 0) {
+      if (goAway && !stopped && streams.isEmpty()) {
         stopped = true;
       } else {
         return;

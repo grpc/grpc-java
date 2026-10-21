@@ -18,17 +18,18 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Verify.verify;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
+import io.grpc.CallOptions;
+import io.grpc.InternalConfigSelector;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status.Code;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,23 +42,45 @@ import javax.annotation.Nullable;
  */
 final class ManagedChannelServiceConfig {
 
+  @Nullable
+  private final MethodInfo defaultMethodConfig;
   private final Map<String, MethodInfo> serviceMethodMap;
   private final Map<String, MethodInfo> serviceMap;
-  // TODO(notcarl/zdapeng): use retryThrottling here
   @Nullable
   private final Throttle retryThrottling;
   @Nullable
   private final Object loadBalancingConfig;
+  @Nullable
+  private final Map<String, ?> healthCheckingConfig;
 
   ManagedChannelServiceConfig(
+      @Nullable MethodInfo defaultMethodConfig,
       Map<String, MethodInfo> serviceMethodMap,
       Map<String, MethodInfo> serviceMap,
       @Nullable Throttle retryThrottling,
-      @Nullable Object loadBalancingConfig) {
+      @Nullable Object loadBalancingConfig,
+      @Nullable Map<String, ?> healthCheckingConfig) {
+    this.defaultMethodConfig = defaultMethodConfig;
     this.serviceMethodMap = Collections.unmodifiableMap(new HashMap<>(serviceMethodMap));
     this.serviceMap = Collections.unmodifiableMap(new HashMap<>(serviceMap));
     this.retryThrottling = retryThrottling;
     this.loadBalancingConfig = loadBalancingConfig;
+    this.healthCheckingConfig =
+        healthCheckingConfig != null
+            ? Collections.unmodifiableMap(new HashMap<>(healthCheckingConfig))
+            : null;
+  }
+
+  /** Returns an empty {@link ManagedChannelServiceConfig}. */
+  static ManagedChannelServiceConfig empty() {
+    return
+        new ManagedChannelServiceConfig(
+            null,
+            new HashMap<String, MethodInfo>(),
+            new HashMap<String, MethodInfo>(),
+            /* retryThrottling= */ null,
+            /* loadBalancingConfig= */ null,
+            /* healthCheckingConfig= */ null);
   }
 
   /**
@@ -75,6 +98,8 @@ final class ManagedChannelServiceConfig {
     }
     Map<String, MethodInfo> serviceMethodMap = new HashMap<>();
     Map<String, MethodInfo> serviceMap = new HashMap<>();
+    Map<String, ?> healthCheckingConfig =
+        ServiceConfigUtil.getHealthCheckedService(serviceConfig);
 
     // Try and do as much validation here before we swap out the existing configuration.  In case
     // the input is invalid, we don't want to lose the existing configuration.
@@ -83,10 +108,17 @@ final class ManagedChannelServiceConfig {
 
     if (methodConfigs == null) {
       // this is surprising, but possible.
-      return new ManagedChannelServiceConfig(
-          serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+      return
+          new ManagedChannelServiceConfig(
+              null,
+              serviceMethodMap,
+              serviceMap,
+              retryThrottling,
+              loadBalancingConfig,
+              healthCheckingConfig);
     }
 
+    MethodInfo defaultMethodConfig = null;
     for (Map<String, ?> methodConfig : methodConfigs) {
       MethodInfo info = new MethodInfo(
           methodConfig, retryEnabled, maxRetryAttemptsLimit, maxHedgedAttemptsLimit);
@@ -94,13 +126,21 @@ final class ManagedChannelServiceConfig {
       List<Map<String, ?>> nameList =
           ServiceConfigUtil.getNameListFromMethodConfig(methodConfig);
 
-      checkArgument(
-          nameList != null && !nameList.isEmpty(), "no names in method config %s", methodConfig);
+      if (nameList == null || nameList.isEmpty()) {
+        continue;
+      }
       for (Map<String, ?> name : nameList) {
         String serviceName = ServiceConfigUtil.getServiceFromName(name);
-        checkArgument(!Strings.isNullOrEmpty(serviceName), "missing service name");
         String methodName = ServiceConfigUtil.getMethodFromName(name);
-        if (Strings.isNullOrEmpty(methodName)) {
+        if (Strings.isNullOrEmpty(serviceName)) {
+          checkArgument(
+              Strings.isNullOrEmpty(methodName), "missing service name for method %s", methodName);
+          checkArgument(
+              defaultMethodConfig == null,
+              "Duplicate default method config in service config %s",
+              serviceConfig);
+          defaultMethodConfig = info;
+        } else if (Strings.isNullOrEmpty(methodName)) {
           // Service scoped config
           checkArgument(
               !serviceMap.containsKey(serviceName), "Duplicate service %s", serviceName);
@@ -117,22 +157,32 @@ final class ManagedChannelServiceConfig {
       }
     }
 
-    return new ManagedChannelServiceConfig(
-        serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+    return
+        new ManagedChannelServiceConfig(
+            defaultMethodConfig,
+            serviceMethodMap,
+            serviceMap,
+            retryThrottling,
+            loadBalancingConfig,
+            healthCheckingConfig);
+  }
+
+  @Nullable
+  Map<String, ?> getHealthCheckingConfig() {
+    return healthCheckingConfig;
   }
 
   /**
-   * Returns the per-service configuration for the channel.
+   * Used as a fallback per-RPC config supplier when the attributes value of {@link
+   * InternalConfigSelector#KEY} is not available. Returns {@code null} if there is no method
+   * config in this service config.
    */
-  Map<String, MethodInfo> getServiceMap() {
-    return serviceMap;
-  }
-
-  /**
-   * Returns the per-method configuration for the channel.
-   */
-  Map<String, MethodInfo> getServiceMethodMap() {
-    return serviceMethodMap;
+  @Nullable
+  InternalConfigSelector getDefaultConfigSelector() {
+    if (serviceMap.isEmpty() && serviceMethodMap.isEmpty() && defaultMethodConfig == null) {
+      return null;
+    }
+    return new ServiceConfigConvertedSelector(this);
   }
 
   @VisibleForTesting
@@ -141,10 +191,64 @@ final class ManagedChannelServiceConfig {
     return loadBalancingConfig;
   }
 
+  @Nullable
+  Throttle getRetryThrottling() {
+    return retryThrottling;
+  }
+
+  @Nullable
+  MethodInfo getMethodConfig(MethodDescriptor<?, ?> method) {
+    MethodInfo methodInfo = serviceMethodMap.get(method.getFullMethodName());
+    if (methodInfo == null) {
+      String serviceName = method.getServiceName();
+      methodInfo = serviceMap.get(serviceName);
+    }
+    if (methodInfo == null) {
+      methodInfo = defaultMethodConfig;
+    }
+    return methodInfo;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ManagedChannelServiceConfig that = (ManagedChannelServiceConfig) o;
+    return Objects.equal(defaultMethodConfig, that.defaultMethodConfig)
+        && Objects.equal(serviceMethodMap, that.serviceMethodMap)
+        && Objects.equal(serviceMap, that.serviceMap)
+        && Objects.equal(retryThrottling, that.retryThrottling)
+        && Objects.equal(loadBalancingConfig, that.loadBalancingConfig);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(
+        defaultMethodConfig, serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("defaultMethodConfig", defaultMethodConfig)
+        .add("serviceMethodMap", serviceMethodMap)
+        .add("serviceMap", serviceMap)
+        .add("retryThrottling", retryThrottling)
+        .add("loadBalancingConfig", loadBalancingConfig)
+        .toString();
+  }
+
   /**
    * Equivalent of MethodConfig from a ServiceConfig with restrictions from Channel setting.
    */
   static final class MethodInfo {
+    static final CallOptions.Key<MethodInfo> KEY =
+        CallOptions.Key.create("io.grpc.internal.ManagedChannelServiceConfig.MethodInfo");
+
     // TODO(carl-mastrangelo): add getters for these fields and make them private.
     final Long timeoutNanos;
     final Boolean waitForReady;
@@ -181,12 +285,12 @@ final class ManagedChannelServiceConfig {
       Map<String, ?> retryPolicyMap =
           retryEnabled ? ServiceConfigUtil.getRetryPolicyFromMethodConfig(methodConfig) : null;
       retryPolicy = retryPolicyMap == null
-          ? RetryPolicy.DEFAULT : retryPolicy(retryPolicyMap, maxRetryAttemptsLimit);
+          ? null : retryPolicy(retryPolicyMap, maxRetryAttemptsLimit);
 
       Map<String, ?> hedgingPolicyMap =
           retryEnabled ? ServiceConfigUtil.getHedgingPolicyFromMethodConfig(methodConfig) : null;
       hedgingPolicy = hedgingPolicyMap == null
-          ? HedgingPolicy.DEFAULT : hedgingPolicy(hedgingPolicyMap, maxHedgedAttemptsLimit);
+          ? null : hedgingPolicy(hedgingPolicyMap, maxHedgedAttemptsLimit);
     }
 
     @Override
@@ -255,21 +359,22 @@ final class ManagedChannelServiceConfig {
           "backoffMultiplier must be greater than 0: %s",
           backoffMultiplier);
 
-      List<String> rawCodes =
+      Long perAttemptRecvTimeout =
+          ServiceConfigUtil.getPerAttemptRecvTimeoutNanosFromRetryPolicy(retryPolicy);
+      checkArgument(
+          perAttemptRecvTimeout == null || perAttemptRecvTimeout >= 0,
+          "perAttemptRecvTimeout cannot be negative: %s",
+          perAttemptRecvTimeout);
+
+      Set<Code> retryableCodes =
           ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy);
-      checkNotNull(rawCodes, "rawCodes must be present");
-      checkArgument(!rawCodes.isEmpty(), "rawCodes can't be empty");
-      EnumSet<Code> codes = EnumSet.noneOf(Code.class);
-      // service config doesn't say if duplicates are allowed, so just accept them.
-      for (String rawCode : rawCodes) {
-        verify(!"OK".equals(rawCode), "rawCode can not be \"OK\"");
-        codes.add(Code.valueOf(rawCode));
-      }
-      Set<Code> retryableStatusCodes = Collections.unmodifiableSet(codes);
+      checkArgument(
+          perAttemptRecvTimeout != null || !retryableCodes.isEmpty(),
+          "retryableStatusCodes cannot be empty without perAttemptRecvTimeout");
 
       return new RetryPolicy(
           maxAttempts, initialBackoffNanos, maxBackoffNanos, backoffMultiplier,
-          retryableStatusCodes);
+          perAttemptRecvTimeout, retryableCodes);
     }
 
     private static HedgingPolicy hedgingPolicy(
@@ -286,19 +391,26 @@ final class ManagedChannelServiceConfig {
       checkArgument(
           hedgingDelayNanos >= 0, "hedgingDelay must not be negative: %s", hedgingDelayNanos);
 
-      List<String> rawCodes =
-          ServiceConfigUtil.getNonFatalStatusCodesFromHedgingPolicy(hedgingPolicy);
-      checkNotNull(rawCodes, "rawCodes must be present");
-      checkArgument(!rawCodes.isEmpty(), "rawCodes can't be empty");
-      EnumSet<Code> codes = EnumSet.noneOf(Code.class);
-      // service config doesn't say if duplicates are allowed, so just accept them.
-      for (String rawCode : rawCodes) {
-        verify(!"OK".equals(rawCode), "rawCode can not be \"OK\"");
-        codes.add(Code.valueOf(rawCode));
-      }
-      Set<Code> nonFatalStatusCodes = Collections.unmodifiableSet(codes);
+      return new HedgingPolicy(
+          maxAttempts, hedgingDelayNanos,
+          ServiceConfigUtil.getNonFatalStatusCodesFromHedgingPolicy(hedgingPolicy));
+    }
+  }
 
-      return new HedgingPolicy(maxAttempts, hedgingDelayNanos, nonFatalStatusCodes);
+  static final class ServiceConfigConvertedSelector extends InternalConfigSelector {
+
+    final ManagedChannelServiceConfig config;
+
+    /** Converts the service config to config selector. */
+    private ServiceConfigConvertedSelector(ManagedChannelServiceConfig config) {
+      this.config = config;
+    }
+
+    @Override
+    public Result selectConfig(PickSubchannelArgs args) {
+      return Result.newBuilder()
+          .setConfig(config)
+          .build();
     }
   }
 }

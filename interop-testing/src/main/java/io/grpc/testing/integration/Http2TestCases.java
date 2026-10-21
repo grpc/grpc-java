@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import com.google.common.base.Preconditions;
+import java.util.Locale;
 
 /**
  * Enum of HTTP/2 interop test cases.
@@ -49,7 +50,7 @@ public enum Http2TestCases {
   public static Http2TestCases fromString(String s) {
     Preconditions.checkNotNull(s, "s");
     try {
-      return Http2TestCases.valueOf(s.toUpperCase());
+      return Http2TestCases.valueOf(s.toUpperCase(Locale.ROOT));
     } catch (IllegalArgumentException ex) {
       throw new IllegalArgumentException("Invalid test case: " + s);
     }

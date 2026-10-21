@@ -16,8 +16,9 @@
 
 package io.grpc.examples.experimental;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -42,8 +43,7 @@ public class CompressingHelloWorldClient {
 
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public CompressingHelloWorldClient(String host, int port) {
-    channel = ManagedChannelBuilder.forAddress(host, port)
-        .usePlaintext()
+    channel = Grpc.newChannelBuilderForAddress(host, port, InsecureChannelCredentials.create())
         .build();
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
@@ -73,12 +73,13 @@ public class CompressingHelloWorldClient {
    * greeting.
    */
   public static void main(String[] args) throws Exception {
+    // Access a service running on the local machine on port 50051
     CompressingHelloWorldClient client = new CompressingHelloWorldClient("localhost", 50051);
     try {
-      /* Access a service running on the local machine on port 50051 */
       String user = "world";
+      // Use the arg as the name to greet if provided
       if (args.length > 0) {
-        user = args[0]; /* Use the arg as the name to greet if provided */
+        user = args[0];
       }
       client.greet(user);
     } finally {

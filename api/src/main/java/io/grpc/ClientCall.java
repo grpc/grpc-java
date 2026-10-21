@@ -67,7 +67,7 @@ import javax.annotation.Nullable;
  * manner, and notifies gRPC library to receive additional response after one is consumed by
  * a fictional <code>processResponse()</code>.
  *
- * <p><pre>
+ * <pre>
  *   call = channel.newCall(bidiStreamingMethod, callOptions);
  *   listener = new ClientCall.Listener&lt;FooResponse&gt;() {
  *     &#64;Override
@@ -104,7 +104,12 @@ public abstract class ClientCall<ReqT, RespT> {
    * Callbacks for receiving metadata, response messages and completion status from the server.
    *
    * <p>Implementations are free to block for extended periods of time. Implementations are not
-   * required to be thread-safe.
+   * required to be thread-safe, but they must not be thread-hostile. The caller is free to call
+   * an instance from multiple threads, but only one call simultaneously. A single thread may
+   * interleave calls to multiple instances, so implementations using ThreadLocals must be careful
+   * to avoid leaking inappropriate state (e.g., clearing the ThreadLocal before returning).
+   *
+   * @param <T> type of message received.
    */
   public abstract static class Listener<T> {
 
@@ -137,6 +142,10 @@ public abstract class ClientCall<ReqT, RespT> {
      * <p>If {@code status} returns false for {@link Status#isOk()}, then the call failed.
      * An additional block of trailer metadata may be received at the end of the call from the
      * server. An empty {@link Metadata} object is passed if no trailers are received.
+     *
+     * <p>This method should not throw. If this method throws, there is no way to be notified of the
+     * exception. Implementations should therefore be careful of exceptions which can accidentally 
+     * leak resources.
      *
      * @param status the result of the remote call.
      * @param trailers metadata provided at call completion.
@@ -205,8 +214,8 @@ public abstract class ClientCall<ReqT, RespT> {
   /**
    * Prevent any further processing for this {@code ClientCall}. No further messages may be sent or
    * will be received. The server is informed of cancellations, but may not stop processing the
-   * call. Cancellation is permitted if previously {@link #halfClose}d. Cancelling an already {@code
-   * cancel()}ed {@code ClientCall} has no effect.
+   * call. Cancellation is permitted even if previously {@link #halfClose}d. Cancelling an already
+   * {@code cancel()}ed {@code ClientCall} has no effect.
    *
    * <p>No other methods on this class can be called after this method has been called.
    *
@@ -261,7 +270,6 @@ public abstract class ClientCall<ReqT, RespT> {
    * encoding has been negotiated, this is a no-op. By default per-message compression is enabled,
    * but may not have any effect if compression is not enabled on the call.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1703")
   public void setMessageCompression(boolean enabled) {
     // noop
   }

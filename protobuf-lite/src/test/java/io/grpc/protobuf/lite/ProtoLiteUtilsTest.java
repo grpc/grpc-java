@@ -16,10 +16,12 @@
 
 package io.grpc.protobuf.lite;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 import com.google.common.io.ByteStreams;
@@ -36,14 +38,13 @@ import io.grpc.MethodDescriptor.PrototypeMarshaller;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.testing.protobuf.SimpleRecursiveMessage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -51,9 +52,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ProtoLiteUtilsTest {
 
-  @Rule public final ExpectedException thrown = ExpectedException.none();
-
-  private Marshaller<Type> marshaller = ProtoLiteUtils.marshaller(Type.getDefaultInstance());
+  private final Marshaller<Type> marshaller = ProtoLiteUtils.marshaller(Type.getDefaultInstance());
   private Type proto = Type.newBuilder().setName("name").build();
 
   @Test
@@ -84,7 +83,7 @@ public class ProtoLiteUtilsTest {
   }
 
   @Test
-  public void parseInvalid() throws Exception {
+  public void parseInvalid() {
     InputStream is = new ByteArrayInputStream(new byte[] {-127});
     try {
       marshaller.parse(is);
@@ -96,7 +95,7 @@ public class ProtoLiteUtilsTest {
   }
 
   @Test
-  public void testMismatch() throws Exception {
+  public void testMismatch() {
     Marshaller<Enum> enumMarshaller = ProtoLiteUtils.marshaller(Enum.getDefaultInstance());
     // Enum's name and Type's name are both strings with tag 1.
     Enum altProto = Enum.newBuilder().setName(proto.getName()).build();
@@ -104,7 +103,7 @@ public class ProtoLiteUtilsTest {
   }
 
   @Test
-  public void introspection() throws Exception {
+  public void introspection() {
     Marshaller<Enum> enumMarshaller = ProtoLiteUtils.marshaller(Enum.getDefaultInstance());
     PrototypeMarshaller<Enum> prototypeMarshaller = (PrototypeMarshaller<Enum>) enumMarshaller;
     assertSame(Enum.getDefaultInstance(), prototypeMarshaller.getMessagePrototype());
@@ -211,14 +210,13 @@ public class ProtoLiteUtilsTest {
 
   @Test
   public void extensionRegistry_notNull() {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("newRegistry");
-
-    ProtoLiteUtils.setExtensionRegistry(null);
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> ProtoLiteUtils.setExtensionRegistry(null));
+    assertThat(e).hasMessageThat().isEqualTo("newRegistry");
   }
 
   @Test
-  public void parseFromKnowLengthInputStream() throws Exception {
+  public void parseFromKnowLengthInputStream() {
     Marshaller<Type> marshaller = ProtoLiteUtils.marshaller(Type.getDefaultInstance());
     Type expect = Type.newBuilder().setName("expected name").build();
 
@@ -231,21 +229,106 @@ public class ProtoLiteUtilsTest {
     assertEquals(GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE, ProtoLiteUtils.DEFAULT_MAX_MESSAGE_SIZE);
   }
 
+  @Test
+  public void testNullDefaultInstance() {
+    String expectedMessage = "defaultInstance cannot be null";
+    assertThrows(expectedMessage, NullPointerException.class,
+        () -> ProtoLiteUtils.marshaller(null));
+
+    assertThrows(expectedMessage, NullPointerException.class,
+        () -> ProtoLiteUtils.marshallerWithRecursionLimit(null, 10)
+    );
+  }
+
+  @Test
+  public void givenPositiveLimit_testRecursionLimitExceeded() throws IOException {
+    Marshaller<SimpleRecursiveMessage> marshaller = ProtoLiteUtils.marshallerWithRecursionLimit(
+        SimpleRecursiveMessage.getDefaultInstance(), 10);
+    SimpleRecursiveMessage message = buildRecursiveMessage(12);
+
+    assertRecursionLimitExceeded(marshaller, message);
+  }
+
+  @Test
+  public void givenZeroLimit_testRecursionLimitExceeded() throws IOException {
+    Marshaller<SimpleRecursiveMessage> marshaller = ProtoLiteUtils.marshallerWithRecursionLimit(
+        SimpleRecursiveMessage.getDefaultInstance(), 0);
+    SimpleRecursiveMessage message = buildRecursiveMessage(1);
+
+    assertRecursionLimitExceeded(marshaller, message);
+  }
+
+  @Test
+  public void givenPositiveLimit_testRecursionLimitNotExceeded() throws IOException {
+    Marshaller<SimpleRecursiveMessage> marshaller = ProtoLiteUtils.marshallerWithRecursionLimit(
+        SimpleRecursiveMessage.getDefaultInstance(), 15);
+    SimpleRecursiveMessage message = buildRecursiveMessage(12);
+
+    assertRecursionLimitNotExceeded(marshaller, message);
+  }
+
+  @Test
+  public void givenZeroLimit_testRecursionLimitNotExceeded() throws IOException {
+    Marshaller<SimpleRecursiveMessage> marshaller = ProtoLiteUtils.marshallerWithRecursionLimit(
+        SimpleRecursiveMessage.getDefaultInstance(), 0);
+    SimpleRecursiveMessage message = buildRecursiveMessage(0);
+
+    assertRecursionLimitNotExceeded(marshaller, message);
+  }
+
+  @Test
+  public void testDefaultRecursionLimit() throws IOException {
+    Marshaller<SimpleRecursiveMessage> marshaller = ProtoLiteUtils.marshaller(
+        SimpleRecursiveMessage.getDefaultInstance());
+    SimpleRecursiveMessage message = buildRecursiveMessage(100);
+
+    assertRecursionLimitNotExceeded(marshaller, message);
+  }
+
+  private static void assertRecursionLimitExceeded(Marshaller<SimpleRecursiveMessage> marshaller,
+      SimpleRecursiveMessage message) throws IOException {
+    InputStream is = marshaller.stream(message);
+    ByteArrayInputStream bais = new ByteArrayInputStream(ByteStreams.toByteArray(is));
+
+    assertThrows(StatusRuntimeException.class, () -> marshaller.parse(bais));
+  }
+
+  private static void assertRecursionLimitNotExceeded(Marshaller<SimpleRecursiveMessage> marshaller,
+      SimpleRecursiveMessage message) throws IOException {
+    InputStream is = marshaller.stream(message);
+    ByteArrayInputStream bais = new ByteArrayInputStream(ByteStreams.toByteArray(is));
+
+    assertEquals(message, marshaller.parse(bais));
+  }
+
+  private static SimpleRecursiveMessage buildRecursiveMessage(int depth) {
+    SimpleRecursiveMessage.Builder builder = SimpleRecursiveMessage.newBuilder()
+        .setValue("depth-" + depth);
+    for (int i = depth; i > 0; i--) {
+      builder = SimpleRecursiveMessage.newBuilder()
+          .setValue("depth-" + i)
+          .setMessage(builder.build());
+    }
+
+    return builder.build();
+  }
+
   private static class CustomKnownLengthInputStream extends InputStream implements KnownLength {
+
     private int position = 0;
-    private byte[] source;
+    private final byte[] source;
 
     private CustomKnownLengthInputStream(byte[] source) {
       this.source = source;
     }
 
     @Override
-    public int available() throws IOException {
+    public int available() {
       return source.length - position;
     }
 
     @Override
-    public int read() throws IOException {
+    public int read() {
       if (position == source.length) {
         return -1;
       }

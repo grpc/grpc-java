@@ -16,11 +16,13 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -47,6 +49,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -184,6 +187,94 @@ public class TlsTest {
   }
 
   /**
+   * Test that a client fails to send requests over TLS to a server with an unexpected hostname
+   * listed in an otherwise valid certificate.
+   */
+  @Test
+  public void clientRejectedMismatchedHostname() throws Exception {
+    // Create & start a server.
+    File serverCertFile = TestUtils.loadCert("server1.pem");
+    File serverPrivateKeyFile = TestUtils.loadCert("server1.key");
+    X509Certificate[] serverTrustedCaCerts = {
+        TestUtils.loadX509Cert("ca.pem")
+    };
+    server = serverBuilder(0, serverCertFile, serverPrivateKeyFile, serverTrustedCaCerts)
+        .addService(new SimpleServiceImpl())
+        .build()
+        .start();
+
+    // Create a client.
+    File clientCertChainFile = TestUtils.loadCert("client.pem");
+    File clientPrivateKeyFile = TestUtils.loadCert("client.key");
+    X509Certificate[] clientTrustedCaCerts = {
+        TestUtils.loadX509Cert("ca.pem")
+    };
+
+    // Override authority on the client to trigger a hostname verification failure
+    channel = NettyChannelBuilder.forAddress("localhost", server.getPort())
+        .overrideAuthority("i.am.a.bad.hostname")
+        .negotiationType(NegotiationType.TLS)
+        .sslContext(clientContextBuilder
+            .keyManager(clientCertChainFile, clientPrivateKeyFile)
+            .trustManager(clientTrustedCaCerts)
+            .build()
+        )
+        .build();
+    SimpleServiceGrpc.SimpleServiceBlockingStub client = SimpleServiceGrpc.newBlockingStub(channel);
+
+    // Send an actual request, via the full GRPC & network stack, and check that a proper
+    // response comes back.
+    try {
+      client.unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("TLS handshake should have failed, but didn't; received RPC response");
+    } catch (StatusRuntimeException e) {
+      assertEquals(Throwables.getStackTraceAsString(e), Status.Code.UNAVAILABLE,
+          e.getStatus().getCode());
+      // The root of the failure should be a CertificateException, but it is wrapped by a varying
+      // number of SSLHandshakeExceptions. Thus, reliably detecting the underlying cause is not
+      // feasible.
+      assertThat(e.getCause()).isInstanceOf(SSLHandshakeException.class);
+    }
+  }
+
+  /**
+   * Test that a client can explicitly disable hostname verification when it authenticates the
+   * server using a non-DNS identity.
+   */
+  @Test
+  public void clientCanDisableHostnameVerification() throws Exception {
+    // Create & start a server.
+    File serverCertFile = TestUtils.loadCert("server1.pem");
+    File serverPrivateKeyFile = TestUtils.loadCert("server1.key");
+    X509Certificate[] serverTrustedCaCerts = {
+        TestUtils.loadX509Cert("ca.pem")
+    };
+    server = serverBuilder(0, serverCertFile, serverPrivateKeyFile, serverTrustedCaCerts)
+        .addService(new SimpleServiceImpl())
+        .build()
+        .start();
+
+    // Use a mismatched authority, but explicitly disable DNS hostname verification.
+    File clientCertChainFile = TestUtils.loadCert("client.pem");
+    File clientPrivateKeyFile = TestUtils.loadCert("client.key");
+    X509Certificate[] clientTrustedCaCerts = {
+        TestUtils.loadX509Cert("ca.pem")
+    };
+    channel = NettyChannelBuilder.forAddress("localhost", server.getPort())
+        .overrideAuthority("i.am.a.bad.hostname")
+        .negotiationType(NegotiationType.TLS)
+        .sslContext(clientContextBuilder
+            .endpointIdentificationAlgorithm("")
+            .keyManager(clientCertChainFile, clientPrivateKeyFile)
+            .trustManager(clientTrustedCaCerts)
+            .build())
+        .build();
+    SimpleServiceGrpc.SimpleServiceBlockingStub client = SimpleServiceGrpc.newBlockingStub(channel);
+
+    client.unaryRpc(SimpleRequest.getDefaultInstance());
+  }
+
+  /**
    * Tests that a server configured to require client authentication refuses to accept connections
    * from a client that has an untrusted certificate.
    */
@@ -226,6 +317,12 @@ public class TlsTest {
           Throwables.getStackTraceAsString(e),
           Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
+    // We really want to see TRANSIENT_FAILURE here, but if the test runs slowly the 1s backoff
+    // may be exceeded by the time the failure happens (since it counts from the start of the
+    // attempt). Even so, CONNECTING is a strong indicator that the handshake failed; otherwise we'd
+    // expect READY or IDLE.
+    assertThat(channel.getState(false))
+        .isAnyOf(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING);
   }
 
 
@@ -267,6 +364,11 @@ public class TlsTest {
           Throwables.getStackTraceAsString(e),
           Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
+    // We really want to see TRANSIENT_FAILURE here, but if the test runs slowly the 1s backoff
+    // may be exceeded by the time the failure happens (since it counts from the start of the
+    // attempt). Even so, CONNECTING is a strong indicator that the handshake failed; otherwise we'd
+    assertThat(channel.getState(false))
+        .isAnyOf(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING);
   }
 
 
@@ -312,6 +414,11 @@ public class TlsTest {
           Throwables.getStackTraceAsString(e),
           Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
+    // We really want to see TRANSIENT_FAILURE here, but if the test runs slowly the 1s backoff
+    // may be exceeded by the time the failure happens (since it counts from the start of the
+    // attempt). Even so, CONNECTING is a strong indicator that the handshake failed; otherwise we'd
+    assertThat(channel.getState(false))
+        .isAnyOf(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING);
   }
 
 

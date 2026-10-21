@@ -24,6 +24,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -35,8 +37,9 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -52,8 +55,6 @@ import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.TestServiceGrpc.TestServiceBlockingStub;
 import io.grpc.testing.integration.TransportCompressionTest.Fzip;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -145,25 +146,16 @@ public class CompressionTest {
    * Parameters for test.
    */
   @Parameters
-  public static Collection<Object[]> params() {
-    boolean[] bools = new boolean[]{false, true};
-    List<Object[]> combos = new ArrayList<>(64);
-    for (boolean enableClientMessageCompression : bools) {
-      for (boolean clientAcceptEncoding : bools) {
-        for (boolean clientEncoding : bools) {
-          for (boolean enableServerMessageCompression : bools) {
-            for (boolean serverAcceptEncoding : bools) {
-              for (boolean serverEncoding : bools) {
-                combos.add(new Object[] {
-                    enableClientMessageCompression, clientAcceptEncoding, clientEncoding,
-                    enableServerMessageCompression, serverAcceptEncoding, serverEncoding});
-              }
-            }
-          }
-        }
-      }
-    }
-    return combos;
+  public static Iterable<Object[]> params() {
+    List<Boolean> bools = Lists.newArrayList(false, true);
+    return Iterables.transform(Lists.cartesianProduct(
+        bools, // enableClientMessageCompression
+        bools, // clientAcceptEncoding
+        bools, // clientEncoding
+        bools, // enableServerMessageCompression
+        bools, // serverAcceptEncoding
+        bools  // serverEncoding
+    ), List::toArray);
   }
 
   @Test
@@ -189,11 +181,11 @@ public class CompressionTest {
         .build()
         .start();
 
-    channel = ManagedChannelBuilder.forAddress("localhost", server.getPort())
+    channel = Grpc.newChannelBuilder(
+            "localhost:" + server.getPort(), InsecureChannelCredentials.create())
         .decompressorRegistry(clientDecompressors)
         .compressorRegistry(clientCompressors)
         .intercept(new ClientCompressorInterceptor())
-        .usePlaintext()
         .build();
     stub = TestServiceGrpc.newBlockingStub(channel);
 

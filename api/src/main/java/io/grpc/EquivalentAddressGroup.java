@@ -35,6 +35,47 @@ import java.util.List;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 public final class EquivalentAddressGroup {
 
+  /**
+   * The authority to be used when constructing Subchannels for this EquivalentAddressGroup.
+   * However, if the channel has overridden authority via
+   * {@link ManagedChannelBuilder#overrideAuthority(String)}, the transport will use the channel's
+   * authority override.
+   *
+   * <p>The authority <strong>must</strong> be from a trusted source, because if the authority is
+   * tampered with, RPCs may be sent to attackers which may leak sensitive user data. If the
+   * authority was acquired by doing I/O, the communication must be authenticated (e.g., via TLS).
+   * Recognize that the server that provided the authority can trivially impersonate the service.
+   */
+  @Attr
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6138")
+  public static final Attributes.Key<String> ATTR_AUTHORITY_OVERRIDE =
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE");
+  /**
+   * The name of the locality that this EquivalentAddressGroup is in.
+   */
+  public static final Attributes.Key<String> ATTR_LOCALITY_NAME =
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.LOCALITY");
+  /**
+   * The backend service associated with this EquivalentAddressGroup.
+   */
+  @Attr
+  static final Attributes.Key<String> ATTR_BACKEND_SERVICE =
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.BACKEND_SERVICE");
+  /**
+   * Endpoint weight for load balancing purposes. While the type is Long, it must be a valid uint32.
+   * Must not be zero. The weight is proportional to the other endpoints; if an endpoint's weight is
+   * twice that of another endpoint, it is intended to receive twice the load.
+   */
+  @Attr
+  static final Attributes.Key<Long> ATTR_WEIGHT =
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_WEIGHT");
+  /**
+   * Name associated with individual address, if available (e.g., DNS name).
+   */
+  @Attr
+  static final Attributes.Key<String> ATTR_ADDRESS_NAME =
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_ADDRESS_NAME");
+
   private final List<SocketAddress> addrs;
   private final Attributes attrs;
 
@@ -93,7 +134,9 @@ public final class EquivalentAddressGroup {
 
   @Override
   public String toString() {
-    // TODO(zpencer): Summarize return value if addr is very large
+    // EquivalentAddressGroup is intended to contain a small number of addresses for the same
+    // endpoint(e.g., IPv4/IPv6). Aggregating many groups into a single EquivalentAddressGroup
+    // is no longer done, so this no longer needs summarization.
     return "[" + addrs + "/" + attrs + "]";
   }
 
@@ -113,6 +156,9 @@ public final class EquivalentAddressGroup {
    */
   @Override
   public boolean equals(Object other) {
+    if (this == other) {
+      return true;
+    }
     if (!(other instanceof EquivalentAddressGroup)) {
       return false;
     }

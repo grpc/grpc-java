@@ -16,7 +16,7 @@
 
 package io.grpc.benchmarks;
 
-import java.net.SocketAddress;
+import java.util.Locale;
 
 /**
  * All of the supported transports.
@@ -49,7 +49,7 @@ public enum Transport {
    *
    * @throws IllegalArgumentException if the given address is invalid for this transport.
    */
-  public void validateSocketAddress(SocketAddress address) {
+  public void validateSocketAddress(String address) {
     if (!socketAddressValidator.isValidSocketAddress(address)) {
       throw new IllegalArgumentException(
           "Invalid address " + address + " for transport " + this);
@@ -66,11 +66,16 @@ public enum Transport {
       if (!first) {
         builder.append("\n");
       }
-      builder.append(transport.name().toLowerCase());
+      builder.append(transport);
       builder.append(": ");
       builder.append(transport.description);
       first = false;
     }
     return builder.toString();
+  }
+
+  @Override
+  public String toString() {
+    return name().toLowerCase(Locale.ROOT);
   }
 }

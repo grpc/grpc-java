@@ -16,9 +16,12 @@
 
 package io.grpc.okhttp;
 
-import static com.google.common.base.Charsets.UTF_8;
+import static com.google.common.truth.Truth.assertThat;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -36,9 +39,7 @@ import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentMatchers;
@@ -48,8 +49,6 @@ import org.mockito.ArgumentMatchers;
  */
 @RunWith(JUnit4.class)
 public class OkHttpProtocolNegotiatorTest {
-  @Rule public final ExpectedException thrown = ExpectedException.none();
-
   private final SSLSocket sock = mock(SSLSocket.class);
   private final Platform platform = mock(Platform.class);
 
@@ -116,21 +115,19 @@ public class OkHttpProtocolNegotiatorTest {
     OkHttpProtocolNegotiator negotiator = OkHttpProtocolNegotiator.get();
     doReturn(parameters).when(sock).getSSLParameters();
     doThrow(new IOException()).when(sock).startHandshake();
-    thrown.expect(IOException.class);
-
-    negotiator.negotiate(sock, "hostname", ImmutableList.of(Protocol.HTTP_2));
+    assertThrows(IOException.class,
+        () -> negotiator.negotiate(sock, "hostname", ImmutableList.of(Protocol.HTTP_2)));
   }
 
   @Test
-  public void negotiate_noSelectedProtocol() throws Exception {
+  public void negotiate_noSelectedProtocol() {
     Platform platform = mock(Platform.class);
 
     OkHttpProtocolNegotiator negotiator = new OkHttpProtocolNegotiator(platform);
 
-    thrown.expect(RuntimeException.class);
-    thrown.expectMessage("TLS ALPN negotiation failed");
-
-    negotiator.negotiate(sock, "hostname", ImmutableList.of(Protocol.HTTP_2));
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> negotiator.negotiate(sock, "hostname", ImmutableList.of(Protocol.HTTP_2)));
+    assertThat(e).hasMessageThat().isEqualTo("TLS ALPN negotiation failed with protocols: [h2]");
   }
 
   @Test
@@ -146,29 +143,9 @@ public class OkHttpProtocolNegotiatorTest {
     verify(platform).afterHandshake(sock);
   }
 
-  @Test
-  public void negotiate_preferGrpcExp() throws Exception {
-    // This test doesn't actually verify that grpc-exp is preferred, since the
-    // mocking of getSelectedProtocol() causes the protocol list to be ignored.
-    // The main usefulness of the test is for future changes to
-    // OkHttpProtocolNegotiator, where we can catch any change that would affect
-    // grpc-exp preference.
-    when(platform.getSelectedProtocol(ArgumentMatchers.<SSLSocket>any())).thenReturn("grpc-exp");
-    OkHttpProtocolNegotiator negotiator = new OkHttpProtocolNegotiator(platform);
-
-    String actual =
-        negotiator.negotiate(sock, "hostname",
-                ImmutableList.of(Protocol.GRPC_EXP, Protocol.HTTP_2));
-
-    assertEquals("grpc-exp", actual);
-    verify(sock).startHandshake();
-    verify(platform).getSelectedProtocol(sock);
-    verify(platform).afterHandshake(sock);
-  }
-
   // Checks that the super class is properly invoked.
   @Test
-  public void negotiate_android_handshakeFails() throws Exception {
+  public void negotiate_android_handshakeFails() {
     when(platform.getTlsExtensionType()).thenReturn(TlsExtensionType.ALPN_AND_NPN);
     AndroidNegotiator negotiator = new AndroidNegotiator(platform);
 
@@ -179,10 +156,9 @@ public class OkHttpProtocolNegotiatorTest {
       }
     };
 
-    thrown.expect(IOException.class);
-    thrown.expectMessage("expected");
-
-    negotiator.negotiate(androidSock, "hostname", ImmutableList.of(Protocol.HTTP_2));
+    IOException e = assertThrows(IOException.class,
+        () -> negotiator.negotiate(androidSock, "hostname", ImmutableList.of(Protocol.HTTP_2)));
+    assertThat(e).hasMessageThat().isEqualTo("expected");
   }
 
   @VisibleForTesting
@@ -314,5 +290,10 @@ public class OkHttpProtocolNegotiatorTest {
 
     @Override
     public void startHandshake() throws IOException {}
+  }
+
+  @Test
+  public void isValidHostName_withUnderscore() {
+    assertFalse(OkHttpProtocolNegotiator.isValidHostName("test_cert_2"));
   }
 }

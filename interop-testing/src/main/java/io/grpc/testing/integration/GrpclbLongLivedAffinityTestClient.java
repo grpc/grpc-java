@@ -16,8 +16,6 @@
 
 package io.grpc.testing.integration;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
@@ -72,8 +70,8 @@ public final class GrpclbLongLivedAffinityTestClient {
   private long rpcIntermissionSeconds = 1;
   private long totalTestSeconds = 60;
 
-  protected ManagedChannel channel;
-  protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
+  ManagedChannel channel;
+  TestServiceGrpc.TestServiceBlockingStub blockingStub;
 
   private void parseArgs(String[] args) {
     boolean usage = false;
@@ -175,7 +173,6 @@ public final class GrpclbLongLivedAffinityTestClient {
             blockingStub.withDeadlineAfter(1, TimeUnit.MINUTES).unaryCall(request);
         logger.info("Received response");
         String serverId = response.getServerId();
-        checkNotNull(serverId, "serverId is null");
         if (lastServerId != null && !lastServerId.equals(serverId)) {
           String msg = "Expected serverId " + lastServerId + ", but got " + serverId;
           logger.warning(msg + ". affinityBreakageBudget=" + affinityBreakageBudget);

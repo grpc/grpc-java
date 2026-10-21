@@ -17,8 +17,6 @@
 package io.grpc.netty;
 
 import java.lang.reflect.Method;
-import java.security.AccessController;
-import java.security.PrivilegedExceptionAction;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 
@@ -34,6 +32,7 @@ final class JettyTlsUtil {
 
   private static class Java9AlpnUnavailabilityCauseHolder {
 
+    @SuppressWarnings("StaticAssignmentOfThrowable")
     static final Throwable cause = checkAlpnAvailability();
 
     static Throwable checkAlpnAvailability() {
@@ -41,13 +40,7 @@ final class JettyTlsUtil {
         SSLContext context = SSLContext.getInstance("TLS");
         context.init(null, null, null);
         SSLEngine engine = context.createSSLEngine();
-        Method getApplicationProtocol =
-            AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
-              @Override
-              public Method run() throws Exception {
-                return SSLEngine.class.getMethod("getApplicationProtocol");
-              }
-            });
+        Method getApplicationProtocol = SSLEngine.class.getMethod("getApplicationProtocol");
         getApplicationProtocol.invoke(engine);
         return null;
       } catch (Throwable t) {
@@ -56,9 +49,8 @@ final class JettyTlsUtil {
     }
   }
 
-  /**
-   * Indicates whether or not the Jetty ALPN jar is installed in the boot classloader.
-   */
+  /** Indicates whether or not the Jetty ALPN jar is installed in the boot classloader. */
+  @SuppressWarnings("StaticAssignmentOfThrowable")
   static synchronized boolean isJettyAlpnConfigured() {
     try {
       Class.forName("org.eclipse.jetty.alpn.ALPN", true, null);
@@ -72,14 +64,14 @@ final class JettyTlsUtil {
   static synchronized Throwable getJettyAlpnUnavailabilityCause() {
     // This case should be unlikely
     if (jettyAlpnUnavailabilityCause == null) {
+      @SuppressWarnings("UnusedVariable")
       boolean discard = isJettyAlpnConfigured();
     }
     return jettyAlpnUnavailabilityCause;
   }
 
-  /**
-   * Indicates whether or not the Jetty NPN jar is installed in the boot classloader.
-   */
+  /** Indicates whether or not the Jetty NPN jar is installed in the boot classloader. */
+  @SuppressWarnings("StaticAssignmentOfThrowable")
   static synchronized boolean isJettyNpnConfigured() {
     try {
       Class.forName("org.eclipse.jetty.npn.NextProtoNego", true, null);
@@ -93,6 +85,7 @@ final class JettyTlsUtil {
   static synchronized Throwable getJettyNpnUnavailabilityCause() {
     // This case should be unlikely
     if (jettyNpnUnavailabilityCause == null) {
+      @SuppressWarnings("UnusedVariable")
       boolean discard = isJettyNpnConfigured();
     }
     return jettyNpnUnavailabilityCause;

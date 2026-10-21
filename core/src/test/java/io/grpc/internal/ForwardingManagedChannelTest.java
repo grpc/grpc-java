@@ -28,6 +28,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ForwardingTestUtil;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
+import io.grpc.NoopClientCall;
 import io.grpc.testing.TestMethodDescriptors;
 import java.lang.reflect.Method;
 import java.util.Collections;

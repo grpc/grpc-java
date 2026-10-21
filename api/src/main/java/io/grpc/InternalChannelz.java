@@ -179,6 +179,12 @@ public final class InternalChannelz {
     return new ServerList(serverList, !iterator.hasNext());
   }
 
+  /** Returns a server. */
+  @Nullable
+  public InternalInstrumented<ServerStats> getServer(long id) {
+    return servers.get(id);
+  }
+
   /** Returns socket refs for a server. */
   @Nullable
   public ServerSocketsList getServerSockets(long serverId, long fromId, int maxPageSize) {

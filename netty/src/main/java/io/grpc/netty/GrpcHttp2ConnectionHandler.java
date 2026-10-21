@@ -16,10 +16,15 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.Internal;
 import io.grpc.InternalChannelz;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.AdaptiveCumulator;
+import io.netty.handler.codec.ByteToMessageDecoder.Cumulator;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
@@ -31,17 +36,25 @@ import javax.annotation.Nullable;
  */
 @Internal
 public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler {
+  private static final int ADAPTIVE_CUMULATOR_COMPOSE_MIN_SIZE_DEFAULT = 1024;
+  private static final Cumulator ADAPTIVE_CUMULATOR =
+      new AdaptiveCumulator(ADAPTIVE_CUMULATOR_COMPOSE_MIN_SIZE_DEFAULT);
 
   @Nullable
   protected final ChannelPromise channelUnused;
+  private final ChannelLogger negotiationLogger;
 
-  public GrpcHttp2ConnectionHandler(
+  @SuppressWarnings("this-escape")
+  protected GrpcHttp2ConnectionHandler(
       ChannelPromise channelUnused,
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
-      Http2Settings initialSettings) {
+      Http2Settings initialSettings,
+      ChannelLogger negotiationLogger) {
     super(decoder, encoder, initialSettings);
     this.channelUnused = channelUnused;
+    this.negotiationLogger = negotiationLogger;
+    setCumulator(ADAPTIVE_CUMULATOR);
   }
 
   /**
@@ -52,6 +65,7 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    * @deprecated Use the two argument method instead.
    */
   @Deprecated
+  @SuppressWarnings("InlineMeSuggester") // the caller should consider providing securityInfo
   public void handleProtocolNegotiationCompleted(Attributes attrs) {
     handleProtocolNegotiationCompleted(attrs, /*securityInfo=*/ null);
   }
@@ -67,6 +81,14 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    */
   public void handleProtocolNegotiationCompleted(
       Attributes attrs, InternalChannelz.Security securityInfo) {
+  }
+
+  /**
+   * Returns the channel logger for the given channel context.
+   */
+  public ChannelLogger getNegotiationLogger() {
+    checkState(negotiationLogger != null, "NegotiationLogger must not be null");
+    return negotiationLogger;
   }
 
   /**

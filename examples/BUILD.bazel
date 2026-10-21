@@ -1,4 +1,8 @@
+load("@com_google_protobuf//bazel:java_proto_library.bzl", "java_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@io_grpc_grpc_java//:java_grpc_library.bzl", "java_grpc_library")
+load("@rules_java//java:java_binary.bzl", "java_binary")
+load("@rules_java//java:java_library.bzl", "java_library")
 
 proto_library(
     name = "helloworld_proto",
@@ -50,6 +54,22 @@ java_grpc_library(
     deps = [":route_guide_java_proto"],
 )
 
+proto_library(
+    name = "echo_proto",
+    srcs = ["src/main/proto/grpc/examples/echo/echo.proto"],
+)
+
+java_proto_library(
+    name = "echo_java_proto",
+    deps = [":echo_proto"],
+)
+
+java_grpc_library(
+    name = "echo_java_grpc",
+    srcs = [":echo_proto"],
+    deps = [":echo_java_proto"],
+)
+
 java_library(
     name = "examples",
     testonly = 1,
@@ -63,20 +83,29 @@ java_library(
         "@io_grpc_grpc_java//netty",
     ],
     deps = [
+        ":_health_java_grpc",
+        ":echo_java_grpc",
+        ":echo_java_proto",
         ":hello_streaming_java_grpc",
         ":hello_streaming_java_proto",
         ":helloworld_java_grpc",
         ":helloworld_java_proto",
         ":route_guide_java_grpc",
         ":route_guide_java_proto",
-        "@com_google_api_grpc_proto_google_common_protos//jar",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_java//api",
+        "@io_grpc_grpc_java//context",
         "@io_grpc_grpc_java//protobuf",
+        "@io_grpc_grpc_java//services:health",
+        "@io_grpc_grpc_java//services:healthlb",
         "@io_grpc_grpc_java//stub",
+        "@io_grpc_grpc_proto//:health_java_proto",
+        "@io_grpc_grpc_proto//:health_proto",
+        "@maven//:com_google_api_grpc_proto_google_common_protos",
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:com_google_code_gson_gson",
+        "@maven//:com_google_guava_guava",
     ],
 )
 
@@ -131,5 +160,121 @@ java_binary(
     main_class = "io.grpc.examples.manualflowcontrol.ManualFlowControlServer",
     runtime_deps = [
         ":examples",
+    ],
+)
+
+java_binary(
+    name = "load-balance-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.loadbalance.LoadBalanceClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "load-balance-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.loadbalance.LoadBalanceServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "custom-load-balance-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.customloadbalance.CustomLoadBalanceClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "name-resolve-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.nameresolve.NameResolveClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "name-resolve-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.nameresolve.NameResolveServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "deadline-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.deadline.DeadlineServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "deadline-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.deadline.DeadlineClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "healthservice-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.healthservice.HealthServiceServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "healthservice-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.healthservice.HealthServiceClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_grpc_library(
+    name = "_health_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:health_proto"],
+    visibility = ["//visibility:private"],
+    deps = ["@io_grpc_grpc_proto//:health_java_proto"],
+)
+
+java_binary(
+    name = "retrying-hello-world-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.retrying.RetryingHelloWorldClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "retrying-hello-world-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.retrying.RetryingHelloWorldServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+# grpc-xds requires some WORKSPACE/MODULE deps that aren't needed by the other
+# targets. This just makes sure the example WORKSPACE/MODULE works with
+# grpc-xds.
+java_library(
+    name = "test_grpc_xds_compiles",
+    runtime_deps = [
+        "@io_grpc_grpc_java//xds",
     ],
 )

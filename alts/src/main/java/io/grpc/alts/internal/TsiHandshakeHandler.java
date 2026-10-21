@@ -17,19 +17,21 @@
 package io.grpc.alts.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.alts.internal.AltsProtocolNegotiator.AUTH_CONTEXT_KEY;
 import static io.grpc.alts.internal.AltsProtocolNegotiator.TSI_PEER_KEY;
 
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.internal.TsiHandshakeHandler.HandshakeValidator.SecurityDetails;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
-import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -39,11 +41,9 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 /**
- * Performs The TSI Handshake. When the handshake is complete, it fires a user event with a {@link
- * TsiHandshakeCompletionEvent} indicating the result of the handshake.
+ * Performs The TSI Handshake.
  */
 public final class TsiHandshakeHandler extends ByteToMessageDecoder {
-
   /**
    * Validates a Tsi Peer object.
    */
@@ -83,24 +83,33 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   private final NettyTsiHandshaker handshaker;
   private final HandshakeValidator handshakeValidator;
   private final ChannelHandler next;
+  private final AsyncSemaphore semaphore;
 
-  private ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
+  private ProtocolNegotiationEvent pne;
+  private boolean semaphoreAcquired;
+  private final ChannelLogger negotiationLogger;
 
   /**
    * Constructs a TsiHandshakeHandler.
    */
   public TsiHandshakeHandler(
-      ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator) {
+      ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator,
+      ChannelLogger negotiationLogger) {
+    this(next, handshaker, handshakeValidator, null, negotiationLogger);
+  }
+
+  /**
+   * Constructs a TsHandshakeHandler. If a semaphore is provided, a permit from the semaphore is
+   * required to start the handshake and is returned when the handshake ends.
+   */
+  public TsiHandshakeHandler(
+      ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator,
+      AsyncSemaphore semaphore, ChannelLogger negotiationLogger) {
     this.handshaker = checkNotNull(handshaker, "handshaker");
     this.handshakeValidator = checkNotNull(handshakeValidator, "handshakeValidator");
     this.next = checkNotNull(next, "next");
-  }
-
-  @Override
-  public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-    InternalProtocolNegotiators.negotiationLogger(ctx)
-        .log(ChannelLogLevel.INFO, "TsiHandshake started");
-    sendHandshake(ctx);
+    this.semaphore = semaphore;
+    this.negotiationLogger = negotiationLogger;
   }
 
   @Override
@@ -128,27 +137,53 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
       boolean success = false;
       try {
         framer = new TsiFrameHandler(protector);
-        // replace the current handler with the framer (instead of adding before) since there may
-        // be pending data after the handshake frame.  The data will need to be decoded before
-        // being passed to the `next` handler.
-        ctx.pipeline().replace(ctx.name(), null, framer);
-        // Once the framer is in the pipeline, it will be cleaned up when the handler is removed.
+        // adding framer and next handler after this handler before removing Decoder (current
+        // handler). This will prevents any missing read from decoder and/or unframed write from
+        // next handler.
+        ctx.pipeline().addAfter(ctx.name(), null, framer);
+        ctx.pipeline().addAfter(ctx.pipeline().context(framer).name(), null, next);
+        ctx.pipeline().remove(ctx.name());
+        fireProtocolNegotiationEvent(ctx, peer, authContext, details);
         success = true;
       } finally {
         if (!success && protector != null) {
           protector.destroy();
         }
       }
-      // Add the `next` handler as late as possible, as it will issue writes on being added.
-      ctx.pipeline().addAfter(ctx.pipeline().context(framer).name(), null, next);
-      fireProtocolNegotiationEvent(ctx, peer, authContext, details);
     }
   }
 
   @Override
-  public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+  public void userEventTriggered(final ChannelHandlerContext ctx, Object evt) throws Exception {
     if (evt instanceof ProtocolNegotiationEvent) {
+      checkState(pne == null, "negotiation already started");
       pne = (ProtocolNegotiationEvent) evt;
+      negotiationLogger.log(ChannelLogLevel.INFO, "TsiHandshake started");
+      ChannelFuture acquire = semaphoreAcquire(ctx);
+      if (acquire.isSuccess()) {
+        semaphoreAcquired = true;
+        sendHandshake(ctx);
+      } else {
+        acquire.addListener(new ChannelFutureListener() {
+          @Override public void operationComplete(ChannelFuture future) {
+            if (!future.isSuccess()) {
+              ctx.fireExceptionCaught(future.cause());
+              return;
+            }
+            if (ctx.isRemoved()) {
+              semaphoreRelease();
+              return;
+            }
+            semaphoreAcquired = true;
+            try {
+              sendHandshake(ctx);
+            } catch (Exception ex) {
+              ctx.fireExceptionCaught(ex);
+            }
+            ctx.flush();
+          }
+        });
+      }
     } else {
       super.userEventTriggered(ctx, evt);
     }
@@ -156,8 +191,8 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
 
   private void fireProtocolNegotiationEvent(
       ChannelHandlerContext ctx, TsiPeer peer, Object authContext, SecurityDetails details) {
-    InternalProtocolNegotiators.negotiationLogger(ctx)
-        .log(ChannelLogLevel.INFO, "TsiHandshake finished");
+    checkState(pne != null, "negotiation not yet complete");
+    negotiationLogger.log(ChannelLogLevel.INFO, "TsiHandshake finished");
     ProtocolNegotiationEvent localPne = pne;
     Attributes.Builder attrs = InternalProtocolNegotiationEvent.getAttributes(localPne).toBuilder()
         .set(TSI_PEER_KEY, peer)
@@ -182,9 +217,34 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
         } else {
           break;
         }
+      } catch (GeneralSecurityException e) {
+        throw new GeneralSecurityException("TsiHandshakeHandler encountered exception", e);
       } finally {
         buf.release(written ? 1 : 2);
       }
+    }
+  }
+
+  @Override
+  protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception {
+    if (semaphoreAcquired) {
+      semaphoreRelease();
+      semaphoreAcquired = false;
+    }
+    handshaker.close();
+  }
+
+  private ChannelFuture semaphoreAcquire(ChannelHandlerContext ctx) {
+    if (semaphore == null) {
+      return ctx.newSucceededFuture();
+    } else {
+      return semaphore.acquire(ctx);
+    }
+  }
+
+  private void semaphoreRelease() {
+    if (semaphore != null) {
+      semaphore.release();
     }
   }
 }

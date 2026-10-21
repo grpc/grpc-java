@@ -26,6 +26,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.protobuf.ByteString;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import org.junit.Before;
 import org.junit.Test;
@@ -70,8 +72,9 @@ public class AltsTsiHandshakerTest {
   public void setUp() throws Exception {
     mockClient = mock(AltsHandshakerClient.class);
     mockServer = mock(AltsHandshakerClient.class);
-    handshakerClient = new AltsTsiHandshaker(true, mockClient);
-    handshakerServer = new AltsTsiHandshaker(false, mockServer);
+    NoopChannelLogger channelLogger = new NoopChannelLogger();
+    handshakerClient = new AltsTsiHandshaker(true, mockClient, channelLogger);
+    handshakerServer = new AltsTsiHandshaker(false, mockServer, channelLogger);
   }
 
   private HandshakerResult getHandshakerResult(boolean isClient) {
@@ -112,7 +115,7 @@ public class AltsTsiHandshakerTest {
     verify(mockServer, never()).startClientHandshake();
     verify(mockServer, never()).next(ArgumentMatchers.<ByteBuffer>any());
     // Mock transport buffer all consumed by processBytesFromPeer and there is an output frame.
-    transportBuffer.position(transportBuffer.limit());
+    ((Buffer) transportBuffer).position(transportBuffer.limit());
     when(mockServer.startServerHandshake(transportBuffer)).thenReturn(outputFrame);
     when(mockServer.isFinished()).thenReturn(false);
 
@@ -127,7 +130,7 @@ public class AltsTsiHandshakerTest {
     verify(mockServer, never()).next(ArgumentMatchers.<ByteBuffer>any());
     // Mock transport buffer all consumed by processBytesFromPeer and output frame is empty.
     // Expect processBytesFromPeer return False, because more data are needed from the peer.
-    transportBuffer.position(transportBuffer.limit());
+    ((Buffer) transportBuffer).position(transportBuffer.limit());
     when(mockServer.startServerHandshake(transportBuffer)).thenReturn(emptyOutputFrame);
     when(mockServer.isFinished()).thenReturn(false);
 
@@ -174,7 +177,7 @@ public class AltsTsiHandshakerTest {
     when(mockClient.isFinished()).thenReturn(false);
 
     handshakerClient.getBytesToSendToPeer(transportBuffer);
-    transportBuffer.position(transportBuffer.limit());
+    ((Buffer) transportBuffer).position(transportBuffer.limit());
     assertFalse(handshakerClient.processBytesFromPeer(transportBuffer));
   }
 
@@ -231,7 +234,7 @@ public class AltsTsiHandshakerTest {
         TEST_SERVER_SERVICE_ACCOUNT,
         clientPeer.getProperty(AltsTsiHandshaker.TSI_SERVICE_ACCOUNT_PEER_PROPERTY).getValue());
 
-    AltsAuthContext clientContext = (AltsAuthContext) handshakerClient.extractPeerObject();
+    AltsInternalContext clientContext = (AltsInternalContext) handshakerClient.extractPeerObject();
     assertEquals(TEST_APPLICATION_PROTOCOL, clientContext.getApplicationProtocol());
     assertEquals(TEST_RECORD_PROTOCOL, clientContext.getRecordProtocol());
     assertEquals(TEST_SERVER_SERVICE_ACCOUNT, clientContext.getPeerServiceAccount());
@@ -257,7 +260,7 @@ public class AltsTsiHandshakerTest {
         TEST_CLIENT_SERVICE_ACCOUNT,
         serverPeer.getProperty(AltsTsiHandshaker.TSI_SERVICE_ACCOUNT_PEER_PROPERTY).getValue());
 
-    AltsAuthContext serverContext = (AltsAuthContext) handshakerServer.extractPeerObject();
+    AltsInternalContext serverContext = (AltsInternalContext) handshakerServer.extractPeerObject();
     assertEquals(TEST_APPLICATION_PROTOCOL, serverContext.getApplicationProtocol());
     assertEquals(TEST_RECORD_PROTOCOL, serverContext.getRecordProtocol());
     assertEquals(TEST_CLIENT_SERVICE_ACCOUNT, serverContext.getPeerServiceAccount());

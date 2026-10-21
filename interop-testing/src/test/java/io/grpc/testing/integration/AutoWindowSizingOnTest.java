@@ -16,38 +16,36 @@
 
 package io.grpc.testing.integration;
 
-import io.grpc.ManagedChannel;
-import io.grpc.internal.AbstractServerImplBuilder;
-import io.grpc.netty.InternalHandlerSettings;
+import io.grpc.InsecureServerCredentials;
+import io.grpc.ServerBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
-import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class AutoWindowSizingOnTest extends AbstractInteropTest {
 
-  @BeforeClass
-  public static void turnOnAutoWindow() {
-    InternalHandlerSettings.enable(true);
-    InternalHandlerSettings.autoWindowOn(true);
-  }
-
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
-    return NettyServerBuilder.forPort(0)
+  protected ServerBuilder<?> getServerBuilder() {
+    NettyServerBuilder builder = NettyServerBuilder.forPort(0, InsecureServerCredentials.create())
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    // Disable the default census stats tracer, use testing tracer instead.
+    InternalNettyServerBuilder.setStatsEnabled(builder, false);
+    return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected NettyChannelBuilder createChannelBuilder() {
     NettyChannelBuilder builder = NettyChannelBuilder.forAddress(getListenAddress())
         .negotiationType(NegotiationType.PLAINTEXT)
-        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, createClientCensusStatsModule());
-    return builder.build();
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+        .initialFlowControlWindow(NettyChannelBuilder.DEFAULT_FLOW_CONTROL_WINDOW);
+    // Disable the default census stats interceptor, use testing interceptor instead.
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor());
   }
 }

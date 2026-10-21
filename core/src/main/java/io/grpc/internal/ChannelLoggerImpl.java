@@ -97,8 +97,9 @@ final class ChannelLoggerImpl extends ChannelLogger {
   private static Level toJavaLogLevel(ChannelLogLevel level) {
     switch (level) {
       case ERROR:
-        return Level.FINE;
       case WARNING:
+        return Level.FINE;
+      case INFO:
         return Level.FINER;
       default:
         return Level.FINEST;

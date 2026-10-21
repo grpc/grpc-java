@@ -19,8 +19,6 @@ package io.grpc.grpclb;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -31,10 +29,11 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 interface SubchannelPool {
+
   /**
-   * Pass essential utilities and the balancer that's using this pool.
+   * Registers a listener to received Subchannel status updates.
    */
-  void init(Helper helper, LoadBalancer lb);
+  void registerListener(PooledSubchannelStateListener listener);
 
   /**
    * Takes a {@link Subchannel} from the pool for the given {@code eag} if there is one available.
@@ -42,12 +41,6 @@ interface SubchannelPool {
    * defaultAttributes}.
    */
   Subchannel takeOrCreateSubchannel(EquivalentAddressGroup eag, Attributes defaultAttributes);
-
-  /**
-   * Gets notified about a state change of Subchannel that is possibly cached in this pool.  Do
-   * nothing if this pool doesn't own this Subchannel.
-   */
-  void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newStateInfo);
 
   /**
    * Puts a {@link Subchannel} back to the pool.  From this point the Subchannel is owned by the
@@ -59,4 +52,20 @@ interface SubchannelPool {
    * Shuts down all subchannels in the pool immediately.
    */
   void clear();
+
+  /**
+   * Receives state changes for a pooled {@link Subchannel}.
+   */
+  interface PooledSubchannelStateListener {
+
+    /**
+     * Handles a state change on a Subchannel. The behavior is similar to {@link
+     * io.grpc.LoadBalancer.SubchannelStateListener}.
+     *
+     * <p>When a subchannel is reused, subchannel state change event will be triggered even if the
+     * underlying status remains same.
+     */
+    void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
+
+  }
 }

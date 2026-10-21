@@ -17,28 +17,34 @@
 package io.grpc.netty;
 
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
+import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
@@ -53,12 +59,12 @@ import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
 import io.netty.util.AsciiString;
-import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -66,8 +72,8 @@ import javax.annotation.Nullable;
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
-class NettyClientTransport implements ConnectionClientTransport {
-  static final AttributeKey<ChannelLogger> LOGGER_KEY = AttributeKey.newInstance("channelLogger");
+class NettyClientTransport implements ConnectionClientTransport,
+    ClientKeepAlivePinger.TransportWithDisconnectReason {
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -78,9 +84,12 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final String authorityString;
   private final AsciiString authority;
   private final AsciiString userAgent;
+  private final boolean autoFlowControl;
   private final int flowControlWindow;
+  private final Set<AsciiString> neverIndexedMetadataKeys;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
+  private final int softLimitHeaderListSize;
   private KeepAliveManager keepAliveManager;
   private final long keepAliveTimeNanos;
   private final long keepAliveTimeoutNanos;
@@ -100,24 +109,50 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final Attributes eagAttributes;
   private final LocalSocketPicker localSocketPicker;
   private final ChannelLogger channelLogger;
+  private final boolean useGetForSafeMethods;
+  private final Ticker ticker;
+  private final MetricRecorder metricRecorder;
+
 
   NettyClientTransport(
-      SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
-      Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
-      ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
-      int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
-      boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
-      Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
-      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger) {
+      SocketAddress address,
+      ChannelFactory<? extends Channel> channelFactory,
+      Map<ChannelOption<?>, ?> channelOptions,
+      EventLoopGroup group,
+      ProtocolNegotiator negotiator,
+      boolean autoFlowControl,
+      int flowControlWindow,
+      Set<AsciiString> neverIndexedMetadataKeys,
+      int maxMessageSize,
+      int maxHeaderListSize,
+      int softLimitHeaderListSize,
+      long keepAliveTimeNanos,
+      long keepAliveTimeoutNanos,
+      boolean keepAliveWithoutCalls,
+      String authority,
+      @Nullable String userAgent,
+      Runnable tooManyPingsRunnable,
+      TransportTracer transportTracer,
+      Attributes eagAttributes,
+      LocalSocketPicker localSocketPicker,
+      ChannelLogger channelLogger,
+      boolean useGetForSafeMethods,
+      MetricRecorder metricRecorder,
+      Ticker ticker) {
+
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.negotiationScheme = this.negotiator.scheme();
     this.remoteAddress = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
     this.channelFactory = channelFactory;
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
+    this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
+    this.neverIndexedMetadataKeys =
+        Preconditions.checkNotNull(neverIndexedMetadataKeys, "neverIndexedMetadataKeys");
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
+    this.softLimitHeaderListSize = softLimitHeaderListSize;
     this.keepAliveTimeNanos = keepAliveTimeNanos;
     this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
     this.keepAliveWithoutCalls = keepAliveWithoutCalls;
@@ -131,6 +166,9 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.localSocketPicker = Preconditions.checkNotNull(localSocketPicker, "localSocketPicker");
     this.logId = InternalLogId.allocate(getClass(), remoteAddress.toString());
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
+    this.useGetForSafeMethods = useGetForSafeMethods;
+    this.metricRecorder = metricRecorder;
+    this.ticker = Preconditions.checkNotNull(ticker, "ticker");
   }
 
   @Override
@@ -139,7 +177,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       executor.execute(new Runnable() {
         @Override
         public void run() {
-          callback.onFailure(statusExplainingWhyTheChannelIsNull.asException());
+          callback.onFailure(statusExplainingWhyTheChannelIsNull);
         }
       });
       return;
@@ -151,7 +189,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
           Status s = statusFromFailedFuture(future);
-          Http2Ping.notifyFailed(callback, executor, s.asException());
+          Http2Ping.notifyFailed(callback, executor, s);
         }
       }
     };
@@ -162,21 +200,24 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      ClientStreamTracer[] tracers) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
     if (channel == null) {
-      return new FailingClientStream(statusExplainingWhyTheChannelIsNull);
+      return new FailingClientStream(statusExplainingWhyTheChannelIsNull, tracers);
     }
     StatsTraceContext statsTraceCtx =
-        StatsTraceContext.newClientContext(callOptions, getAttributes(), headers);
+        StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
     return new NettyClientStream(
         new NettyClientStream.TransportState(
             handler,
             channel.eventLoop(),
             maxMessageSize,
             statsTraceCtx,
-            transportTracer) {
+            transportTracer,
+            method.getFullMethodName(),
+            callOptions) {
           @Override
           protected Status statusFromFailedFuture(ChannelFuture f) {
             return NettyClientTransport.this.statusFromFailedFuture(f);
@@ -190,7 +231,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         userAgent,
         statsTraceCtx,
         transportTracer,
-        callOptions);
+        callOptions,
+        useGetForSafeMethods);
   }
 
   @SuppressWarnings("unchecked")
@@ -201,37 +243,35 @@ class NettyClientTransport implements ConnectionClientTransport {
     EventLoop eventLoop = group.next();
     if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
       keepAliveManager = new KeepAliveManager(
-          new ClientKeepAlivePinger(this), eventLoop, keepAliveTimeNanos, keepAliveTimeoutNanos,
-          keepAliveWithoutCalls);
+          new ClientKeepAlivePinger(this), eventLoop, keepAliveTimeNanos,
+          keepAliveTimeoutNanos, keepAliveWithoutCalls);
     }
 
     handler = NettyClientHandler.newHandler(
-        lifecycleManager,
-        keepAliveManager,
-        flowControlWindow,
-        maxHeaderListSize,
-        GrpcUtil.STOPWATCH_SUPPLIER,
-        tooManyPingsRunnable,
-        transportTracer,
-        eagAttributes,
-        authorityString);
-    NettyHandlerSettings.setAutoWindow(handler);
+            lifecycleManager,
+            keepAliveManager,
+            autoFlowControl,
+            flowControlWindow,
+            neverIndexedMetadataKeys,
+            maxHeaderListSize,
+            softLimitHeaderListSize,
+            GrpcUtil.STOPWATCH_SUPPLIER,
+            tooManyPingsRunnable,
+            transportTracer,
+            eagAttributes,
+            authorityString,
+            channelLogger,
+            ticker,
+            metricRecorder);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
-    b.attr(LOGGER_KEY, channelLogger);
+    b.option(ALLOCATOR, Utils.getByteBufAllocator(false));
     b.group(eventLoop);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
     b.option(SO_KEEPALIVE, true);
-    // For non-epoll based channel, the option will be ignored.
-    if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
-      ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
-      if (tcpUserTimeout != null) {
-        b.option(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos));
-      }
-    }
     for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
       // Every entry in the map is obtained from
       // NettyChannelBuilder#withOption(ChannelOption<T> option, T value)
@@ -241,7 +281,7 @@ class NettyClientTransport implements ConnectionClientTransport {
 
     ChannelHandler bufferingHandler = new WriteBufferingAndExceptionHandler(negotiationHandler);
 
-    /**
+    /*
      * We don't use a ChannelInitializer in the client bootstrap because its "initChannel" method
      * is executed in the event loop and we need this handler to be in the pipeline immediately so
      * that it may begin buffering writes.
@@ -265,11 +305,26 @@ class NettyClientTransport implements ConnectionClientTransport {
           // could use GlobalEventExecutor (which is what regFuture would use for notifying
           // listeners in this case), but avoiding on-demand thread creation in an error case seems
           // a good idea and is probably clearer threading.
-          lifecycleManager.notifyTerminated(statusExplainingWhyTheChannelIsNull);
+          lifecycleManager.notifyTerminated(statusExplainingWhyTheChannelIsNull,
+              SimpleDisconnectError.UNKNOWN);
         }
       };
     }
     channel = regFuture.channel();
+    // For non-epoll based channel, the option will be ignored.
+    try {
+      if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED
+              && Class.forName("io.netty.channel.epoll.AbstractEpollChannel").isInstance(channel)) {
+        ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
+        if (tcpUserTimeout != null) {
+          int tcpUserTimeoutMs = (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos);
+          channel.config().setOption(tcpUserTimeout, tcpUserTimeoutMs);
+        }
+      }
+    } catch (ClassNotFoundException ignored) {
+      // JVM did not load AbstractEpollChannel, so the current channel will not be of epoll type,
+      // so there is no need to set TCP_USER_TIMEOUT
+    }
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
     // This write will have no effect, yet it will only complete once the negotiationHandler
@@ -283,7 +338,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         if (!future.isSuccess()) {
           // Need to notify of this failure, because NettyClientHandler may not have been added to
           // the pipeline before the error occurred.
-          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
+          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()),
+              SimpleDisconnectError.UNKNOWN);
         }
       }
     });
@@ -317,15 +373,17 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public void shutdownNow(final Status reason) {
+    shutdownNow(reason, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
+  }
+
+  @Override
+  public void shutdownNow(final Status reason, DisconnectError disconnectError) {
     // Notifying of termination is automatically done when the channel closes.
     if (channel != null && channel.isOpen()) {
       handler.getWriteQueue().enqueue(new Runnable() {
         @Override
         public void run() {
-          lifecycleManager.notifyShutdown(reason);
-          // Call close() directly since negotiation may not have completed, such that a write would
-          // be queued.
-          channel.close();
+          lifecycleManager.notifyShutdown(reason, disconnectError);
           channel.write(new ForcefulCloseCommand(reason));
         }
       }, true);

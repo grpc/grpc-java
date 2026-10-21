@@ -26,7 +26,7 @@ import android.os.StrictMode;
 import android.os.StrictMode.OnVmViolationListener;
 import android.os.StrictMode.VmPolicy;
 import android.os.strictmode.Violation;
-import android.support.v7.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
 import android.view.View;

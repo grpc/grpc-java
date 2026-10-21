@@ -23,9 +23,10 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
@@ -38,28 +39,40 @@ final class CachedSubchannelPool implements SubchannelPool {
   private final HashMap<EquivalentAddressGroup, CacheEntry> cache =
       new HashMap<>();
 
-  private Helper helper;
-  private LoadBalancer lb;
+  private final Helper helper;
+  private PooledSubchannelStateListener listener;
 
   @VisibleForTesting
   static final long SHUTDOWN_TIMEOUT_MS = 10000;
 
-  @Override
-  public void init(Helper helper, LoadBalancer lb) {
+  public CachedSubchannelPool(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
-    this.lb = checkNotNull(lb, "lb");
   }
 
   @Override
-  @SuppressWarnings("deprecation")
+  public void registerListener(PooledSubchannelStateListener listener) {
+    this.listener = checkNotNull(listener, "listener");
+  }
+
+  @Override
   public Subchannel takeOrCreateSubchannel(
       EquivalentAddressGroup eag, Attributes defaultAttributes) {
     final CacheEntry entry = cache.remove(eag);
     final Subchannel subchannel;
     if (entry == null) {
-      // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to the
-      // new createSubchannel().
-      subchannel = helper.createSubchannel(eag, defaultAttributes);
+      subchannel =
+          helper.createSubchannel(
+              CreateSubchannelArgs.newBuilder()
+                  .setAddresses(eag)
+                  .setAttributes(defaultAttributes)
+                  .build());
+      subchannel.start(new SubchannelStateListener() {
+        @Override
+        public void onSubchannelState(ConnectivityStateInfo newState) {
+          updateCachedSubchannelState(subchannel, newState);
+          listener.onSubchannelState(subchannel, newState);
+        }
+      });
     } else {
       subchannel = entry.subchannel;
       entry.shutdownTimer.cancel();
@@ -68,15 +81,15 @@ final class CachedSubchannelPool implements SubchannelPool {
       helper.getSynchronizationContext().execute(new Runnable() {
           @Override
           public void run() {
-            lb.handleSubchannelState(subchannel, entry.state);
+            listener.onSubchannelState(subchannel, entry.state);
           }
         });
     }
     return subchannel;
   }
 
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newStateInfo) {
+  private void updateCachedSubchannelState(
+      Subchannel subchannel, ConnectivityStateInfo newStateInfo) {
     CacheEntry cached = cache.get(subchannel.getAddresses());
     if (cached == null || cached.subchannel != subchannel) {
       // Given subchannel is not cached.  Not our responsibility.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The gRPC Authors
+ * Copyright 2022 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,31 @@
 
 package io.grpc;
 
+import io.grpc.ManagedChannelProvider.NewChannelBuilderResult;
+
+/** Internal accessor for {@link ManagedChannelProvider}. */
+@Internal
 public final class InternalManagedChannelProvider {
-  public static final Iterable<Class<?>> HARDCODED_CLASSES =
-      ManagedChannelProvider.HARDCODED_CLASSES;
+
+  private InternalManagedChannelProvider() {
+  }
+
+  public static boolean isAvailable(ManagedChannelProvider provider) {
+    return provider.isAvailable();
+  }
+
+  public static ManagedChannelBuilder<?> builderForAddress(ManagedChannelProvider provider,
+      String name, int port) {
+    return provider.builderForAddress(name, port);
+  }
+
+  public static ManagedChannelBuilder<?> builderForTarget(ManagedChannelProvider provider,
+      String target) {
+    return provider.builderForTarget(target);
+  }
+
+  public static NewChannelBuilderResult newChannelBuilder(ManagedChannelProvider provider,
+      String target, ChannelCredentials creds) {
+    return provider.newChannelBuilder(target, creds);
+  }
 }

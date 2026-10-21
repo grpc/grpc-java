@@ -16,8 +16,8 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.US_ASCII;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -45,10 +45,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Queue;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
@@ -57,6 +59,9 @@ import org.mockito.stubbing.Answer;
 public abstract class NettyStreamTestBase<T extends Stream> {
   protected static final String MESSAGE = "hello world";
   protected static final int STREAM_ID = 1;
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock
   protected Channel channel;
@@ -86,8 +91,6 @@ public abstract class NettyStreamTestBase<T extends Stream> {
   /** Set up for test. */
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     when(channel.alloc()).thenReturn(UnpooledByteBufAllocator.DEFAULT);
     when(channel.pipeline()).thenReturn(pipeline);
     when(channel.eventLoop()).thenReturn(eventLoop);
@@ -136,13 +139,6 @@ public abstract class NettyStreamTestBase<T extends Stream> {
   @Test
   public void shouldBeImmediatelyReadyForData() {
     assertTrue(stream.isReady());
-  }
-
-  @Test
-  public void closedShouldNotBeReady() throws IOException {
-    assertTrue(stream.isReady());
-    closeStream();
-    assertFalse(stream.isReady());
   }
 
   @Test

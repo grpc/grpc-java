@@ -19,6 +19,7 @@ package io.grpc.netty;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.TruthJUnit.assume;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
@@ -28,10 +29,13 @@ import io.grpc.InternalChannelz.SocketOptions;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ConnectTimeoutException;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ServerChannel;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -40,6 +44,7 @@ import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -59,10 +64,27 @@ public class UtilsTest {
     Throwable t;
     t = new ConnectTimeoutException("msg");
     assertStatusEquals(Status.UNAVAILABLE.withCause(t), Utils.statusFromThrowable(t));
+    t = new UnresolvedAddressException();
+    assertStatusEquals(Status.UNAVAILABLE.withCause(t), Utils.statusFromThrowable(t));
     t = new Http2Exception(Http2Error.INTERNAL_ERROR, "msg");
     assertStatusEquals(Status.INTERNAL.withCause(t), Utils.statusFromThrowable(t));
     t = new Exception("msg");
     assertStatusEquals(Status.UNKNOWN.withCause(t), Utils.statusFromThrowable(t));
+  }
+
+  @Test
+  public void testGetBufferAllocator() {
+    ByteBufAllocator heapAllocator = Utils.getByteBufAllocator(true);
+    ByteBufAllocator directAllocator = Utils.getByteBufAllocator(false);
+    assertNotEquals(heapAllocator, directAllocator);
+
+    System.setProperty("io.netty.allocator.type", "unpooled");
+    ByteBufAllocator unpooled1 = Utils.getByteBufAllocator(false);
+    assertThat(unpooled1.getClass().getName()).isNotEqualTo("UnpooledByteBufAllocator");
+
+    System.setProperty("io.netty.allocator.type", "pooled");
+    ByteBufAllocator unpooled2 = Utils.getByteBufAllocator(false);
+    assertEquals(directAllocator, unpooled2);
   }
 
   @Test
@@ -204,13 +226,13 @@ public class UtilsTest {
   }
 
   @Test
-  public void defaultServerChannelType_whenEpollIsAvailable() {
+  public void defaultServerChannelFactory_whenEpollIsAvailable() {
     assume().that(Utils.isEpollAvailable()).isTrue();
 
-    Class<? extends Channel> clientChannelType = Utils.DEFAULT_SERVER_CHANNEL_TYPE;
+    ChannelFactory<? extends ServerChannel> channelFactory = Utils.DEFAULT_SERVER_CHANNEL_FACTORY;
 
-    assertThat(clientChannelType.getName())
-        .isEqualTo("io.netty.channel.epoll.EpollServerSocketChannel");
+    assertThat(channelFactory.toString())
+        .isEqualTo("ReflectiveChannelFactory(EpollServerSocketChannel.class)");
   }
 
   @Test

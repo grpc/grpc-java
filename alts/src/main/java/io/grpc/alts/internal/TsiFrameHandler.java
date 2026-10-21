@@ -83,11 +83,7 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
 
   @Override
   public void handlerRemoved0(ChannelHandlerContext ctx) throws Exception {
-    if (pendingUnprotectedWrites != null && !pendingUnprotectedWrites.isEmpty()) {
-      pendingUnprotectedWrites.removeAndFailAll(
-          new ChannelException("Pending write on removal of TSI handler"));
-    }
-    destroyProtector();
+    destroyProtectorAndWrites();
   }
 
   @Override
@@ -115,15 +111,14 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
     } catch (GeneralSecurityException e) {
       logger.log(Level.FINE, "Ignored error on flush before close", e);
     } finally {
-      pendingUnprotectedWrites = null;
-      destroyProtector();
+      destroyProtectorAndWrites();
     }
   }
 
   @Override
   @SuppressWarnings("FutureReturnValueIgnored") // for aggregatePromise.doneAllocatingPromises
   public void flush(final ChannelHandlerContext ctx) throws GeneralSecurityException {
-    if (pendingUnprotectedWrites.isEmpty()) {
+    if (pendingUnprotectedWrites == null || pendingUnprotectedWrites.isEmpty()) {
       // Return early if there's nothing to write. Otherwise protector.protectFlush() below may
       // not check for "no-data" and go on writing the 0-byte "data" to the socket with the
       // protection framing.
@@ -184,7 +179,15 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
     ctx.read();
   }
 
-  private void destroyProtector() {
+  private void destroyProtectorAndWrites() {
+    try {
+      if (pendingUnprotectedWrites != null && !pendingUnprotectedWrites.isEmpty()) {
+        pendingUnprotectedWrites.removeAndFailAll(
+            new ChannelException("Pending write on teardown of TSI handler"));
+      }
+    } finally {
+      pendingUnprotectedWrites = null;
+    }
     if (protector != null) {
       try {
         protector.destroy();

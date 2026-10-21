@@ -19,19 +19,26 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
+import io.grpc.okhttp.internal.framed.ErrorCode;
+import io.grpc.okhttp.internal.framed.FrameWriter;
+import io.grpc.okhttp.internal.framed.Settings;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
+import io.perfmark.TaskCloseable;
 import java.io.IOException;
 import java.net.Socket;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.Sink;
 import okio.Timeout;
 
 /**
  * A sink that asynchronously write / flushes a buffer internally. AsyncSink provides flush
- * coalescing to minimize network packing transmit.
+ * coalescing to minimize network packing transmit. Because I/O is handled asynchronously, most I/O
+ * exceptions will be delivered via a callback.
  */
 final class AsyncSink implements Sink {
 
@@ -39,6 +46,7 @@ final class AsyncSink implements Sink {
   private final Buffer buffer = new Buffer();
   private final SerializingExecutor serializingExecutor;
   private final TransportExceptionHandler transportExceptionHandler;
+  private final int maxQueuedControlFrames;
 
   @GuardedBy("lock")
   private boolean writeEnqueued = false;
@@ -49,15 +57,26 @@ final class AsyncSink implements Sink {
   private Sink sink;
   @Nullable
   private Socket socket;
+  private boolean controlFramesExceeded;
+  private int controlFramesInWrite;
+  @GuardedBy("lock")
+  private int queuedControlFrames;
 
-  private AsyncSink(SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
+  private AsyncSink(SerializingExecutor executor, TransportExceptionHandler exceptionHandler,
+      int maxQueuedControlFrames) {
     this.serializingExecutor = checkNotNull(executor, "executor");
     this.transportExceptionHandler = checkNotNull(exceptionHandler, "exceptionHandler");
+    this.maxQueuedControlFrames = maxQueuedControlFrames;
   }
 
+  /**
+   * {@code maxQueuedControlFrames} is only effective for frames written with
+   * {@link #limitControlFramesWriter(FrameWriter)}.
+   */
   static AsyncSink sink(
-      SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
-    return new AsyncSink(executor, exceptionHandler);
+      SerializingExecutor executor, TransportExceptionHandler exceptionHandler,
+      int maxQueuedControlFrames) {
+    return new AsyncSink(executor, exceptionHandler, maxQueuedControlFrames);
   }
 
   /**
@@ -72,30 +91,64 @@ final class AsyncSink implements Sink {
     this.socket = checkNotNull(socket, "socket");
   }
 
+  FrameWriter limitControlFramesWriter(FrameWriter delegate) {
+    return new LimitControlFramesWriter(delegate);
+  }
+
   @Override
   public void write(Buffer source, long byteCount) throws IOException {
     checkNotNull(source, "source");
     if (closed) {
       throw new IOException("closed");
     }
-    synchronized (lock) {
-      buffer.write(source, byteCount);
-      if (writeEnqueued || flushEnqueued || buffer.completeSegmentByteCount() <= 0) {
+    try (TaskCloseable ignore = PerfMark.traceTask("AsyncSink.write")) {
+      boolean closeSocket = false;
+      synchronized (lock) {
+        buffer.write(source, byteCount);
+
+        queuedControlFrames += controlFramesInWrite;
+        controlFramesInWrite = 0;
+        if (!controlFramesExceeded && queuedControlFrames > maxQueuedControlFrames) {
+          controlFramesExceeded = true;
+          closeSocket = true;
+        } else {
+          if (writeEnqueued || flushEnqueued || buffer.completeSegmentByteCount() <= 0) {
+            return;
+          }
+          writeEnqueued = true;
+        }
+      }
+      if (closeSocket) {
+        try {
+          socket.close();
+        } catch (IOException e) {
+          transportExceptionHandler.onException(e);
+        }
         return;
       }
-      writeEnqueued = true;
-    }
-    serializingExecutor.execute(new WriteRunnable() {
-      @Override
-      public void doRun() throws IOException {
-        Buffer buf = new Buffer();
-        synchronized (lock) {
-          buf.write(buffer, buffer.completeSegmentByteCount());
-          writeEnqueued = false;
+      serializingExecutor.execute(new WriteRunnable() {
+        final Link link = PerfMark.linkOut();
+        @Override
+        public void doRun() throws IOException {
+          Buffer buf = new Buffer();
+          try (TaskCloseable ignore = PerfMark.traceTask("WriteRunnable.runWrite")) {
+            PerfMark.linkIn(link);
+            int writingControlFrames;
+            synchronized (lock) {
+              buf.write(buffer, buffer.completeSegmentByteCount());
+              writeEnqueued = false;
+              // Imprecise because we only tranfer complete segments, but not by much and error
+              // won't accumulate over time
+              writingControlFrames = queuedControlFrames;
+            }
+            sink.write(buf, buf.size());
+            synchronized (lock) {
+              queuedControlFrames -= writingControlFrames;
+            }
+          }
         }
-        sink.write(buf, buf.size());
-      }
-    });
+      });
+    }
   }
 
   @Override
@@ -103,24 +156,30 @@ final class AsyncSink implements Sink {
     if (closed) {
       throw new IOException("closed");
     }
-    synchronized (lock) {
-      if (flushEnqueued) {
-        return;
-      }
-      flushEnqueued = true;
-    }
-    serializingExecutor.execute(new WriteRunnable() {
-      @Override
-      public void doRun() throws IOException {
-        Buffer buf = new Buffer();
-        synchronized (lock) {
-          buf.write(buffer, buffer.size());
-          flushEnqueued = false;
+    try (TaskCloseable ignore = PerfMark.traceTask("AsyncSink.flush")) {
+      synchronized (lock) {
+        if (flushEnqueued) {
+          return;
         }
-        sink.write(buf, buf.size());
-        sink.flush();
+        flushEnqueued = true;
       }
-    });
+      serializingExecutor.execute(new WriteRunnable() {
+        final Link link = PerfMark.linkOut();
+        @Override
+        public void doRun() throws IOException {
+          Buffer buf = new Buffer();
+          try (TaskCloseable ignore = PerfMark.traceTask("WriteRunnable.runFlush")) {
+            PerfMark.linkIn(link);
+            synchronized (lock) {
+              buf.write(buffer, buffer.size());
+              flushEnqueued = false;
+            }
+            sink.write(buf, buf.size());
+            sink.flush();
+          }
+        }
+      });
+    }
   }
 
   @Override
@@ -137,6 +196,13 @@ final class AsyncSink implements Sink {
     serializingExecutor.execute(new Runnable() {
       @Override
       public void run() {
+        try {
+          if (sink != null && buffer.size() > 0) {
+            sink.write(buffer, buffer.size());
+          }
+        } catch (IOException e) {
+          transportExceptionHandler.onException(e);
+        }
         buffer.close();
         try {
           if (sink != null) {
@@ -170,5 +236,31 @@ final class AsyncSink implements Sink {
     }
 
     public abstract void doRun() throws IOException;
+  }
+
+  private class LimitControlFramesWriter extends ForwardingFrameWriter {
+    public LimitControlFramesWriter(FrameWriter delegate) {
+      super(delegate);
+    }
+
+    @Override
+    public void ackSettings(Settings peerSettings) throws IOException {
+      controlFramesInWrite++;
+      super.ackSettings(peerSettings);
+    }
+
+    @Override
+    public void rstStream(int streamId, ErrorCode errorCode) throws IOException {
+      controlFramesInWrite++;
+      super.rstStream(streamId, errorCode);
+    }
+
+    @Override
+    public void ping(boolean ack, int payload1, int payload2) throws IOException {
+      if (ack) {
+        controlFramesInWrite++;
+      }
+      super.ping(ack, payload1, payload2);
+    }
   }
 }

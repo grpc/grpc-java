@@ -35,9 +35,10 @@ final class ServiceConfigState {
   private boolean updated;
 
   /**
+   * Construct new instance.
+   *
    * @param defaultServiceConfig The initial service config, or {@code null} if absent.
    * @param lookUpServiceConfig {@code true} if service config updates might occur.
-   * @param syncCtx The synchronization context that this is accessed from.
    */
   ServiceConfigState(
       @Nullable ManagedChannelServiceConfig defaultServiceConfig,

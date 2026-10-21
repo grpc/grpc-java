@@ -32,6 +32,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Creates a channel with the target's address and port number.
    *
+   * <p>Note that there is an open JDK bug on {@link java.net.URI} class parsing an ipv6 scope ID:
+   * bugs.openjdk.org/browse/JDK-8199396. This method is exposed to this bug. If you experience an
+   * issue, a work-around is to convert the scope ID to its numeric form (e.g. by using
+   * Inet6Address.getScopeId()) before calling this method.
+   *
    * @see #forTarget(String)
    * @since 1.0.0
    */
@@ -40,11 +45,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Creates a channel with a target string, which can be either a valid {@link
-   * NameResolver}-compliant URI, or an authority string.
+   * Creates a channel with a target string, which can be either an RFC 3986 URI, or an authority
+   * string.
    *
-   * <p>A {@code NameResolver}-compliant URI is an absolute hierarchical URI as defined by {@link
-   * java.net.URI}. Example URIs:
+   * <p>Example URIs:
    * <ul>
    *   <li>{@code "dns:///foo.googleapis.com:8080"}</li>
    *   <li>{@code "dns:///foo.googleapis.com"}</li>
@@ -52,11 +56,14 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *   <li>{@code "dns://8.8.8.8/foo.googleapis.com:8080"}</li>
    *   <li>{@code "dns://8.8.8.8/foo.googleapis.com"}</li>
    *   <li>{@code "zookeeper://zk.example.com:9900/example_service"}</li>
+   *   <li>{@code "intent:#Intent;package=com.some.app;action=a;category=c;end;"}</li>
    * </ul>
    *
-   * <p>An authority string will be converted to a {@code NameResolver}-compliant URI, which has
-   * {@code "dns"} as the scheme, no authority, and the original authority string as its path after
-   * properly escaped. Example authority strings:
+   * <p>An authority string will be converted to a URI having the scheme of the name resolver with
+   * the highest priority (e.g. {@code "dns"}), the empty string as the authority, and
+   * {@code target} as its absolute path. We recommend libraries specify {@code target} as a URI
+   * instead since they cannot know which NameResolver will be default at runtime.
+   * Example authority strings:
    * <ul>
    *   <li>{@code "localhost"}</li>
    *   <li>{@code "127.0.0.1"}</li>
@@ -67,6 +74,17 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:443"}</li>
    * </ul>
    *
+   * <p>The URI form of {@code target} is preferred because it is less ambiguous. For example, the
+   * target string {@code foo:8080} is a valid authority string with host {@code foo} and port
+   * {@code 8080} but it is also a valid RFC 3986 URI with scheme {@code foo} and path {@code 8080}.
+   * gRPC prioritizes the URI form, which means {@code foo:8080} will be treated as a URI with
+   * scheme {@code foo}. Using {@code dns:///foo:8080} avoids this ambiguity.
+   *
+   * <p>Note that there is an open JDK bug on {@link java.net.URI} class parsing an ipv6 scope ID:
+   * bugs.openjdk.org/browse/JDK-8199396. This method is exposed to this bug. If you experience an
+   * issue, a work-around is to convert the scope ID to its numeric form (e.g. by using
+   * Inet6Address.getScopeId()) before calling this method.
+   * 
    * @since 1.0.0
    */
   public static ManagedChannelBuilder<?> forTarget(String target) {
@@ -74,11 +92,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Execute application code directly in the transport thread.
-   *
-   * <p>Depending on the underlying transport, using a direct executor may lead to substantial
-   * performance improvements. However, it also requires the application to not block under
+   * Execute application code directly in the transport thread. The application must not block under
    * any circumstances.
+   *
+   * <p>Depending on the underlying transport and the application code, using a direct executor may
+   * lead to 10s of µs latency reduction but causes a substantial performance degradation when
+   * misused.
    *
    * <p>Calling this method is semantically equivalent to calling {@link #executor(Executor)} and
    * passing in a direct executor. However, this is the preferred way as it may allow the transport
@@ -90,7 +109,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T directExecutor();
 
   /**
-   * Provides a custom executor.
+   * Set the default executor for callbacks. This is used for async and future stub callbacks, but
+   * can be overridden by {@link CallOptions#withExecutor} and {@code stub.withExecutor()}. Blocking
+   * stubs specify a per-RPC executor. This is also used for {@link
+   * ManagedChannel#notifyWhenStateChanged}.
    *
    * <p>It's an optional parameter. If the user has not provided an executor when the channel is
    * built, the builder will use a static cached thread pool.
@@ -102,6 +124,25 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @since 1.0.0
    */
   public abstract T executor(Executor executor);
+
+  /**
+   * Provides a custom executor that will be used for operations that block or are expensive, to
+   * avoid blocking asynchronous code paths. For example, DNS queries and OAuth token fetching over
+   * HTTP could use this executor.
+   *
+   * <p>It's an optional parameter. If the user has not provided an executor when the channel is
+   * built, the builder will use a static cached thread pool.
+   *
+   * <p>The channel won't take ownership of the given executor. It's caller's responsibility to shut
+   * down the executor when it's desired.
+   *
+   * @return this
+   * @throws UnsupportedOperationException if unsupported
+   * @since 1.25.0
+   */
+  public T offloadExecutor(Executor executor) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Adds interceptors that will be called before the channel performs its real work. This is
@@ -128,6 +169,33 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T intercept(ClientInterceptor... interceptors);
 
   /**
+   * Internal-only: Adds a factory that will construct an interceptor based on the channel's target.
+   * This can be used to work around nameResolverFactory() changing the target string.
+   */
+  @Internal
+  protected T interceptWithTarget(InterceptorFactory factory) {
+    throw new UnsupportedOperationException();
+  }
+
+  /** Internal-only. */
+  @Internal
+  protected interface InterceptorFactory {
+    ClientInterceptor newInterceptor(String target);
+  }
+
+  /**
+   * Adds a {@link ClientTransportFilter}. The order of filters being added is the order they will
+   * be executed
+   *
+   * @return this
+   * @since 1.60.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10652")
+  public T addTransportFilter(ClientTransportFilter filter) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Provides a custom {@code User-Agent} for the application.
    *
    * <p>It's an optional parameter. The library will provide a user agent independent of this
@@ -141,6 +209,9 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Overrides the authority used with TLS and HTTP virtual hosting. It does not change what host is
    * actually connected to. Is commonly in the form {@code host:port}.
+   *
+   * <p>If the channel builder overrides authority, any authority override from name resolution
+   * result (via {@link EquivalentAddressGroup#ATTR_AUTHORITY_OVERRIDE}) will be discarded.
    *
    * <p>This method is intended for testing, but may safely be used outside of tests as an
    * alternative to DNS overrides.
@@ -157,57 +228,37 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>Should only be used for testing or for APIs where the use of such API or the data
    * exchanged is not sensitive.
    *
-   * @param skipNegotiation @{code true} if there is a priori knowledge that the endpoint supports
-   *                        plaintext, {@code false} if plaintext use must be negotiated.
-   * @deprecated Use {@link #usePlaintext()} instead.
+   * <p>This assumes prior knowledge that the target of this channel is using plaintext.  It will
+   * not perform HTTP/1.1 upgrades.
    *
-   * @throws UnsupportedOperationException if plaintext mode is not supported.
    * @return this
-   * @since 1.0.0
+   * @throws IllegalStateException if ChannelCredentials were provided when constructing the builder
+   * @throws UnsupportedOperationException if plaintext mode is not supported.
+   * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
-  @Deprecated
-  public T usePlaintext(boolean skipNegotiation) {
+  public T usePlaintext() {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Use of a plaintext connection to the server. By default a secure connection mechanism
-   * such as TLS will be used.
+   * Makes the client use TLS. Note: this is enabled by default.
    *
-   * <p>Should only be used for testing or for APIs where the use of such API or the data
-   * exchanged is not sensitive.
-   *
-   * <p>This assumes prior knowledge that the target of this channel is using plaintext.  It will
-   * not perform HTTP/1.1 upgrades.
-   *
-   *
-   * @throws UnsupportedOperationException if plaintext mode is not supported.
-   * @return this
-   * @since 1.11.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
-  @SuppressWarnings("deprecation")
-  public T usePlaintext() {
-    return usePlaintext(true);
-  }
-
-  /**
-   * Makes the client use TLS.
+   * <p>It is recommended to use the {@link ChannelCredentials} API
+   * instead of this method.
    *
    * @return this
+   * @throws IllegalStateException if ChannelCredentials were provided when constructing the builder
    * @throws UnsupportedOperationException if transport security is not supported.
    * @since 1.9.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3713")
   public T useTransportSecurity() {
     throw new UnsupportedOperationException();
   }
 
   /**
    * Provides a custom {@link NameResolver.Factory} for the channel. If this method is not called,
-   * the builder will try the providers listed by {@link NameResolverProvider#providers()} for the
-   * given target.
+   * the builder will try the providers registered in the default {@link NameResolverRegistry} for
+   * the given target.
    *
    * <p>This method should rarely be used, as name resolvers should provide a {@code
    * NameResolverProvider} and users rely on service loading to find implementations in the class
@@ -216,7 +267,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * @return this
    * @since 1.0.0
+   * @deprecated Most usages should use a globally-registered {@link NameResolverProvider} instead,
+   *     with either the SPI mechanism or {@link NameResolverRegistry#register}. Replacements for
+   *     all use-cases are not necessarily available yet. See
+   *     <a href="https://github.com/grpc/grpc-java/issues/7133">#7133</a>.
    */
+  @Deprecated
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract T nameResolverFactory(NameResolver.Factory resolverFactory);
 
@@ -235,22 +291,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public T defaultLoadBalancingPolicy(String policy) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Enables full-stream decompression of inbound streams. This will cause the channel's outbound
-   * headers to advertise support for GZIP compressed streams, and gRPC servers which support the
-   * feature may respond with a GZIP compressed stream.
-   *
-   * <p>EXPERIMENTAL: This method is here to enable an experimental feature, and may be changed or
-   * removed once the feature is stable.
-   *
-   * @throws UnsupportedOperationException if unsupported
-   * @since 1.7.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3399")
-  public T enableFullStreamDecompression() {
     throw new UnsupportedOperationException();
   }
 
@@ -343,7 +383,17 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * notice when they are causing excessive load. Clients are strongly encouraged to use only as
    * small of a value as necessary.
    *
+   * <p>When the channel implementation supports TCP_USER_TIMEOUT, enabling keepalive will also
+   * enable TCP_USER_TIMEOUT for the connection. This requires <em>all</em> sent packets to receive
+   * a TCP acknowledgement before the keepalive timeout. The keepalive time is not used for
+   * TCP_USER_TIMEOUT, except as a signal to enable the feature. grpc-netty supports
+   * TCP_USER_TIMEOUT on Linux platforms supported by netty-transport-native-epoll.
+   *
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A18-tcp-user-timeout.md">gRFC A18
+   *     TCP User Timeout</a>
    * @since 1.7.0
    */
   public T keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
@@ -358,6 +408,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This value should be at least multiple times the RTT to allow for lost packets.
    *
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A18-tcp-user-timeout.md">gRFC A18
+   *     TCP User Timeout</a>
    * @since 1.7.0
    */
   public T keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
@@ -375,6 +429,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * @throws UnsupportedOperationException if unsupported
    * @see #keepAliveTime(long, TimeUnit)
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
    * @since 1.7.0
    */
   public T keepAliveWithoutCalls(boolean enable) {
@@ -382,9 +438,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Sets max number of retry attempts. The total number of retry attempts for each RPC will not
-   * exceed this number even if service config may allow a higher number. Setting this number to
-   * zero is not effectively the same as {@code disableRetry()} because the former does not disable
+   * Sets the maximum number of retry attempts that may be configured by the service config. If the
+   * service config specifies a larger value it will be reduced to this value.  Setting this number
+   * to zero is not effectively the same as {@code disableRetry()} because the former does not
+   * disable
    * <a
    * href="https://github.com/grpc/proposal/blob/master/A6-client-retries.md#transparent-retries">
    * transparent retry</a>.
@@ -401,8 +458,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Sets max number of hedged attempts. The total number of hedged attempts for each RPC will not
-   * exceed this number even if service config may allow a higher number.
+   * Sets the maximum number of hedged attempts that may be configured by the service config. If the
+   * service config specifies a larger value it will be reduced to this value.
    *
    * <p>This method may not work as expected for the current release because retry is not fully
    * implemented yet.
@@ -452,28 +509,27 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
 
 
   /**
-   * Disables the retry and hedging mechanism provided by the gRPC library. This is designed for the
+   * Disables the retry and hedging subsystem provided by the gRPC library. This is designed for the
    * case when users have their own retry implementation and want to avoid their own retry taking
    * place simultaneously with the gRPC library layer retry.
    *
    * @return this
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T disableRetry() {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Enables the retry and hedging mechanism provided by the gRPC library.
-   *
-   * <p>For the current release, this method may have a side effect that disables Census stats and
-   * tracing. Hedging support is not implemented yet.
+   * Enables the retry and hedging subsystem which will use
+   * <a href="https://github.com/grpc/proposal/blob/master/A6-client-retries.md#integration-with-service-config">
+   * per-method configuration</a>. If a method is unconfigured, it will be limited to
+   * transparent retries, which are safe for non-idempotent RPCs. Service config is ideally provided
+   * by the name resolver, but may also be specified via {@link #defaultServiceConfig}.
    *
    * @return this
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T enableRetry() {
     throw new UnsupportedOperationException();
   }
@@ -511,7 +567,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.19.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
   public T proxyDetector(ProxyDetector proxyDetector) {
     throw new UnsupportedOperationException();
   }
@@ -548,10 +603,26 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * <p>If null is passed, then there will be no default service config.
    *
+   * <p>Your preferred JSON parser may not produce results in the format expected. For such cases,
+   * you can convert its output. For example, if your parser produces Integers and other Numbers
+   * in addition to Double:
+   *
+   * <pre>{@code @SuppressWarnings("unchecked")
+   * private static Object convertNumbers(Object o) {
+   *   if (o instanceof Map) {
+   *     ((Map) o).replaceAll((k,v) -> convertNumbers(v));
+   *   } else if (o instanceof List) {
+   *     ((List) o).replaceAll(YourClass::convertNumbers);
+   *   } else if (o instanceof Number && !(o instanceof Double)) {
+   *     o = ((Number) o).doubleValue();
+   *   }
+   *   return o;
+   * }}</pre>
+   *
+   * @return this
    * @throws IllegalArgumentException When the given serviceConfig is invalid or the current version
    *         of grpc library can not parse it gracefully. The state of the builder is unchanged if
    *         an exception is thrown.
-   * @return this
    * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
@@ -568,6 +639,52 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
   public T disableServiceConfigLookUp() {
     throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Adds a {@link MetricSink} for channel to use for configuring and recording metrics.
+   *
+   * @return this
+   * @since 1.64.0
+   */
+  @Internal
+  protected T addMetricSink(MetricSink metricSink) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Provides a "custom" argument for the {@link NameResolver}, if applicable, replacing any 'value'
+   * previously provided for 'key'.
+   *
+   * <p>NB: If the selected {@link NameResolver} does not understand 'key', or target URI resolution
+   * isn't needed at all, your custom argument will be silently ignored.
+   *
+   * <p>See {@link NameResolver.Args#getArg(NameResolver.Args.Key)} for more.
+   *
+   * @param key identifies the argument in a type-safe manner
+   * @param value the argument itself
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+  public <X> T setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
+    throw new UnsupportedOperationException();
+  }
+
+
+  /**
+   * Sets a configurator that will be applied to all internal child channels created by this
+   * channel.
+   *
+   * <p>This allows injecting universal configuration (like interceptors)
+   * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections.
+   *
+   * @param channelConfigurator the configurator to apply.
+   * @return this
+   * @since 1.83.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T childChannelConfigurator(ChannelConfigurator channelConfigurator) {
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   /**

@@ -1,0 +1,333 @@
+/*
+ * Copyright 2017 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.util;
+
+import static com.google.common.collect.Iterables.getOnlyElement;
+import static org.junit.Assert.assertEquals;
+
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.NoopServerCall;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptors;
+import io.grpc.ServerMethodDefinition;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.ServiceDescriptor;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.grpc.testing.TestMethodDescriptors;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+
+/**
+ * Unit test for {@link io.grpc.ServerInterceptor} implementations that come with gRPC. Not to be
+ * confused with the unit tests that validate gRPC's usage of interceptors.
+ */
+@RunWith(JUnit4.class)
+public class UtilServerInterceptorsTest {
+  private static class VoidCallListener extends ServerCall.Listener<Void> {
+    public void onCall(ServerCall<Void, Void> unused, Metadata unused2) { }
+  }
+
+  private MethodDescriptor<Void, Void> flowMethod = TestMethodDescriptors.voidMethod();
+  private final Metadata headers = new Metadata();
+  private ServerCallHandler<Void, Void> handler = new ServerCallHandler<Void, Void>() {
+      @Override
+      public ServerCall.Listener<Void> startCall(
+          ServerCall<Void, Void> call, Metadata headers) {
+        listener.onCall(call, headers);
+        return listener;
+      }
+  };
+  private ServerServiceDefinition serviceDefinition =
+      ServerServiceDefinition.builder(new ServiceDescriptor("service_foo", flowMethod))
+          .addMethod(flowMethod, handler)
+          .build();
+  private VoidCallListener listener;
+
+  @SuppressWarnings("unchecked")
+  private static ServerMethodDefinition<Void, Void> getSoleMethod(
+      ServerServiceDefinition serviceDef) {
+    if (serviceDef.getMethods().size() != 1) {
+      throw new AssertionError("Not exactly one method present");
+    }
+    return (ServerMethodDefinition<Void, Void>) getOnlyElement(serviceDef.getMethods());
+  }
+
+  @Test
+  public void statusRuntimeExceptionTransmitter() {
+    final Status expectedStatus = Status.UNAVAILABLE;
+    final Metadata expectedMetadata = new Metadata();
+    FakeServerCall<Void, Void> call =
+        new FakeServerCall<>(expectedStatus, expectedMetadata);
+    final StatusRuntimeException exception =
+        new StatusRuntimeException(expectedStatus, expectedMetadata);
+    listener = new VoidCallListener() {
+      @Override
+      public void onMessage(Void message) {
+        throw exception;
+      }
+
+      @Override
+      public void onHalfClose() {
+        throw exception;
+      }
+
+      @Override
+      public void onCancel() {
+        throw exception;
+      }
+
+      @Override
+      public void onComplete() {
+        throw exception;
+      }
+
+      @Override
+      public void onReady() {
+        throw exception;
+      }
+
+      @Override
+      public void onEvent(Object event) {
+        throw exception;
+      }
+    };
+
+    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
+        serviceDefinition,
+        Arrays.asList(TransmitStatusRuntimeExceptionInterceptor.instance()));
+    // The interceptor should have handled the error by directly closing the ServerCall
+    // and the exception should not propagate to the method's caller
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onMessage(null);
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onCancel();
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onComplete();
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onHalfClose();
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onReady();
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers)
+        .onEvent(new Object());
+    assertEquals(6, call.numCloses);
+  }
+
+  @Test
+  public void statusRuntimeExceptionTransmitter_serializingServerCall_triggerEvent() {
+    final java.util.concurrent.atomic.AtomicReference<Object> eventRef =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    FakeServerCall<Void, Void> call = new FakeServerCall<Void, Void>(Status.OK, new Metadata()) {
+      @Override
+      public void triggerEvent(Object event) {
+        eventRef.set(event);
+      }
+    };
+    final java.util.concurrent.atomic.AtomicReference<ServerCall<Void, Void>> interceptedCall =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    listener = new VoidCallListener() {
+      @Override
+      public void onCall(ServerCall<Void, Void> call, Metadata headers) {
+        interceptedCall.set(call);
+      }
+    };
+    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
+        serviceDefinition,
+        Arrays.asList(TransmitStatusRuntimeExceptionInterceptor.instance()));
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
+    Object testEvent = new Object();
+    interceptedCall.get().triggerEvent(testEvent);
+    assertEquals(testEvent, eventRef.get());
+  }
+
+  @Test
+  public void statusRuntimeExceptionTransmitterIgnoresClosedCalls() {
+    final Status expectedStatus = Status.UNAVAILABLE;
+    final Status unexpectedStatus = Status.CANCELLED;
+    final Metadata expectedMetadata = new Metadata();
+
+    FakeServerCall<Void, Void> call =
+        new FakeServerCall<>(expectedStatus, expectedMetadata);
+    final StatusRuntimeException exception =
+        new StatusRuntimeException(expectedStatus, expectedMetadata);
+
+    listener = new VoidCallListener() {
+      @Override
+      public void onMessage(Void message) {
+        throw exception;
+      }
+
+      @Override
+      public void onHalfClose() {
+        throw exception;
+      }
+    };
+
+    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
+        serviceDefinition,
+        Arrays.asList(TransmitStatusRuntimeExceptionInterceptor.instance()));
+    ServerCall.Listener<Void> callDoubleSreListener =
+        getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
+    callDoubleSreListener.onMessage(null); // the only close with our exception
+    callDoubleSreListener.onHalfClose(); // should not trigger a close
+    callDoubleSreListener.onEvent(new Object()); // should not trigger a close
+
+    // this listener closes the call when it is initialized with startCall
+    listener = new VoidCallListener() {
+      @Override
+      public void onCall(ServerCall<Void, Void> call, Metadata headers) {
+        call.close(unexpectedStatus, headers);
+      }
+
+      @Override
+      public void onHalfClose() {
+        throw exception;
+      }
+
+      @Override
+      public void onEvent(Object event) {
+        throw exception;
+      }
+    };
+
+    ServerCall.Listener<Void> callClosedListener =
+        getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
+    // call is already closed, does not match exception
+    callClosedListener.onHalfClose(); // should not trigger a close
+    callClosedListener.onEvent(new Object()); // should not trigger a close
+    assertEquals(1, call.numCloses);
+  }
+
+  @Test
+  public void statusRuntimeExceptionTransmitter_onEvent_transmitsStatusAndTrailers() {
+    final Status expectedStatus = Status.RESOURCE_EXHAUSTED.withDescription("rate limited");
+    final Metadata expectedMetadata = new Metadata();
+    Metadata.Key<String> key =
+        Metadata.Key.of("custom-trailer", Metadata.ASCII_STRING_MARSHALLER);
+    expectedMetadata.put(key, "val");
+
+    final java.util.concurrent.atomic.AtomicReference<Status> closedStatus =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    final java.util.concurrent.atomic.AtomicReference<Metadata> closedTrailers =
+        new java.util.concurrent.atomic.AtomicReference<>();
+
+    FakeServerCall<Void, Void> call =
+        new FakeServerCall<Void, Void>(expectedStatus, expectedMetadata) {
+          @Override
+          public void close(Status status, Metadata trailers) {
+            closedStatus.set(status);
+            closedTrailers.set(trailers);
+            super.close(status, trailers);
+          }
+        };
+
+    final StatusRuntimeException exception =
+        new StatusRuntimeException(expectedStatus, expectedMetadata);
+
+    listener = new VoidCallListener() {
+      @Override
+      public void onEvent(Object event) {
+        throw exception;
+      }
+    };
+
+    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
+        serviceDefinition,
+        Arrays.asList(TransmitStatusRuntimeExceptionInterceptor.instance()));
+
+    // When onEvent throws StatusRuntimeException, it should close the call with status and trailers
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onEvent("event");
+
+    assertEquals(1, call.numCloses);
+    assertEquals(expectedStatus, closedStatus.get());
+    assertEquals("val", closedTrailers.get().get(key));
+  }
+
+  @Test
+  public void statusRuntimeExceptionTransmitter_serializingServerCall_serializesTriggerEvent() {
+    final List<String> executionOrder = Collections.synchronizedList(new ArrayList<String>());
+    FakeServerCall<Void, Void> call = new FakeServerCall<Void, Void>(Status.OK, new Metadata()) {
+      @Override
+      public void sendHeaders(Metadata headers) {
+        executionOrder.add("sendHeaders");
+      }
+
+      @Override
+      public void triggerEvent(Object event) {
+        executionOrder.add("triggerEvent:" + event);
+      }
+
+      @Override
+      public void sendMessage(Void message) {
+        executionOrder.add("sendMessage");
+      }
+
+      @Override
+      public void close(Status status, Metadata trailers) {
+        executionOrder.add("close");
+      }
+    };
+
+    final java.util.concurrent.atomic.AtomicReference<ServerCall<Void, Void>> interceptedCall =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    listener = new VoidCallListener() {
+      @Override
+      public void onCall(ServerCall<Void, Void> call, Metadata headers) {
+        interceptedCall.set(call);
+      }
+    };
+
+    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
+        serviceDefinition,
+        Arrays.asList(TransmitStatusRuntimeExceptionInterceptor.instance()));
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
+
+    ServerCall<Void, Void> sc = interceptedCall.get();
+    sc.sendHeaders(new Metadata());
+    sc.triggerEvent("event1");
+    sc.sendMessage(null);
+    sc.triggerEvent("event2");
+    sc.close(Status.OK, new Metadata());
+
+    assertEquals(
+        Arrays.asList(
+            "sendHeaders", "triggerEvent:event1", "sendMessage", "triggerEvent:event2", "close"),
+        executionOrder);
+  }
+
+  private static class FakeServerCall<ReqT, RespT> extends NoopServerCall<ReqT, RespT> {
+    final Status expectedStatus;
+    final Metadata expectedMetadata;
+
+    int numCloses;
+
+    FakeServerCall(Status expectedStatus, Metadata expectedMetadata) {
+      this.expectedStatus = expectedStatus;
+      this.expectedMetadata = expectedMetadata;
+    }
+
+    @Override
+    @SuppressWarnings("ReferenceEquality")
+    public void close(Status status, Metadata trailers) {
+      if (status == expectedStatus && trailers == expectedMetadata) {
+        numCloses++;
+      }
+    }
+  }
+}

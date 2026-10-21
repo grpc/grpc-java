@@ -32,7 +32,7 @@ import javax.annotation.Nullable;
  * underlying transport need to work together.
  *
  * <p>The {@link NameResolver} should invoke the {@link ProxyDetector} retrieved from the {@link
- * NameResolver.Helper#getProxyDetector}, and pass the returned {@link ProxiedSocketAddress} to
+ * NameResolver.Args#getProxyDetector}, and pass the returned {@link ProxiedSocketAddress} to
  * {@link NameResolver.Listener#onAddresses}.  The DNS name resolver shipped with gRPC is already
  * doing so.
  *
@@ -46,7 +46,6 @@ import javax.annotation.Nullable;
  * Netty transport and the OkHttp transport currently only support {@link
  * HttpConnectProxiedSocketAddress} which is returned by the default {@code ProxyDetector}.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5279")
 public interface ProxyDetector {
   /**
    * Given a target address, returns a proxied address if a proxy should be used. If no proxy should

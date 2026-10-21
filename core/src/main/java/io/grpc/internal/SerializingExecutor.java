@@ -59,7 +59,7 @@ public final class SerializingExecutor implements Executor, Runnable {
   private static final int RUNNING = -1;
 
   /** Underlying executor that all submitted Runnable objects are run on. */
-  private final Executor executor;
+  private Executor executor;
 
   /** A list of Runnables to be run in order. */
   private final Queue<Runnable> runQueue = new ConcurrentLinkedQueue<>();
@@ -72,6 +72,15 @@ public final class SerializingExecutor implements Executor, Runnable {
    * @param executor Executor in which tasks should be run. Must not be null.
    */
   public SerializingExecutor(Executor executor) {
+    Preconditions.checkNotNull(executor, "'executor' must not be null.");
+    this.executor = executor;
+  }
+
+  /**
+   * Only call this from this SerializingExecutor Runnable, so that the executor is immediately
+   * visible to this SerializingExecutor executor.
+   * */
+  public void setExecutor(Executor executor) {
     Preconditions.checkNotNull(executor, "'executor' must not be null.");
     this.executor = executor;
   }
@@ -104,7 +113,7 @@ public final class SerializingExecutor implements Executor, Runnable {
             // ConcurrentLinkedQueue claims that null elements are not allowed, but seems to not
             // throw if the item to remove is null.  If removable is present in the queue twice,
             // the wrong one may be removed.  It doesn't seem possible for this case to exist today.
-            // This is important to run in case of RejectedExectuionException, so that future calls
+            // This is important to run in case of RejectedExecutionException, so that future calls
             // to execute don't succeed and accidentally run a previous runnable.
             runQueue.remove(removable);
           }
@@ -118,7 +127,8 @@ public final class SerializingExecutor implements Executor, Runnable {
   public void run() {
     Runnable r;
     try {
-      while ((r = runQueue.poll()) != null) {
+      Executor oldExecutor = executor;
+      while (oldExecutor == executor && (r = runQueue.poll()) != null ) {
         try {
           r.run();
         } catch (RuntimeException e) {

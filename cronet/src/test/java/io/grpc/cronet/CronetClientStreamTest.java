@@ -18,6 +18,7 @@ package io.grpc.cronet;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.os.Build;
 import com.google.common.io.BaseEncoding;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
@@ -43,8 +45,9 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.ByteArrayInputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -52,29 +55,33 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import org.chromium.net.BidirectionalStream;
 import org.chromium.net.CronetException;
-import org.chromium.net.ExperimentalBidirectionalStream;
 import org.chromium.net.UrlResponseInfo;
 import org.chromium.net.impl.UrlResponseInfoImpl;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P)
 public final class CronetClientStreamTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private CronetClientTransport transport;
   private Metadata metadata = new Metadata();
   @Mock private StreamBuilderFactory factory;
-  @Mock private ExperimentalBidirectionalStream cronetStream;
-  @Mock private Executor executor;
+  @Mock private BidirectionalStream cronetStream;
   @Mock private ClientStreamListener clientListener;
-  @Mock private ExperimentalBidirectionalStream.Builder builder;
+  @Mock private BidirectionalStream.Builder builder;
   private final Object lock = new Object();
   private final TransportTracer transportTracer = TransportTracer.getDefaultFactory().create();
+  private final Executor executor = Runnable::run;
   CronetClientStream clientStream;
 
   private MethodDescriptor.Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
@@ -94,16 +101,15 @@ public final class CronetClientStreamTest {
     }
 
     @Override
+    @SuppressWarnings("GuardedBy")
     public void run() {
-      assertTrue(stream != null);
+      assertNotNull(stream);
       stream.transportState().start(factory);
     }
   }
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     SetStreamFactoryRunnable callback = new SetStreamFactoryRunnable(factory);
     clientStream =
         new CronetClientStream(
@@ -119,7 +125,9 @@ public final class CronetClientStreamTest {
             method,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            false,
+            false);
     callback.setStream(clientStream);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
@@ -159,9 +167,9 @@ public final class CronetClientStreamTest {
     String[] requests = new String[5];
     WritableBuffer[] buffers = new WritableBuffer[5];
     for (int i = 0; i < 5; ++i) {
-      requests[i] = new String("request" + String.valueOf(i));
+      requests[i] = "request" + i;
       buffers[i] = allocator.allocate(requests[i].length());
-      buffers[i].write(requests[i].getBytes(Charset.forName("UTF-8")), 0, requests[i].length());
+      buffers[i].write(requests[i].getBytes(StandardCharsets.UTF_8), 0, requests[i].length());
       // The 3rd and 5th writeFrame calls have flush=true.
       clientStream.abstractClientStreamSink().writeFrame(buffers[i], false, i == 2 || i == 4, 1);
     }
@@ -173,7 +181,7 @@ public final class CronetClientStreamTest {
     // 5 writes are called.
     verify(cronetStream, times(5)).write(isA(ByteBuffer.class), eq(false));
     ByteBuffer fakeBuffer = ByteBuffer.allocateDirect(8);
-    fakeBuffer.position(8);
+    ((Buffer) fakeBuffer).position(8);
     verify(cronetStream, times(2)).flush();
 
     // 5 onWriteCompleted callbacks for previous writes.
@@ -194,27 +202,19 @@ public final class CronetClientStreamTest {
   }
 
   private static List<Map.Entry<String, String>> responseHeader(String status) {
-    Map<String, String> headers = new HashMap<String, String>();
+    Map<String, String> headers = new HashMap<>();
     headers.put(":status", status);
     headers.put("content-type", "application/grpc");
     headers.put("test-key", "test-value");
-    List<Map.Entry<String, String>> headerList = new ArrayList<Map.Entry<String, String>>(3);
-    for (Map.Entry<String, String> entry : headers.entrySet()) {
-      headerList.add(entry);
-    }
-    return headerList;
+    return new ArrayList<>(headers.entrySet());
   }
 
   private static List<Map.Entry<String, String>> trailers(int status) {
-    Map<String, String> trailers = new HashMap<String, String>();
+    Map<String, String> trailers = new HashMap<>();
     trailers.put("grpc-status", String.valueOf(status));
     trailers.put("content-type", "application/grpc");
     trailers.put("test-trailer-key", "test-trailer-value");
-    List<Map.Entry<String, String>> trailerList = new ArrayList<Map.Entry<String, String>>(3);
-    for (Map.Entry<String, String> entry : trailers.entrySet()) {
-      trailerList.add(entry);
-    }
-    return trailerList;
+    return new ArrayList<>(trailers.entrySet());
   }
 
   private static ByteBuffer createMessageFrame(byte[] bytes) {
@@ -238,7 +238,7 @@ public final class CronetClientStreamTest {
     verify(cronetStream, times(0)).read(isA(ByteBuffer.class));
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "", 0);
     callback.onResponseHeadersReceived(cronetStream, info);
     verify(cronetStream, times(1)).read(isA(ByteBuffer.class));
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
@@ -254,7 +254,7 @@ public final class CronetClientStreamTest {
     callback.onReadCompleted(
         cronetStream,
         info,
-        (ByteBuffer) createMessageFrame(new String("response1").getBytes(Charset.forName("UTF-8"))),
+        createMessageFrame("response1".getBytes(StandardCharsets.UTF_8)),
         false);
     // Haven't request any message, so no callback is called here.
     verify(clientListener, times(0)).messagesAvailable(isA(MessageProducer.class));
@@ -284,28 +284,28 @@ public final class CronetClientStreamTest {
     verify(cronetStream, times(0)).write(isA(ByteBuffer.class), isA(Boolean.class));
     // Send the first data frame.
     CronetWritableBufferAllocator allocator = new CronetWritableBufferAllocator();
-    String request = new String("request");
+    String request = "request";
     WritableBuffer writableBuffer = allocator.allocate(request.length());
-    writableBuffer.write(request.getBytes(Charset.forName("UTF-8")), 0, request.length());
+    writableBuffer.write(request.getBytes(StandardCharsets.UTF_8), 0, request.length());
     clientStream.abstractClientStreamSink().writeFrame(writableBuffer, false, true, 1);
     ArgumentCaptor<ByteBuffer> bufferCaptor = ArgumentCaptor.forClass(ByteBuffer.class);
     verify(cronetStream, times(1)).write(bufferCaptor.capture(), isA(Boolean.class));
     ByteBuffer buffer = bufferCaptor.getValue();
-    buffer.position(request.length());
+    ((Buffer) buffer).position(request.length());
     verify(cronetStream, times(1)).flush();
 
     // Receive response header
     clientStream.request(2);
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "", 0);
     callback.onResponseHeadersReceived(cronetStream, info);
     verify(cronetStream, times(1)).read(isA(ByteBuffer.class));
     // Receive one message
     callback.onReadCompleted(
         cronetStream,
         info,
-        (ByteBuffer) createMessageFrame(new String("response").getBytes(Charset.forName("UTF-8"))),
+        createMessageFrame("response".getBytes(StandardCharsets.UTF_8)),
         false);
     verify(clientListener, times(1)).messagesAvailable(isA(MessageProducer.class));
     verify(cronetStream, times(2)).read(isA(ByteBuffer.class));
@@ -356,7 +356,7 @@ public final class CronetClientStreamTest {
     clientStream.request(2);
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "", 0);
     callback.onResponseHeadersReceived(cronetStream, info);
     verify(cronetStream, times(1)).read(isA(ByteBuffer.class));
 
@@ -411,7 +411,7 @@ public final class CronetClientStreamTest {
     // Receive response header
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "", 0);
     callback.onResponseHeadersReceived(cronetStream, info);
 
     CronetException exception = mock(CronetException.class);
@@ -439,7 +439,7 @@ public final class CronetClientStreamTest {
     // Receive response header
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "", 0);
     callback.onResponseHeadersReceived(cronetStream, info);
 
     // Report trailer but not endOfStream.
@@ -471,7 +471,7 @@ public final class CronetClientStreamTest {
     // Receive response header
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "", 0);
     callback.onResponseHeadersReceived(cronetStream, info);
 
     // Report trailer and endOfStream
@@ -524,7 +524,7 @@ public final class CronetClientStreamTest {
     callback.onStreamReady(cronetStream);
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "", 0);
     callback.onResponseHeadersReceived(cronetStream, info);
     // Receive trailer first
     ((CronetClientStream.BidirectionalStreamCallback) callback)
@@ -553,7 +553,7 @@ public final class CronetClientStreamTest {
     callback.onStreamReady(cronetStream);
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "", 0);
     callback.onResponseHeadersReceived(cronetStream, info);
     // Receive cronet's endOfStream
     callback.onReadCompleted(cronetStream, null, ByteBuffer.allocate(0), true);
@@ -570,6 +570,7 @@ public final class CronetClientStreamTest {
     assertEquals(Status.UNAUTHENTICATED.getCode(), status.getCode());
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void addCronetRequestAnnotation_deprecated() {
     Object annotation = new Object();
@@ -587,8 +588,10 @@ public final class CronetClientStreamTest {
             false /* alwaysUsePut */,
             method,
             StatsTraceContext.NOOP,
-            CallOptions.DEFAULT.withOption(CronetCallOptions.CRONET_ANNOTATION_KEY, annotation),
-            transportTracer);
+            CallOptions.DEFAULT.withOption(CronetClientStream.CRONET_ANNOTATION_KEY, annotation),
+            transportTracer,
+            false,
+            false);
     callback.setStream(stream);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
@@ -603,8 +606,8 @@ public final class CronetClientStreamTest {
   public void withAnnotation() {
     Object annotation1 = new Object();
     Object annotation2 = new Object();
-    CallOptions callOptions = CronetCallOptions.withAnnotation(CallOptions.DEFAULT, annotation1);
-    callOptions = CronetCallOptions.withAnnotation(callOptions, annotation2);
+    CallOptions callOptions = CronetClientStream.withAnnotation(CallOptions.DEFAULT, annotation1);
+    callOptions = CronetClientStream.withAnnotation(callOptions, annotation2);
 
     SetStreamFactoryRunnable callback = new SetStreamFactoryRunnable(factory);
     CronetClientStream stream =
@@ -621,7 +624,9 @@ public final class CronetClientStreamTest {
             method,
             StatsTraceContext.NOOP,
             callOptions,
-            transportTracer);
+            transportTracer,
+            false,
+            false);
     callback.setStream(stream);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
@@ -659,10 +664,12 @@ public final class CronetClientStreamTest {
             getMethod,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            true,
+            false);
     callback.setStream(stream);
-    ExperimentalBidirectionalStream.Builder getBuilder =
-        mock(ExperimentalBidirectionalStream.Builder.class);
+    BidirectionalStream.Builder getBuilder =
+        mock(BidirectionalStream.Builder.class);
     when(getFactory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
         .thenReturn(getBuilder);
@@ -674,7 +681,7 @@ public final class CronetClientStreamTest {
         .newBidirectionalStreamBuilder(
             isA(String.class), isA(BidirectionalStream.Callback.class), isA(Executor.class));
 
-    byte[] msg = "request".getBytes(Charset.forName("UTF-8"));
+    byte[] msg = "request".getBytes(StandardCharsets.UTF_8);
     stream.writeMessage(new ByteArrayInputStream(msg));
     // We still haven't built the stream or sent anything.
     verify(cronetStream, times(0)).write(isA(ByteBuffer.class), isA(Boolean.class));
@@ -714,10 +721,12 @@ public final class CronetClientStreamTest {
             idempotentMethod,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            true,
+            true);
     callback.setStream(stream);
-    ExperimentalBidirectionalStream.Builder builder =
-        mock(ExperimentalBidirectionalStream.Builder.class);
+    BidirectionalStream.Builder builder =
+        mock(BidirectionalStream.Builder.class);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
         .thenReturn(builder);
@@ -744,10 +753,12 @@ public final class CronetClientStreamTest {
             method,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            true,
+            true);
     callback.setStream(stream);
-    ExperimentalBidirectionalStream.Builder builder =
-        mock(ExperimentalBidirectionalStream.Builder.class);
+    BidirectionalStream.Builder builder =
+        mock(BidirectionalStream.Builder.class);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
         .thenReturn(builder);
@@ -782,10 +793,12 @@ public final class CronetClientStreamTest {
             method,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            false,
+            false);
     callback.setStream(stream);
-    ExperimentalBidirectionalStream.Builder builder =
-        mock(ExperimentalBidirectionalStream.Builder.class);
+    BidirectionalStream.Builder builder =
+        mock(BidirectionalStream.Builder.class);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
         .thenReturn(builder);

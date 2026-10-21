@@ -17,12 +17,12 @@
 package io.grpc.internal;
 
 import io.grpc.Attributes;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A {@link ManagedClientTransport} that is based on a connection.
+ *
+ * <p>This interface is thread-safe.
  */
-@ThreadSafe
 public interface ConnectionClientTransport extends ManagedClientTransport {
   /**
    * Returns a set of attributes, which may vary depending on the state of the transport. The keys

@@ -21,19 +21,29 @@ import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Server for listening for and dispatching incoming calls. It is not expected to be implemented by
  * application code or interceptors.
+ *
+ * <p>This class is thread-safe.
  */
-@ThreadSafe
 public abstract class Server {
+
   /**
-   * Bind and start the server.
+   * Key for accessing the {@link Server} instance inside server RPC {@link Context}. It's
+   * unclear to us what users would need. If you think you need to use this, please file an
+   * issue for us to discuss a public API.
+   */
+  static final Context.Key<Server> SERVER_CONTEXT_KEY =
+      Context.key("io.grpc.Server");
+
+  /**
+   * Bind and start the server.  After this call returns, clients may begin connecting to the
+   * listening socket(s).
    *
    * @return {@code this} object
-   * @throws IllegalStateException if already started
+   * @throws IllegalStateException if already started or shut down
    * @throws IOException if unable to bind
    * @since 1.0.0
    */
@@ -61,7 +71,6 @@ public abstract class Server {
    * @throws IllegalStateException if the server has not yet been started.
    * @since 1.19.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5332")
   public List<? extends SocketAddress> getListenSockets() {
     throw new UnsupportedOperationException();
   }
@@ -102,6 +111,15 @@ public abstract class Server {
 
   /**
    * Initiates an orderly shutdown in which preexisting calls continue but new calls are rejected.
+   * After this call returns, this server has released the listening socket(s) and may be reused by
+   * another server.
+   *
+   * <p>Note that this method will not wait for preexisting calls to finish before returning.
+   * {@link #awaitTermination()} or {@link #awaitTermination(long, TimeUnit)} needs to be called to
+   * wait for existing calls to finish.
+   *
+   * <p>Calling this method before {@code start()} will shut down and terminate the server like
+   * normal, but prevents starting the server in the future.
    *
    * @return {@code this} object
    * @since 1.0.0
@@ -111,7 +129,11 @@ public abstract class Server {
   /**
    * Initiates a forceful shutdown in which preexisting and new calls are rejected. Although
    * forceful, the shutdown process is still not instantaneous; {@link #isTerminated()} will likely
-   * return {@code false} immediately after this method returns.
+   * return {@code false} immediately after this method returns. After this call returns, this
+   * server has released the listening socket(s) and may be reused by another server.
+   *
+   * <p>Calling this method before {@code start()} will shut down and terminate the server like
+   * normal, but prevents starting the server in the future.
    *
    * @return {@code this} object
    * @since 1.0.0
@@ -140,12 +162,18 @@ public abstract class Server {
   /**
    * Waits for the server to become terminated, giving up if the timeout is reached.
    *
+   * <p>Calling this method before {@code start()} or {@code shutdown()} is permitted and does not
+   * change its behavior.
+   *
    * @return whether the server is terminated, as would be done by {@link #isTerminated()}.
    */
   public abstract boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException;
 
   /**
    * Waits for the server to become terminated.
+   *
+   * <p>Calling this method before {@code start()} or {@code shutdown()} is permitted and does not
+   * change its behavior.
    *
    * @since 1.0.0
    */

@@ -21,16 +21,18 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
-import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.io.ByteStreams;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
@@ -41,9 +43,9 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * The abstract base class for {@link ClientStream} implementations. Extending classes only need to
- * implement {@link #transportState()} and {@link #abstractClientStreamSink()}. Must only be called
- * from the sending application thread.
+ * The abstract base class for {@link ClientStream} implementations.
+ *
+ * <p>Must only be called from the sending application thread.
  */
 public abstract class AbstractClientStream extends AbstractStream
     implements ClientStream, MessageFramer.Sink {
@@ -72,17 +74,10 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param endOfStream {@code true} if this is the last frame; {@code flush} is guaranteed to be
      *     {@code true} if this is {@code true}
      * @param flush {@code true} if more data may not be arriving soon
-     * @Param numMessages the number of messages this series of frames represents, must be >= 0.
+     * @param numMessages the number of messages this series of frames represents, must be >= 0.
      */
     void writeFrame(
         @Nullable WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages);
-
-    /**
-     * Requests up to the given number of messages from the call to be delivered to the client. This
-     * should end up triggering {@link TransportState#requestMessagesFromDeframer(int)} on the
-     * transport thread.
-     */
-    void request(int numMessages);
 
     /**
      * Tears down the stream, typically in the event of a timeout. This method may be called
@@ -96,8 +91,8 @@ public abstract class AbstractClientStream extends AbstractStream
 
   private final TransportTracer transportTracer;
   private final Framer framer;
-  private boolean shouldBeCountedForInUse;
-  private boolean useGet;
+  private final boolean shouldBeCountedForInUse;
+  private final boolean useGet;
   private Metadata headers;
   /**
    * Whether cancel() has been called. This is not strictly necessary, but removes the delay between
@@ -106,6 +101,7 @@ public abstract class AbstractClientStream extends AbstractStream
    */
   private volatile boolean cancelled;
 
+  @SuppressWarnings("this-escape")
   protected AbstractClientStream(
       WritableBufferAllocator bufferAllocator,
       StatsTraceContext statsTraceCtx,
@@ -118,7 +114,7 @@ public abstract class AbstractClientStream extends AbstractStream
     this.shouldBeCountedForInUse = GrpcUtil.shouldBeCountedForInUse(callOptions);
     this.useGet = useGet;
     if (!useGet) {
-      framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
+      this.framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
       this.headers = headers;
     } else {
       framer = new GetFramer(headers, statsTraceCtx);
@@ -128,8 +124,7 @@ public abstract class AbstractClientStream extends AbstractStream
   @Override
   public void setDeadline(Deadline deadline) {
     headers.discardAll(TIMEOUT_KEY);
-    long effectiveTimeout = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
-    headers.put(TIMEOUT_KEY, effectiveTimeout);
+    headers.put(TIMEOUT_KEY, deadline.timeRemaining(TimeUnit.NANOSECONDS));
   }
 
   @Override
@@ -185,11 +180,6 @@ public abstract class AbstractClientStream extends AbstractStream
   }
 
   @Override
-  public final void request(int numMessages) {
-    abstractClientStreamSink().request(numMessages);
-  }
-
-  @Override
   public final void deliverFrame(
       WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages) {
     Preconditions.checkArgument(frame != null || endOfStream, "null frame before EOS");
@@ -216,11 +206,17 @@ public abstract class AbstractClientStream extends AbstractStream
     return super.isReady() && !cancelled;
   }
 
+  @Override
+  public final void appendTimeoutInsight(InsightBuilder insight) {
+    Attributes attrs = getAttributes();
+    insight.appendKeyValue("remote_addr", attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+  }
+
   protected TransportTracer getTransportTracer() {
     return transportTracer;
   }
 
-  /** This should only called from the transport thread. */
+  /** This should only be called from the transport thread. */
   protected abstract static class TransportState extends AbstractStream.TransportState {
     /** Whether listener.closed() has been called. */
     private final StatsTraceContext statsTraceCtx;
@@ -246,9 +242,13 @@ public abstract class AbstractClientStream extends AbstractStream
     protected TransportState(
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
-        TransportTracer transportTracer) {
+        TransportTracer transportTracer,
+        CallOptions options) {
       super(maxMessageSize, statsTraceCtx, transportTracer);
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
+      if (options.getOnReadyThreshold() != null) {
+        this.setOnReadyThreshold(options.getOnReadyThreshold());
+      }
     }
 
     private void setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -303,7 +303,7 @@ public abstract class AbstractClientStream extends AbstractStream
      */
     protected void inboundHeadersReceived(Metadata headers) {
       checkState(!statusReported, "Received headers on closed stream");
-      statsTraceCtx.clientInboundHeaders();
+      statsTraceCtx.clientInboundHeaders(headers);
 
       boolean compressedStream = false;
       String streamEncoding = headers.get(CONTENT_ENCODING_KEY);
@@ -334,8 +334,7 @@ public abstract class AbstractClientStream extends AbstractStream
           if (compressedStream) {
             deframeFailed(
                 Status.INTERNAL
-                    .withDescription(
-                        String.format("Full stream and gRPC message encoding cannot both be set"))
+                    .withDescription("Full stream and gRPC message encoding cannot both be set")
                     .asRuntimeException());
             return;
           }
@@ -459,10 +458,10 @@ public abstract class AbstractClientStream extends AbstractStream
       if (!listenerClosed) {
         listenerClosed = true;
         statsTraceCtx.streamClosed(status);
-        listener().closed(status, rpcProgress, trailers);
         if (getTransportTracer() != null) {
           getTransportTracer().reportStreamClosed(status.isOk());
         }
+        listener().closed(status, rpcProgress, trailers);
       }
     }
   }
@@ -478,11 +477,12 @@ public abstract class AbstractClientStream extends AbstractStream
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     }
 
+    @SuppressWarnings("BetaApi") // ByteStreams is not Beta in v27
     @Override
     public void writePayload(InputStream message) {
       checkState(payload == null, "writePayload should not be called multiple times");
       try {
-        payload = IoUtils.toByteArray(message);
+        payload = ByteStreams.toByteArray(message);
       } catch (java.io.IOException ex) {
         throw new RuntimeException(ex);
       }

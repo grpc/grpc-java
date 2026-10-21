@@ -25,6 +25,7 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -44,7 +45,6 @@ public class LoadBalancerTest {
   private final Attributes attrs = Attributes.newBuilder()
       .set(Attributes.Key.create("trash"), new Object())
       .build();
-  private final Subchannel emptySubchannel = new EmptySubchannel();
 
   @Test
   public void pickResult_withSubchannel() {
@@ -65,12 +65,45 @@ public class LoadBalancerTest {
   }
 
   @Test
+  public void pickResult_withSubchannelReplacement() {
+    PickResult result = PickResult.withSubchannel(subchannel, tracerFactory)
+        .copyWithSubchannel(subchannel2);
+    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel2);
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
+    assertThat(result.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
+    assertThat(result.isDrop()).isFalse();
+  }
+
+  @Test
+  public void pickResult_withStreamTracerFactory() {
+    PickResult result = PickResult.withSubchannel(subchannel)
+        .copyWithStreamTracerFactory(tracerFactory);
+    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
+    assertThat(result.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
+    assertThat(result.isDrop()).isFalse();
+  }
+
+  @Test
   public void pickResult_withNoResult() {
     PickResult result = PickResult.withNoResult();
     assertThat(result.getSubchannel()).isNull();
     assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
     assertThat(result.getStreamTracerFactory()).isNull();
     assertThat(result.isDrop()).isFalse();
+    assertThat(result.getDelayType()).isNull();
+    assertThat(result.getDelayReason()).isNull();
+  }
+
+  @Test
+  public void pickResult_withNoResult_withDelay() {
+    PickResult result = PickResult.withNoResult("connecting", "trying backends");
+    assertThat(result.getSubchannel()).isNull();
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
+    assertThat(result.getStreamTracerFactory()).isNull();
+    assertThat(result.isDrop()).isFalse();
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("trying backends");
   }
 
   @Test
@@ -98,6 +131,10 @@ public class LoadBalancerTest {
     PickResult sc3 = PickResult.withSubchannel(subchannel, tracerFactory);
     PickResult sc4 = PickResult.withSubchannel(subchannel2);
     PickResult nr = PickResult.withNoResult();
+    PickResult nrDelay1 = PickResult.withNoResult("connecting", "trying 10.0.0.1");
+    PickResult nrDelay2 = PickResult.withNoResult("connecting", "trying 10.0.0.1");
+    PickResult nrDelayDiffReason = PickResult.withNoResult("connecting", "trying 10.0.0.2");
+    PickResult nrDelayDiffType = PickResult.withNoResult("rls_lookup_pending", "trying 10.0.0.1");
     PickResult error1 = PickResult.withError(status);
     PickResult error2 = PickResult.withError(status2);
     PickResult error3 = PickResult.withError(status2);
@@ -112,6 +149,12 @@ public class LoadBalancerTest {
     assertThat(sc1).isNotEqualTo(sc3);
     assertThat(sc1).isNotEqualTo(sc4);
 
+    assertThat(nr).isEqualTo(nrDelay1);
+    assertThat(nrDelay1).isEqualTo(nrDelay2);
+    assertThat(nrDelay1.hashCode()).isEqualTo(nrDelay2.hashCode());
+    assertThat(nrDelay1).isEqualTo(nrDelayDiffReason);
+    assertThat(nrDelay1).isEqualTo(nrDelayDiffType);
+
     assertThat(error1).isNotEqualTo(error2);
     assertThat(error2).isEqualTo(error3);
 
@@ -120,38 +163,6 @@ public class LoadBalancerTest {
 
     assertThat(error1.getStatus()).isEqualTo(drop1.getStatus());
     assertThat(error1).isNotEqualTo(drop1);
-  }
-
-  @Deprecated
-  @Test
-  public void helper_createSubchannel_old_delegates() {
-    class OverrideCreateSubchannel extends NoopHelper {
-      boolean ran;
-
-      @Override
-      public Subchannel createSubchannel(List<EquivalentAddressGroup> addrsIn, Attributes attrsIn) {
-        assertThat(addrsIn).hasSize(1);
-        assertThat(addrsIn.get(0)).isSameInstanceAs(eag);
-        assertThat(attrsIn).isSameInstanceAs(attrs);
-        ran = true;
-        return subchannel;
-      }
-    }
-
-    OverrideCreateSubchannel helper = new OverrideCreateSubchannel();
-    assertThat(helper.createSubchannel(eag, attrs)).isSameInstanceAs(subchannel);
-    assertThat(helper.ran).isTrue();
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void helper_createSubchannelList_oldApi_throws() {
-    try {
-      new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
-      fail("Should throw");
-    } catch (UnsupportedOperationException e) {
-      // expected
-    }
   }
 
   @Test
@@ -165,33 +176,6 @@ public class LoadBalancerTest {
     } catch (UnsupportedOperationException e) {
       // expected
     }
-  }
-
-  @Deprecated
-  @Test
-  public void helper_updateSubchannelAddresses_delegates() {
-    class OverrideUpdateSubchannel extends NoopHelper {
-      boolean ran;
-
-      @Override
-      public void updateSubchannelAddresses(
-          Subchannel subchannelIn, List<EquivalentAddressGroup> addrsIn) {
-        assertThat(subchannelIn).isSameInstanceAs(emptySubchannel);
-        assertThat(addrsIn).hasSize(1);
-        assertThat(addrsIn.get(0)).isSameInstanceAs(eag);
-        ran = true;
-      }
-    }
-
-    OverrideUpdateSubchannel helper = new OverrideUpdateSubchannel();
-    helper.updateSubchannelAddresses(emptySubchannel, eag);
-    assertThat(helper.ran).isTrue();
-  }
-
-  @Deprecated
-  @Test(expected = UnsupportedOperationException.class)
-  public void helper_updateSubchannelAddressesList_throws() {
-    new NoopHelper().updateSubchannelAddresses(null, Arrays.asList(eag));
   }
 
   @Test
@@ -294,13 +278,14 @@ public class LoadBalancerTest {
 
   @Deprecated
   @Test
-  public void handleResolvedAddressGroups_delegatesToHandleResolvedAddresses() {
+  public void handleResolvedAddresses_delegatesToAcceptResolvedAddresses() {
     final AtomicReference<ResolvedAddresses> resultCapture = new AtomicReference<>();
 
     LoadBalancer balancer = new LoadBalancer() {
         @Override
-        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           resultCapture.set(resolvedAddresses);
+          return Status.OK;
         }
 
         @Override
@@ -319,23 +304,22 @@ public class LoadBalancerTest {
     List<EquivalentAddressGroup> servers = Arrays.asList(
         new EquivalentAddressGroup(new SocketAddress(){}),
         new EquivalentAddressGroup(new SocketAddress(){}));
-    balancer.handleResolvedAddressGroups(servers, attrs);
+    ResolvedAddresses addresses = ResolvedAddresses.newBuilder().setAddresses(servers)
+        .setAttributes(attrs).build();
+    balancer.handleResolvedAddresses(addresses);
     assertThat(resultCapture.get()).isEqualTo(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
   }
 
   @Deprecated
   @Test
-  public void handleResolvedAddresses_delegatesToHandleResolvedAddressGroups() {
-    final AtomicReference<List<EquivalentAddressGroup>> serversCapture = new AtomicReference<>();
-    final AtomicReference<Attributes> attrsCapture = new AtomicReference<>();
+  public void acceptResolvedAddresses_delegatesToHandleResolvedAddressGroups() {
+    final AtomicReference<ResolvedAddresses> addressesCapture = new AtomicReference<>();
 
     LoadBalancer balancer = new LoadBalancer() {
         @Override
-        public void handleResolvedAddressGroups(
-            List<EquivalentAddressGroup> servers, Attributes attrs) {
-          serversCapture.set(servers);
-          attrsCapture.set(attrs);
+        public void handleResolvedAddresses(ResolvedAddresses addresses) {
+          addressesCapture.set(addresses);
         }
 
         @Override
@@ -354,10 +338,43 @@ public class LoadBalancerTest {
     List<EquivalentAddressGroup> servers = Arrays.asList(
         new EquivalentAddressGroup(new SocketAddress(){}),
         new EquivalentAddressGroup(new SocketAddress(){}));
-    balancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
-    assertThat(serversCapture.get()).isEqualTo(servers);
-    assertThat(attrsCapture.get()).isEqualTo(attrs);
+    ResolvedAddresses addresses = ResolvedAddresses.newBuilder().setAddresses(servers)
+        .setAttributes(attrs).build();
+    balancer.handleResolvedAddresses(addresses);
+    assertThat(addressesCapture.get().getAddresses()).isEqualTo(servers);
+    assertThat(addressesCapture.get().getAttributes()).isEqualTo(attrs);
+  }
+
+  @Deprecated
+  @Test
+  public void acceptResolvedAddresses_noInfiniteLoop() {
+    final List<ResolvedAddresses> addressesCapture = new ArrayList<>();
+
+    LoadBalancer balancer = new LoadBalancer() {
+      @Override
+      public void handleResolvedAddresses(ResolvedAddresses addresses) {
+        addressesCapture.add(addresses);
+        super.handleResolvedAddresses(addresses);
+      }
+
+      @Override
+      public void handleNameResolutionError(Status error) {
+      }
+
+      @Override
+      public void shutdown() {
+      }
+    };
+
+    List<EquivalentAddressGroup> servers = Arrays.asList(
+        new EquivalentAddressGroup(new SocketAddress(){}),
+        new EquivalentAddressGroup(new SocketAddress(){}));
+    ResolvedAddresses addresses = ResolvedAddresses.newBuilder().setAddresses(servers)
+        .setAttributes(attrs).build();
+    balancer.handleResolvedAddresses(addresses);
+    assertThat(addressesCapture).hasSize(1);
+    assertThat(addressesCapture.get(0).getAddresses()).isEqualTo(servers);
+    assertThat(addressesCapture.get(0).getAttributes()).isEqualTo(attrs);
   }
 
   private static class NoopHelper extends LoadBalancer.Helper {
@@ -371,12 +388,6 @@ public class LoadBalancerTest {
         ConnectivityState newState, LoadBalancer.SubchannelPicker newPicker) {}
 
     @Override public SynchronizationContext getSynchronizationContext() {
-      return null;
-    }
-
-    @Deprecated
-    @Override
-    public NameResolver.Factory getNameResolverFactory() {
       return null;
     }
 

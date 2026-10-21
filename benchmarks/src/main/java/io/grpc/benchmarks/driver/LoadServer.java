@@ -36,10 +36,10 @@ import io.grpc.benchmarks.proto.BenchmarkServiceGrpc;
 import io.grpc.benchmarks.proto.Control;
 import io.grpc.benchmarks.proto.Stats;
 import io.grpc.benchmarks.qps.AsyncServer;
-import io.grpc.internal.testing.TestUtils;
+import io.grpc.testing.TlsTesting;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import java.io.File;
+import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -115,8 +115,8 @@ final class LoadServer {
       }
     }
     if (config.hasSecurityParams()) {
-      File cert = TestUtils.loadCert("server1.pem");
-      File key = TestUtils.loadCert("server1.key");
+      InputStream cert = TlsTesting.loadCert("server1.pem");
+      InputStream key = TlsTesting.loadCert("server1.key");
       serverBuilder.useTransportSecurity(cert, key);
     }
     benchmarkService = new AsyncServer.BenchmarkServiceImpl();

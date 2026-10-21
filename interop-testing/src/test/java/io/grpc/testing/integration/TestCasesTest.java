@@ -65,7 +65,10 @@ public class TestCasesTest {
       "unimplemented_service",
       "cancel_after_begin",
       "cancel_after_first_response",
-      "timeout_on_sleeping_server"
+      "timeout_on_sleeping_server",
+      "orca_per_rpc",
+      "orca_oob",
+      "max_concurrent_streams_connection_scaling",
     };
 
     // additional test cases
@@ -73,7 +76,9 @@ public class TestCasesTest {
       "client_compressed_unary_noprobe",
       "client_compressed_streaming_noprobe",
       "very_large_request",
-      "pick_first_unary"
+      "pick_first_unary",
+      "channel_soak",
+      "rpc_soak"
     };
 
     assertEquals(testCases.length + additionalTestCases.length, TestCases.values().length);

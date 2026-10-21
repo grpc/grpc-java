@@ -21,6 +21,8 @@ import io.netty.buffer.ByteBufHolder;
 import io.netty.buffer.DefaultByteBufHolder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPromise;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 
 /**
  * Command sent from the transport to the Netty channel to send a GRPC frame to the remote endpoint.
@@ -28,6 +30,7 @@ import io.netty.channel.ChannelPromise;
 final class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQueue.QueuedCommand {
   private final StreamIdHolder stream;
   private final boolean endStream;
+  private final Link link;
 
   private ChannelPromise promise;
 
@@ -35,10 +38,16 @@ final class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQu
     super(content);
     this.stream = stream;
     this.endStream = endStream;
+    this.link = PerfMark.linkOut();
   }
 
-  int streamId() {
-    return stream.id();
+  @Override
+  public Link getLink() {
+    return link;
+  }
+
+  StreamIdHolder stream() {
+    return stream;
   }
 
   boolean endStream() {
@@ -46,37 +55,8 @@ final class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQu
   }
 
   @Override
-  public ByteBufHolder copy() {
-    return new SendGrpcFrameCommand(stream, content().copy(), endStream);
-  }
-
-  @Override
-  public ByteBufHolder duplicate() {
-    return new SendGrpcFrameCommand(stream, content().duplicate(), endStream);
-  }
-
-  @Override
-  public SendGrpcFrameCommand retain() {
-    super.retain();
-    return this;
-  }
-
-  @Override
-  public SendGrpcFrameCommand retain(int increment) {
-    super.retain(increment);
-    return this;
-  }
-
-  @Override
-  public SendGrpcFrameCommand touch() {
-    super.touch();
-    return this;
-  }
-
-  @Override
-  public SendGrpcFrameCommand touch(Object hint) {
-    super.touch(hint);
-    return this;
+  public ByteBufHolder replace(ByteBuf content) {
+    return new SendGrpcFrameCommand(stream, content, endStream);
   }
 
   @Override
@@ -91,7 +71,7 @@ final class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQu
 
   @Override
   public String toString() {
-    return getClass().getSimpleName() + "(streamId=" + streamId()
+    return getClass().getSimpleName() + "(streamId=" + stream.id()
         + ", endStream=" + endStream + ", content=" + content()
         + ")";
   }

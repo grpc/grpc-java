@@ -147,39 +147,39 @@ public class InboundHeadersBenchmark {
     bh.consume(Utils.convertHeaders(headers));
   }
 
-//  /**
-//   * Prints the size of the header objects in bytes. Needs JOL (Java Object Layout) as a
-//   * dependency.
-//   */
-//  public static void main(String... args) {
-//    Http2Headers grpcRequestHeaders = new GrpcHttp2RequestHeaders(4);
-//    Http2Headers defaultRequestHeaders = new DefaultHttp2Headers(true, 9);
-//    for (int i = 0; i < requestHeaders.length; i += 2) {
-//      grpcRequestHeaders.add(requestHeaders[i], requestHeaders[i + 1]);
-//      defaultRequestHeaders.add(requestHeaders[i], requestHeaders[i + 1]);
-//    }
-//    long c = 10L;
-//    int m = ((int) c) / 20;
-//
-//    long grpcRequestHeadersBytes = GraphLayout.parseInstance(grpcRequestHeaders).totalSize();
-//    long defaultRequestHeadersBytes =
-//        GraphLayout.parseInstance(defaultRequestHeaders).totalSize();
-//
-//    System.out.printf("gRPC Request Headers: %d bytes%nNetty Request Headers: %d bytes%n",
-//        grpcRequestHeadersBytes, defaultRequestHeadersBytes);
-//
-//    Http2Headers grpcResponseHeaders = new GrpcHttp2RequestHeaders(4);
-//    Http2Headers defaultResponseHeaders = new DefaultHttp2Headers(true, 9);
-//    for (int i = 0; i < responseHeaders.length; i += 2) {
-//      grpcResponseHeaders.add(responseHeaders[i], responseHeaders[i + 1]);
-//      defaultResponseHeaders.add(responseHeaders[i], responseHeaders[i + 1]);
-//    }
-//
-//    long grpcResponseHeadersBytes = GraphLayout.parseInstance(grpcResponseHeaders).totalSize();
-//    long defaultResponseHeadersBytes =
-//        GraphLayout.parseInstance(defaultResponseHeaders).totalSize();
-//
-//    System.out.printf("gRPC Response Headers: %d bytes%nNetty Response Headers: %d bytes%n",
-//        grpcResponseHeadersBytes, defaultResponseHeadersBytes);
-//  }
+  ///**
+  // * Prints the size of the header objects in bytes. Needs JOL (Java Object Layout) as a
+  // * dependency.
+  // */
+  //public static void main(String... args) {
+  //  Http2Headers grpcRequestHeaders = new GrpcHttp2RequestHeaders(4);
+  //  Http2Headers defaultRequestHeaders = new DefaultHttp2Headers(true, 9);
+  //  for (int i = 0; i < requestHeaders.length; i += 2) {
+  //    grpcRequestHeaders.add(requestHeaders[i], requestHeaders[i + 1]);
+  //    defaultRequestHeaders.add(requestHeaders[i], requestHeaders[i + 1]);
+  //  }
+  //  long c = 10L;
+  //  int m = ((int) c) / 20;
+
+  //  long grpcRequestHeadersBytes = GraphLayout.parseInstance(grpcRequestHeaders).totalSize();
+  //  long defaultRequestHeadersBytes =
+  //      GraphLayout.parseInstance(defaultRequestHeaders).totalSize();
+
+  //  System.out.printf("gRPC Request Headers: %d bytes%nNetty Request Headers: %d bytes%n",
+  //      grpcRequestHeadersBytes, defaultRequestHeadersBytes);
+
+  //  Http2Headers grpcResponseHeaders = new GrpcHttp2RequestHeaders(4);
+  //  Http2Headers defaultResponseHeaders = new DefaultHttp2Headers(true, 9);
+  //  for (int i = 0; i < responseHeaders.length; i += 2) {
+  //    grpcResponseHeaders.add(responseHeaders[i], responseHeaders[i + 1]);
+  //    defaultResponseHeaders.add(responseHeaders[i], responseHeaders[i + 1]);
+  //  }
+
+  //  long grpcResponseHeadersBytes = GraphLayout.parseInstance(grpcResponseHeaders).totalSize();
+  //  long defaultResponseHeadersBytes =
+  //      GraphLayout.parseInstance(defaultResponseHeaders).totalSize();
+
+  //  System.out.printf("gRPC Response Headers: %d bytes%nNetty Response Headers: %d bytes%n",
+  //      grpcResponseHeadersBytes, defaultResponseHeadersBytes);
+  //}
 }

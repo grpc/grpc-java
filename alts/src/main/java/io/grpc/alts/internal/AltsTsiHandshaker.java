@@ -20,8 +20,11 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.alts.internal.HandshakerServiceGrpc.HandshakerServiceStub;
 import io.netty.buffer.ByteBufAllocator;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -31,6 +34,8 @@ import java.util.List;
  * Negotiates a grpc channel key to be used by the TsiFrameProtector, using ALTs handshaker service.
  */
 public final class AltsTsiHandshaker implements TsiHandshaker {
+  private final ChannelLogger logger;
+
   public static final String TSI_SERVICE_ACCOUNT_PEER_PROPERTY = "service_account";
 
   private final boolean isClient;
@@ -40,15 +45,20 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
 
   /** Starts a new TSI handshaker with client options. */
   private AltsTsiHandshaker(
-      boolean isClient, HandshakerServiceStub stub, AltsHandshakerOptions options) {
+      boolean isClient,
+      HandshakerServiceStub stub,
+      AltsHandshakerOptions options,
+      ChannelLogger logger) {
     this.isClient = isClient;
-    handshaker = new AltsHandshakerClient(stub, options);
+    this.logger = logger;
+    handshaker = new AltsHandshakerClient(stub, options, logger);
   }
 
   @VisibleForTesting
-  AltsTsiHandshaker(boolean isClient, AltsHandshakerClient handshaker) {
+  AltsTsiHandshaker(boolean isClient, AltsHandshakerClient handshaker, ChannelLogger logger) {
     this.isClient = isClient;
     this.handshaker = handshaker;
+    this.logger = logger;
   }
 
   /**
@@ -70,11 +80,12 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
       return true;
     }
     int remaining = bytes.remaining();
-    // Call handshaker service to proceess the bytes.
+    // Call handshaker service to process the bytes.
     if (outputFrame == null) {
       checkState(!isClient, "Client handshaker should not process any frame at the beginning.");
       outputFrame = handshaker.startServerHandshake(bytes);
     } else {
+      logger.log(ChannelLogLevel.DEBUG, "Receive ALTS handshake from downstream");
       outputFrame = handshaker.next(bytes);
     }
     // If handshake has finished or we already have bytes to write, just return true.
@@ -115,17 +126,19 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
   @Override
   public Object extractPeerObject() throws GeneralSecurityException {
     Preconditions.checkState(!isInProgress(), "Handshake is not complete.");
-    return new AltsAuthContext(handshaker.getResult());
+    return new AltsInternalContext(handshaker.getResult());
   }
 
   /** Creates a new TsiHandshaker for use by the client. */
-  public static TsiHandshaker newClient(HandshakerServiceStub stub, AltsHandshakerOptions options) {
-    return new AltsTsiHandshaker(true, stub, options);
+  public static TsiHandshaker newClient(
+      HandshakerServiceStub stub, AltsHandshakerOptions options, ChannelLogger logger) {
+    return new AltsTsiHandshaker(true, stub, options, logger);
   }
 
   /** Creates a new TsiHandshaker for use by the server. */
-  public static TsiHandshaker newServer(HandshakerServiceStub stub, AltsHandshakerOptions options) {
-    return new AltsTsiHandshaker(false, stub, options);
+  public static TsiHandshaker newServer(
+      HandshakerServiceStub stub, AltsHandshakerOptions options, ChannelLogger logger) {
+    return new AltsTsiHandshaker(false, stub, options, logger);
   }
 
   /**
@@ -137,24 +150,26 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
   public void getBytesToSendToPeer(ByteBuffer bytes) throws GeneralSecurityException {
     if (outputFrame == null) { // A null outputFrame indicates we haven't started the handshake.
       if (isClient) {
+        logger.log(ChannelLogLevel.DEBUG, "Initial ALTS handshake to downstream");
         outputFrame = handshaker.startClientHandshake();
       } else {
         // The server needs bytes to process before it can start the handshake.
         return;
       }
     }
+    logger.log(ChannelLogLevel.DEBUG, "Send ALTS request to downstream");
     // Write as many bytes as we are able.
     ByteBuffer outputFrameAlias = outputFrame;
     if (outputFrame.remaining() > bytes.remaining()) {
       outputFrameAlias = outputFrame.duplicate();
-      outputFrameAlias.limit(outputFrameAlias.position() + bytes.remaining());
+      ((Buffer) outputFrameAlias).limit(outputFrameAlias.position() + bytes.remaining());
     }
     bytes.put(outputFrameAlias);
-    outputFrame.position(outputFrameAlias.position());
+    ((Buffer) outputFrame).position(outputFrameAlias.position());
   }
 
   /**
-   * Returns true if and only if the handshake is still in progress
+   * Returns true if and only if the handshake is still in progress.
    *
    * @return true, if the handshake is still in progress, false otherwise.
    */
@@ -178,6 +193,14 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
     byte[] key = handshaker.getKey();
     Preconditions.checkState(key.length == AltsChannelCrypter.getKeyLength(), "Bad key length.");
 
+    // Frame size negotiation is not performed if the peer does not send max frame size (e.g. peer
+    // is gRPC Go or peer uses an old binary).
+    int peerMaxFrameSize = handshaker.getResult().getMaxFrameSize();
+    if (peerMaxFrameSize != 0) {
+      maxFrameSize = Math.min(peerMaxFrameSize, AltsTsiFrameProtector.getMaxFrameSize());
+      maxFrameSize = Math.max(AltsTsiFrameProtector.getMinFrameSize(), maxFrameSize);
+    }
+    logger.log(ChannelLogLevel.INFO, "Maximum frame size value is {0}.", maxFrameSize);
     return new AltsTsiFrameProtector(maxFrameSize, new AltsChannelCrypter(key, isClient), alloc);
   }
 
@@ -190,6 +213,11 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
    */
   @Override
   public TsiFrameProtector createFrameProtector(ByteBufAllocator alloc) {
-    return createFrameProtector(AltsTsiFrameProtector.getMaxAllowedFrameBytes(), alloc);
+    return createFrameProtector(AltsTsiFrameProtector.getMinFrameSize(), alloc);
+  }
+
+  @Override
+  public void close() {
+    handshaker.close();
   }
 }

@@ -16,18 +16,21 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.internal.ReadableBuffers.wrap;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /**
  * Tests for the array-backed {@link ReadableBuffer} returned by {@link ReadableBuffers#wrap(byte[],
  * int, int)}.
  */
+@RunWith(JUnit4.class)
 public class ReadableBuffersArrayTest extends ReadableBufferTestBase {
 
   @Test

@@ -40,8 +40,6 @@ import org.mockito.ArgumentMatchers;
  * Not intended to provide a high code coverage or to test every major usecase.
  *
  * directExecutor() makes it easier to have deterministic tests.
- * However, if your implementation uses another thread and uses streaming it is better to use
- * the default executor, to avoid hitting bug #3084.
  *
  * <p>For more unit test examples see {@link io.grpc.examples.routeguide.RouteGuideClientTest} and
  * {@link io.grpc.examples.routeguide.RouteGuideServerTest}.
@@ -56,7 +54,18 @@ public class HelloWorldClientTest {
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
   private final GreeterGrpc.GreeterImplBase serviceImpl =
-      mock(GreeterGrpc.GreeterImplBase.class, delegatesTo(new GreeterGrpc.GreeterImplBase() {}));
+      mock(GreeterGrpc.GreeterImplBase.class, delegatesTo(
+          new GreeterGrpc.GreeterImplBase() {
+          // By default the client will receive Status.UNIMPLEMENTED for all RPCs.
+          // You might need to implement necessary behaviors for your test here, like this:
+          //
+          // @Override
+          // public void sayHello(HelloRequest request, StreamObserver<HelloReply> respObserver) {
+          //   respObserver.onNext(HelloReply.getDefaultInstance());
+          //   respObserver.onCompleted();
+          // }
+          }));
+
   private HelloWorldClient client;
 
   @Before

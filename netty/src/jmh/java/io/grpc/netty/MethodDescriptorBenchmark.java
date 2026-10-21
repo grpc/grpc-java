@@ -38,16 +38,16 @@ public class MethodDescriptorBenchmark {
 
   private static final MethodDescriptor.Marshaller<Void> marshaller =
       new MethodDescriptor.Marshaller<Void>() {
-    @Override
-    public InputStream stream(Void value) {
-      return new ByteArrayInputStream(new byte[]{});
-    }
+        @Override
+        public InputStream stream(Void value) {
+          return new ByteArrayInputStream(new byte[]{});
+        }
 
-    @Override
-    public Void parse(InputStream stream) {
-      return null;
-    }
-  };
+        @Override
+        public Void parse(InputStream stream) {
+          return null;
+        }
+      };
 
   MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
       .setType(MethodDescriptor.MethodType.UNARY)

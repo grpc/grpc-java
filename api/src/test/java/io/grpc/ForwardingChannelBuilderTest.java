@@ -39,6 +39,7 @@ public class ForwardingChannelBuilderTest {
 
   private final class TestBuilder extends ForwardingChannelBuilder<TestBuilder> {
     @Override
+    @SuppressWarnings("deprecation")
     protected ManagedChannelBuilder<?> delegate() {
       return mockDelegate;
     }
@@ -88,7 +89,7 @@ public class ForwardingChannelBuilderTest {
   }
 
   @Test
-  public void buildReturnsDelegateBuildByDefualt() {
+  public void buildReturnsDelegateBuildByDefault() {
     ManagedChannel mockChannel = mock(ManagedChannel.class);
     doReturn(mockChannel).when(mockDelegate).build();
 

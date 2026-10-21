@@ -23,24 +23,26 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import io.grpc.Attributes;
 import io.grpc.Channel;
+import io.grpc.ChannelLogger;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.OtherSecurity;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil.RpcVersionsCheckResult;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
-import io.grpc.netty.InternalNettyChannelBuilder;
-import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
+import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -52,36 +54,54 @@ import javax.annotation.Nullable;
 public final class AltsProtocolNegotiator {
   private static final Logger logger = Logger.getLogger(AltsProtocolNegotiator.class.getName());
 
+  static final String ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE =
+      "GRPC_ALTS_MAX_CONCURRENT_HANDSHAKES";
+  @VisibleForTesting static final int DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES = 32;
+  private static final AsyncSemaphore handshakeSemaphore =
+      new AsyncSemaphore(getAltsMaxConcurrentHandshakes());
+
   @Grpc.TransportAttr
-  public static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
+  public static final Attributes.Key<TsiPeer> TSI_PEER_KEY =
+      Attributes.Key.create("internal:TSI_PEER");
   @Grpc.TransportAttr
   public static final Attributes.Key<Object> AUTH_CONTEXT_KEY =
-      Attributes.Key.create("AUTH_CONTEXT_KEY");
+      Attributes.Key.create("internal:AUTH_CONTEXT_KEY");
 
   private static final AsciiString SCHEME = AsciiString.of("https");
+
+  private static final String DIRECT_PATH_SERVICE_CFE_CLUSTER_PREFIX = "google_cfe_";
+  private static final String CFE_CLUSTER_RESOURCE_NAME_PREFIX =
+      "/envoy.config.cluster.v3.Cluster/google_cfe_";
+  private static final String CFE_CLUSTER_AUTHORITY_NAME =
+      "traffic-director-c2p.xds.googleapis.com";
 
   /**
    * ClientAltsProtocolNegotiatorFactory is a factory for doing client side negotiation of an ALTS
    * channel.
    */
   public static final class ClientAltsProtocolNegotiatorFactory
-      implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
+      implements InternalProtocolNegotiator.ClientFactory {
 
     private final ImmutableList<String> targetServiceAccounts;
-    private final LazyChannel lazyHandshakerChannel;
+    private final ObjectPool<Channel> handshakerChannelPool;
 
     public ClientAltsProtocolNegotiatorFactory(
         List<String> targetServiceAccounts,
         ObjectPool<Channel> handshakerChannelPool) {
       this.targetServiceAccounts = ImmutableList.copyOf(targetServiceAccounts);
-      this.lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
+      this.handshakerChannelPool = checkNotNull(handshakerChannelPool, "handshakerChannelPool");
     }
 
     @Override
-    public ProtocolNegotiator buildProtocolNegotiator() {
+    public ProtocolNegotiator newNegotiator() {
       return new ClientAltsProtocolNegotiator(
-          new ClientTsiHandshakerFactory(targetServiceAccounts, lazyHandshakerChannel),
-          lazyHandshakerChannel);
+          targetServiceAccounts,
+          handshakerChannelPool);
+    }
+
+    @Override
+    public int getDefaultPort() {
+      return 443;
     }
   }
 
@@ -90,9 +110,10 @@ public final class AltsProtocolNegotiator {
     private final LazyChannel lazyHandshakerChannel;
 
     ClientAltsProtocolNegotiator(
-        TsiHandshakerFactory handshakerFactory, LazyChannel lazyHandshakerChannel) {
-      this.handshakerFactory = checkNotNull(handshakerFactory, "handshakerFactory");
-      this.lazyHandshakerChannel = checkNotNull(lazyHandshakerChannel, "lazyHandshakerChannel");
+        ImmutableList<String> targetServiceAccounts, ObjectPool<Channel> handshakerChannelPool) {
+      this.lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
+      this.handshakerFactory =
+          new ClientTsiHandshakerFactory(targetServiceAccounts, lazyHandshakerChannel);
     }
 
     @Override
@@ -102,12 +123,16 @@ public final class AltsProtocolNegotiator {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
+      TsiHandshaker handshaker =
+          handshakerFactory.newHandshaker(grpcHandler.getAuthority(), negotiationLogger);
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
-      ChannelHandler thh =
-          new TsiHandshakeHandler(gnh, nettyHandshaker, new AltsHandshakeValidator());
-      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh);
+      ChannelHandler thh = new TsiHandshakeHandler(
+          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
+          negotiationLogger);
+      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh,
+          negotiationLogger);
       return wuah;
     }
 
@@ -126,11 +151,13 @@ public final class AltsProtocolNegotiator {
     final class ServerTsiHandshakerFactory implements TsiHandshakerFactory {
 
       @Override
-      public TsiHandshaker newHandshaker(@Nullable String authority) {
+      public TsiHandshaker newHandshaker(
+          @Nullable String authority, ChannelLogger negotiationLogger) {
         assert authority == null;
         return AltsTsiHandshaker.newServer(
             HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()),
-            new AltsHandshakerOptions(RpcProtocolVersionsUtil.getRpcProtocolVersions()));
+            new AltsHandshakerOptions(RpcProtocolVersionsUtil.getRpcProtocolVersions()),
+            negotiationLogger);
       }
     }
 
@@ -157,12 +184,16 @@ public final class AltsProtocolNegotiator {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      TsiHandshaker handshaker = handshakerFactory.newHandshaker(/* authority= */ null);
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
+      TsiHandshaker handshaker =
+          handshakerFactory.newHandshaker(/* authority= */ null, negotiationLogger);
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
-      ChannelHandler thh =
-          new TsiHandshakeHandler(gnh, nettyHandshaker, new AltsHandshakeValidator());
-      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh);
+      ChannelHandler thh = new TsiHandshakeHandler(
+          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
+          negotiationLogger);
+      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh,
+          negotiationLogger);
       return wuah;
     }
 
@@ -177,9 +208,12 @@ public final class AltsProtocolNegotiator {
    * A Protocol Negotiator factory which can switch between ALTS and TLS based on EAG Attrs.
    */
   public static final class GoogleDefaultProtocolNegotiatorFactory
-      implements ProtocolNegotiatorFactory {
+      implements InternalProtocolNegotiator.ClientFactory {
+    @VisibleForTesting
+    @Nullable
+    static Attributes.Key<String> clusterNameAttrKey = loadClusterNameAttrKey();
     private final ImmutableList<String> targetServiceAccounts;
-    private final LazyChannel lazyHandshakerChannel;
+    private final ObjectPool<Channel> handshakerChannelPool;
     private final SslContext sslContext;
 
     /**
@@ -191,16 +225,42 @@ public final class AltsProtocolNegotiator {
         ObjectPool<Channel> handshakerChannelPool,
         SslContext sslContext) {
       this.targetServiceAccounts = ImmutableList.copyOf(targetServiceAccounts);
-      this.lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
+      this.handshakerChannelPool = checkNotNull(handshakerChannelPool, "handshakerChannelPool");
       this.sslContext = checkNotNull(sslContext, "sslContext");
     }
 
     @Override
-    public ProtocolNegotiator buildProtocolNegotiator() {
+    public ProtocolNegotiator newNegotiator() {
       return new GoogleDefaultProtocolNegotiator(
-          new ClientTsiHandshakerFactory(targetServiceAccounts, lazyHandshakerChannel),
-          lazyHandshakerChannel,
-          sslContext);
+          targetServiceAccounts,
+          handshakerChannelPool,
+          sslContext,
+          clusterNameAttrKey);
+    }
+
+    @Override
+    public int getDefaultPort() {
+      return 443;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Nullable
+    private static Attributes.Key<String> loadClusterNameAttrKey() {
+      Attributes.Key<String> key = null;
+      try {
+        Class<?> klass = Class.forName("io.grpc.xds.InternalXdsAttributes");
+        key = (Attributes.Key<String>) klass.getField("ATTR_CLUSTER_NAME").get(null);
+      } catch (ClassNotFoundException e) {
+        logger.log(Level.FINE,
+            "Unable to load xDS endpoint cluster name key, this may be expected", e);
+      } catch (NoSuchFieldException e) {
+        logger.log(Level.FINE,
+            "Unable to load xDS endpoint cluster name key, this may be expected", e);
+      } catch (IllegalAccessException e) {
+        logger.log(Level.FINE,
+            "Unable to load xDS endpoint cluster name key, this may be expected", e);
+      }
+      return key;
     }
   }
 
@@ -208,14 +268,19 @@ public final class AltsProtocolNegotiator {
     private final TsiHandshakerFactory handshakerFactory;
     private final LazyChannel lazyHandshakerChannel;
     private final SslContext sslContext;
+    @Nullable
+    private final Attributes.Key<String> clusterNameAttrKey;
 
     GoogleDefaultProtocolNegotiator(
-        TsiHandshakerFactory handshakerFactory,
-        LazyChannel lazyHandshakerChannel,
-        SslContext sslContext) {
-      this.handshakerFactory = checkNotNull(handshakerFactory, "handshakerFactory");
-      this.lazyHandshakerChannel = checkNotNull(lazyHandshakerChannel, "lazyHandshakerChannel");
+        ImmutableList<String> targetServiceAccounts,
+        ObjectPool<Channel> handshakerChannelPool,
+        SslContext sslContext,
+        @Nullable Attributes.Key<String> clusterNameAttrKey) {
+      this.lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
+      this.handshakerFactory =
+          new ClientTsiHandshakerFactory(targetServiceAccounts, lazyHandshakerChannel);
       this.sslContext = checkNotNull(sslContext, "checkNotNull");
+      this.clusterNameAttrKey = clusterNameAttrKey;
     }
 
     @Override
@@ -226,19 +291,47 @@ public final class AltsProtocolNegotiator {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler securityHandler;
-      if (grpcHandler.getEagAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY) != null
-          || grpcHandler.getEagAttributes().get(GrpcAttributes.ATTR_LB_PROVIDED_BACKEND) != null) {
-        TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
+      boolean isXdsDirectPath = false;
+      if (clusterNameAttrKey != null) {
+        isXdsDirectPath = isDirectPathCluster(
+            grpcHandler.getEagAttributes().get(clusterNameAttrKey));
+      }
+      if (isXdsDirectPath) {
+        TsiHandshaker handshaker =
+            handshakerFactory.newHandshaker(grpcHandler.getAuthority(), negotiationLogger); 
         NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
-        securityHandler =
-            new TsiHandshakeHandler(gnh, nettyHandshaker, new AltsHandshakeValidator());
+        securityHandler = new TsiHandshakeHandler(
+            gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
+            negotiationLogger);
       } else {
         securityHandler = InternalProtocolNegotiators.clientTlsHandler(
-            gnh, sslContext, grpcHandler.getAuthority());
+            gnh, sslContext, grpcHandler.getAuthority(), negotiationLogger);
       }
-      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(securityHandler);
+      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(securityHandler,
+          negotiationLogger);
       return wuah;
+    }
+
+    private boolean isDirectPathCluster(String clusterName) {
+      if (clusterName == null) {
+        return false;
+      }
+      if (clusterName.startsWith(DIRECT_PATH_SERVICE_CFE_CLUSTER_PREFIX)) {
+        return false;
+      }
+      if (!clusterName.startsWith("xdstp:")) {
+        return true;
+      }
+      try {
+        URI uri = new URI(clusterName);
+        // If authority AND path match our CFE checks, use TLS; otherwise use ALTS.
+        return !CFE_CLUSTER_AUTHORITY_NAME.equals(uri.getHost())
+            || !uri.getPath().startsWith(CFE_CLUSTER_RESOURCE_NAME_PREFIX);
+      } catch (URISyntaxException e) {
+        return true; // Shouldn't happen, but assume ALTS.
+      }
     }
 
     @Override
@@ -260,7 +353,8 @@ public final class AltsProtocolNegotiator {
     }
 
     @Override
-    public TsiHandshaker newHandshaker(@Nullable String authority) {
+    public TsiHandshaker newHandshaker(
+        @Nullable String authority, ChannelLogger negotiationLogger) {
       AltsClientOptions handshakerOptions =
           new AltsClientOptions.Builder()
               .setRpcProtocolVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
@@ -268,7 +362,9 @@ public final class AltsProtocolNegotiator {
               .setTargetName(authority)
               .build();
       return AltsTsiHandshaker.newClient(
-          HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()), handshakerOptions);
+          HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()),
+          handshakerOptions,
+          negotiationLogger);
     }
   }
 
@@ -297,7 +393,7 @@ public final class AltsProtocolNegotiator {
     /** Returns the cached channel to the channel pool. */
     synchronized void close() {
       if (channel != null) {
-        channelPool.returnObject(channel);
+        channel = channelPool.returnObject(channel);
       }
     }
   }
@@ -306,25 +402,50 @@ public final class AltsProtocolNegotiator {
 
     @Override
     public SecurityDetails validatePeerObject(Object peerObject) throws GeneralSecurityException {
-      AltsAuthContext altsAuthContext = (AltsAuthContext) peerObject;
+      AltsInternalContext altsContext = (AltsInternalContext) peerObject;
       // Checks peer Rpc Protocol Versions in the ALTS auth context. Fails the connection if
       // Rpc Protocol Versions mismatch.
       RpcVersionsCheckResult checkResult =
           RpcProtocolVersionsUtil.checkRpcProtocolVersions(
               RpcProtocolVersionsUtil.getRpcProtocolVersions(),
-              altsAuthContext.getPeerRpcVersions());
+              altsContext.getPeerRpcVersions());
       if (!checkResult.getResult()) {
         String errorMessage =
             "Local Rpc Protocol Versions "
                 + RpcProtocolVersionsUtil.getRpcProtocolVersions()
                 + " are not compatible with peer Rpc Protocol Versions "
-                + altsAuthContext.getPeerRpcVersions();
+                + altsContext.getPeerRpcVersions();
         throw Status.UNAVAILABLE.withDescription(errorMessage).asRuntimeException();
       }
       return new SecurityDetails(
           SecurityLevel.PRIVACY_AND_INTEGRITY,
-          new Security(new OtherSecurity("alts", Any.pack(altsAuthContext.context))));
+          new Security(new OtherSecurity("alts", Any.pack(altsContext.context))));
     }
+  }
+
+  @VisibleForTesting
+  static int getAltsMaxConcurrentHandshakes(String altsMaxConcurrentHandshakes) {
+    if (altsMaxConcurrentHandshakes == null) {
+      return DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES;
+    }
+    try {
+      int effectiveMaxConcurrentHandshakes = Integer.parseInt(altsMaxConcurrentHandshakes);
+      if (effectiveMaxConcurrentHandshakes < 0) {
+        logger.warning(
+            "GRPC_ALTS_MAX_CONCURRENT_HANDSHAKES environment variable set to invalid value.");
+        return DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES;
+      }
+      return effectiveMaxConcurrentHandshakes;
+    } catch (NumberFormatException e) {
+      logger.warning(
+          "GRPC_ALTS_MAX_CONCURRENT_HANDSHAKES environment variable set to invalid value.");
+      return DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES;
+    }
+  }
+
+  private static int getAltsMaxConcurrentHandshakes() {
+    return getAltsMaxConcurrentHandshakes(
+        System.getenv(ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE));
   }
 
   private AltsProtocolNegotiator() {}

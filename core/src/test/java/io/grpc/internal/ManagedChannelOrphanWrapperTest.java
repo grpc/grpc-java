@@ -54,6 +54,7 @@ public final class ManagedChannelOrphanWrapperTest {
         new ConcurrentHashMap<>();
 
     assertEquals(0, refs.size());
+    @SuppressWarnings("UnusedVariable")
     ManagedChannelOrphanWrapper channel = new ManagedChannelOrphanWrapper(mc, refqueue, refs);
     assertEquals(1, refs.size());
 
@@ -101,13 +102,55 @@ public final class ManagedChannelOrphanWrapperTest {
   }
 
   @Test
+  public void shutdown_withDelegateStillReferenced_doesNotLogWarning() {
+    ManagedChannel mc = new TestManagedChannel();
+    final ReferenceQueue<ManagedChannelOrphanWrapper> refqueue = new ReferenceQueue<>();
+    ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
+        new ConcurrentHashMap<>();
+    
+    ManagedChannelOrphanWrapper wrapper = new ManagedChannelOrphanWrapper(mc, refqueue, refs);
+    WeakReference<ManagedChannelOrphanWrapper> wrapperWeakRef = new WeakReference<>(wrapper);
+
+    final List<LogRecord> records = new ArrayList<>();
+    Logger orphanLogger = Logger.getLogger(ManagedChannelOrphanWrapper.class.getName());
+    Filter oldFilter = orphanLogger.getFilter();
+    orphanLogger.setFilter(new Filter() {
+      @Override
+      public boolean isLoggable(LogRecord record) {
+        synchronized (records) { 
+          records.add(record); 
+        }
+        return false;
+      }
+    });
+
+    try {
+      wrapper.shutdown(); 
+      wrapper = null; 
+      
+      // Wait for the WRAPPER itself to be garbage collected
+      GcFinalization.awaitClear(wrapperWeakRef);
+      ManagedChannelReference.cleanQueue(refqueue);
+
+      synchronized (records) {
+        assertEquals("Warning was logged even though shutdownNow() was called!", 0, records.size());
+      }
+    } finally {
+      orphanLogger.setFilter(oldFilter);
+    }
+  }
+
+  @Test
   public void refCycleIsGCed() {
     ReferenceQueue<ManagedChannelOrphanWrapper> refqueue =
         new ReferenceQueue<>();
     ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
         new ConcurrentHashMap<>();
+    @SuppressWarnings("UnusedVariable")
     ApplicationWithChannelRef app = new ApplicationWithChannelRef();
+    @SuppressWarnings("UnusedVariable")
     ChannelWithApplicationRef channelImpl = new ChannelWithApplicationRef();
+    @SuppressWarnings("UnusedVariable")
     ManagedChannelOrphanWrapper channel =
         new ManagedChannelOrphanWrapper(channelImpl, refqueue, refs);
     app.channel = channel;
@@ -164,10 +207,12 @@ public final class ManagedChannelOrphanWrapperTest {
   }
 
   private static final class ApplicationWithChannelRef {
+    @SuppressWarnings("UnusedVariable")
     private ManagedChannel channel;
   }
 
   private static final class ChannelWithApplicationRef extends TestManagedChannel {
+    @SuppressWarnings("UnusedVariable")
     private ApplicationWithChannelRef application;
   }
 }

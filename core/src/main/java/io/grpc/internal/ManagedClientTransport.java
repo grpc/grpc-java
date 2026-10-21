@@ -16,10 +16,10 @@
 
 package io.grpc.internal;
 
+import com.google.errorprone.annotations.CheckReturnValue;
+import io.grpc.Attributes;
 import io.grpc.Status;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A {@link ClientTransport} that has life-cycle management.
@@ -31,16 +31,15 @@ import javax.annotation.concurrent.ThreadSafe;
  * implementations may transfer the streams to somewhere else. Either way they must conform to the
  * contract defined by {@link #shutdown}, {@link Listener#transportShutdown} and
  * {@link Listener#transportTerminated}.
+ *
+ * <p>This interface is thread-safe.
  */
-@ThreadSafe
 public interface ManagedClientTransport extends ClientTransport {
 
   /**
    * Starts transport. This method may only be called once.
    *
-   * <p>Implementations must not call {@code listener} from within {@link #start}; implementations
-   * are expected to notify listener on a separate thread or when the returned {@link Runnable} is
-   * run. This method and the returned {@code Runnable} should not throw any exceptions.
+   * <p>This method and the returned {@code Runnable} should not throw any exceptions.
    *
    * @param listener non-{@code null} listener of transport events
    * @return a {@link Runnable} that is executed after-the-fact by the original caller, typically
@@ -78,8 +77,9 @@ public interface ManagedClientTransport extends ClientTransport {
      * <p>This is called exactly once, and must be called prior to {@link #transportTerminated}.
      *
      * @param s the reason for the shutdown.
+     * @param e the disconnect error.
      */
-    void transportShutdown(Status s);
+    void transportShutdown(Status s, DisconnectError e);
 
     /**
      * The transport completed shutting down. All resources have been released. All streams have
@@ -94,6 +94,8 @@ public interface ManagedClientTransport extends ClientTransport {
     /**
      * The transport is ready to accept traffic, because the connection is established.  This is
      * called at most once.
+     *
+     * <p>Streams created before this milestone are not guaranteed to function.
      */
     void transportReady();
 
@@ -102,5 +104,13 @@ public interface ManagedClientTransport extends ClientTransport {
      * at least one stream.
      */
     void transportInUse(boolean inUse);
+
+    /**
+     * Called just before {@link #transportReady} to allow direct modification of transport
+     * Attributes.
+     */
+    default Attributes filterTransport(Attributes attributes) {
+      return attributes;
+    }
   }
 }

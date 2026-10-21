@@ -16,9 +16,9 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Charsets.US_ASCII;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,6 +27,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.CallOptions;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -301,6 +302,24 @@ public class Http2ClientStreamTransportStateTest {
   }
 
   @Test
+  public void transportTrailersReceived_missingContentTypeUsesHttpStatus() {
+    BaseTransportState state = new BaseTransportState(transportTracer);
+    state.setListener(mockListener);
+    Metadata trailers = new Metadata();
+    trailers.put(testStatusMashaller, "431");
+
+    state.transportTrailersReceived(trailers);
+
+    verify(mockListener, never()).headersRead(any(Metadata.class));
+    verify(mockListener).closed(statusCaptor.capture(), same(PROCESSED), same(trailers));
+    assertEquals(Code.INTERNAL, statusCaptor.getValue().getCode());
+    assertTrue(statusCaptor.getValue().getDescription().contains("HTTP status code 431"));
+    assertTrue(
+        statusCaptor.getValue().getDescription().contains(
+            "missing content-type in response headers"));
+  }
+
+  @Test
   public void transportTrailersReceived_missingHttpStatus() {
     BaseTransportState state = new BaseTransportState(transportTracer);
     state.setListener(mockListener);
@@ -347,9 +366,22 @@ public class Http2ClientStreamTransportStateTest {
     assertEquals(Code.UNKNOWN, statusCaptor.getValue().getCode());
   }
 
+  @Test
+  public void transportStateWithOnReadyThreshold() {
+    BaseTransportState state = new BaseTransportState(transportTracer,
+        CallOptions.DEFAULT.withOnReadyThreshold(Integer.MAX_VALUE));
+    assertEquals(Integer.MAX_VALUE, state.onReadyThreshold);
+  }
+
   private static class BaseTransportState extends Http2ClientStreamTransportState {
+    private int onReadyThreshold;
+
+    public BaseTransportState(TransportTracer transportTracer, CallOptions options) {
+      super(DEFAULT_MAX_MESSAGE_SIZE, StatsTraceContext.NOOP, transportTracer, options);
+    }
+
     public BaseTransportState(TransportTracer transportTracer) {
-      super(DEFAULT_MAX_MESSAGE_SIZE, StatsTraceContext.NOOP, transportTracer);
+      this(transportTracer, CallOptions.DEFAULT);
     }
 
     @Override
@@ -366,6 +398,12 @@ public class Http2ClientStreamTransportStateTest {
     @Override
     public void runOnTransportThread(Runnable r) {
       r.run();
+    }
+
+    @Override
+    void setOnReadyThreshold(int numBytes) {
+      onReadyThreshold = numBytes;
+      super.setOnReadyThreshold(numBytes);
     }
   }
 }

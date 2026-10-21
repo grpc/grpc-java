@@ -19,7 +19,9 @@ package io.grpc.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
@@ -30,6 +32,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -37,7 +40,6 @@ import java.util.LinkedHashSet;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A client transport that queues requests before a real transport is available. When {@link
@@ -67,28 +69,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
   @GuardedBy("lock")
   private Collection<PendingStream> pendingStreams = new LinkedHashSet<>();
 
-  /**
-   * When {@code shutdownStatus != null && !hasPendingStreams()}, then the transport is considered
-   * terminated.
-   */
-  @GuardedBy("lock")
-  private Status shutdownStatus;
-
-  /**
-   * The last picker that {@link #reprocess} has used. May be set to null when the channel has moved
-   * to idle.
-   */
-  @GuardedBy("lock")
-  @Nullable
-  private SubchannelPicker lastPicker;
-
-  @GuardedBy("lock")
-  private long lastPickerVersion;
+  /** Immutable state needed for picking. 'lock' must be held for writing. */
+  private volatile PickerState pickerState = new PickerState(null, null);
 
   /**
    * Creates a new delayed transport.
    *
-   * @param defaultAppExecutor pending streams will create real streams and run bufferred operations
+   * @param defaultAppExecutor pending streams will create real streams and run buffered operations
    *        in an application executor, which will be this executor, unless there is on provided in
    *        {@link CallOptions}.
    * @param syncContext all listener callbacks of the delayed transport will be run from this
@@ -132,35 +119,50 @@ final class DelayedClientTransport implements ManagedClientTransport {
    */
   @Override
   public final ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      ClientStreamTracer[] tracers) {
     try {
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
-      SubchannelPicker picker = null;
-      long pickerVersion = -1;
+      PickSubchannelArgs args = new PickSubchannelArgsImpl(
+          method, headers, callOptions, new PickDetailsConsumerImpl(tracers));
+      PickerState state = pickerState;
       while (true) {
-        synchronized (lock) {
-          if (shutdownStatus != null) {
-            return new FailingClientStream(shutdownStatus);
-          }
-          if (lastPicker == null) {
-            return createPendingStream(args);
-          }
-          // Check for second time through the loop, and whether anything changed
-          if (picker != null && pickerVersion == lastPickerVersion) {
-            return createPendingStream(args);
-          }
-          picker = lastPicker;
-          pickerVersion = lastPickerVersion;
+        if (state.shutdownStatus != null) {
+          return new FailingClientStream(state.shutdownStatus, tracers);
         }
-        PickResult pickResult = picker.pickSubchannel(args);
-        ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
-            callOptions.isWaitForReady());
-        if (transport != null) {
-          return transport.newStream(
-              args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions());
+        PickResult pickResult = null;
+        if (state.lastPicker != null) {
+          pickResult = state.lastPicker.pickSubchannel(args);
+          callOptions = args.getCallOptions();
+          // User code provided authority takes precedence over the LB provided one.
+          if (callOptions.getAuthority() == null
+              && pickResult.getAuthorityOverride() != null) {
+            callOptions = callOptions.withAuthority(pickResult.getAuthorityOverride());
+          }
+          ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
+              callOptions.isWaitForReady());
+          if (transport != null) {
+            ClientStream stream = transport.newStream(
+                args.getMethodDescriptor(), args.getHeaders(), callOptions,
+                tracers);
+            // User code provided authority takes precedence over the LB provided one; this will be
+            // overwritten by ClientCallImpl if the application sets an authority override
+            if (pickResult.getAuthorityOverride() != null) {
+              stream.setAuthority(pickResult.getAuthorityOverride());
+            }
+            return stream;
+          }
         }
         // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
-        // race with reprocess()), we will buffer it.  Otherwise, will try with the new picker.
+        // race with reprocess()), we will buffer the RPC.  Otherwise, will try with the new picker.
+        synchronized (lock) {
+          PickerState newerState = pickerState;
+          if (state == newerState) {
+            String delayType = determineQueuingDelayType(pickResult);
+            String delayReason = determineQueuingDelayReason(pickResult);
+            return createPendingStream(args, tracers, pickResult, delayType, delayReason);
+          }
+          state = newerState;
+        }
       }
     } finally {
       syncContext.drain();
@@ -172,11 +174,18 @@ final class DelayedClientTransport implements ManagedClientTransport {
    * schedule tasks on syncContext.
    */
   @GuardedBy("lock")
-  private PendingStream createPendingStream(PickSubchannelArgs args) {
-    PendingStream pendingStream = new PendingStream(args);
+  private PendingStream createPendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
+      PickResult pickResult, String delayType, String delayReason) {
+    PendingStream pendingStream = new PendingStream(args, tracers, delayType, delayReason);
+    if (args.getCallOptions().isWaitForReady() && pickResult != null && pickResult.hasResult()) {
+      pendingStream.lastPickStatus = pickResult.getStatus();
+    }
     pendingStreams.add(pendingStream);
     if (getPendingStreamsCount() == 1) {
       syncContext.executeLater(reportTransportInUse);
+    }
+    for (ClientStreamTracer streamTracer : tracers) {
+      streamTracer.createPendingStream();
     }
     return pendingStream;
   }
@@ -194,21 +203,21 @@ final class DelayedClientTransport implements ManagedClientTransport {
   }
 
   /**
-   * Prevents creating any new streams.  Buffered streams are not failed and may still proceed
-   * when {@link #reprocess} is called.  The delayed transport will be terminated when there is no
+   * Prevents creating any new streams. Buffered streams are not failed and may still proceed
+   * when {@link #reprocess} is called. The delayed transport will be terminated when there is no
    * more buffered streams.
    */
   @Override
   public final void shutdown(final Status status) {
     synchronized (lock) {
-      if (shutdownStatus != null) {
+      if (pickerState.shutdownStatus != null) {
         return;
       }
-      shutdownStatus = status;
+      pickerState = pickerState.withShutdownStatus(status);
       syncContext.executeLater(new Runnable() {
           @Override
           public void run() {
-            listener.transportShutdown(status);
+            listener.transportShutdown(status, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
           }
         });
       if (!hasPendingStreams() && reportTransportTerminated != null) {
@@ -238,7 +247,14 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
     if (savedReportTransportTerminated != null) {
       for (PendingStream stream : savedPendingStreams) {
-        stream.cancel(status);
+        Runnable runnable = stream.setStreamAndEndDelay(
+            new FailingClientStream(status, RpcProgress.REFUSED, stream.tracers));
+        if (runnable != null) {
+          // Drain in-line instead of using an executor as failing stream just throws everything
+          // away. This is essentially the same behavior as DelayedStream.cancel() but can be done
+          // before stream.start().
+          runnable.run();
+        }
       }
       syncContext.execute(savedReportTransportTerminated);
     }
@@ -272,8 +288,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
   final void reprocess(@Nullable SubchannelPicker picker) {
     ArrayList<PendingStream> toProcess;
     synchronized (lock) {
-      lastPicker = picker;
-      lastPickerVersion++;
+      pickerState = pickerState.withPicker(picker);
       if (picker == null || !hasPendingStreams()) {
         return;
       }
@@ -284,9 +299,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
     for (final PendingStream stream : toProcess) {
       PickResult pickResult = picker.pickSubchannel(stream.args);
       CallOptions callOptions = stream.args.getCallOptions();
+      if (callOptions.isWaitForReady() && pickResult.hasResult()) {
+        stream.lastPickStatus = pickResult.getStatus();
+      }
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
           callOptions.isWaitForReady());
       if (transport != null) {
+        stream.endDelay();
         Executor executor = defaultAppExecutor;
         // createRealStream may be expensive. It will start real streams on the transport. If
         // there are pending requests, they will be serialized too, which may be expensive. Since
@@ -294,14 +313,16 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (callOptions.getExecutor() != null) {
           executor = callOptions.getExecutor();
         }
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-              stream.createRealStream(transport);
-            }
-          });
+        Runnable runnable = stream.createRealStream(transport, pickResult.getAuthorityOverride());
+        if (runnable != null) {
+          executor.execute(runnable);
+        }
         toRemove.add(stream);
-      }  // else: stay pending
+      } else { // stay pending
+        String delayType = determineQueuingDelayType(pickResult);
+        String delayReason = determineQueuingDelayReason(pickResult);
+        stream.updateDelay(delayType, delayReason);
+      }
     }
 
     synchronized (lock) {
@@ -311,7 +332,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
       if (!hasPendingStreams()) {
         return;
       }
-      pendingStreams.removeAll(toRemove);
+      // Avoid pendingStreams.removeAll() as it can degrade to calling toRemove.contains() for each
+      // element in pendingStreams.
+      for (PendingStream stream : toRemove) {
+        pendingStreams.remove(stream);
+      }
       // Because delayed transport is long-lived, we take this opportunity to down-size the
       // hashmap.
       if (pendingStreams.isEmpty()) {
@@ -324,7 +349,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
         // (which would shutdown the transports and LoadBalancer) because the gap should be shorter
         // than IDLE_MODE_DEFAULT_TIMEOUT_MILLIS (1 second).
         syncContext.executeLater(reportTransportNotInUse);
-        if (shutdownStatus != null && reportTransportTerminated != null) {
+        if (pickerState.shutdownStatus != null && reportTransportTerminated != null) {
           syncContext.executeLater(reportTransportTerminated);
           reportTransportTerminated = null;
         }
@@ -338,24 +363,129 @@ final class DelayedClientTransport implements ManagedClientTransport {
     return logId;
   }
 
+  private static String determineQueuingDelayType(@Nullable PickResult pickResult) {
+    if (pickResult == null) {
+      return "connecting";
+    }
+    if (pickResult.getSubchannel() != null) {
+      return "subchannel_state_mismatch";
+    }
+    if (!pickResult.getStatus().isOk()) {
+      return "picker_failing_with_wait_for_ready";
+    }
+    if (pickResult.getDelayType() != null) {
+      return pickResult.getDelayType();
+    }
+    return "connecting";
+  }
+
+  private static String determineQueuingDelayReason(@Nullable PickResult pickResult) {
+    if (pickResult == null) {
+      return "client channel: waiting for picker";
+    }
+    if (pickResult.getSubchannel() != null) {
+      return "subchannel returned by LB picker has no connected subchannel";
+    }
+    if (!pickResult.getStatus().isOk()) {
+      Status status = pickResult.getStatus();
+      // Status.toString() would append the cause's stack trace.
+      return "wait_for_ready RPC failed with status: " + status.getCode()
+          + (status.getDescription() == null ? "" : ": " + status.getDescription());
+    }
+    if (pickResult.getDelayReason() != null) {
+      return pickResult.getDelayReason();
+    }
+    return "client channel: waiting for picker";
+  }
+
   private class PendingStream extends DelayedStream {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
+    private final ClientStreamTracer[] tracers;
+    private volatile Status lastPickStatus;
+    @GuardedBy("this")
+    @Nullable private String activeDelayType;
+    @GuardedBy("this")
+    @Nullable private String activeDelayReason;
 
-    private PendingStream(PickSubchannelArgs args) {
+    private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
+        String delayType, String delayReason) {
+      super("connecting_and_lb");
       this.args = args;
+      this.tracers = tracers;
+      this.activeDelayType = delayType;
+      this.activeDelayReason = delayReason;
+      for (ClientStreamTracer tracer : tracers) {
+        tracer.recordDelayStart(delayType, delayReason);
+      }
     }
 
-    private void createRealStream(ClientTransport transport) {
+    /**
+     * Updates active attempt delay telemetry state upon load balancing state transitions.
+     *
+     * <p>If {@code newType} differs from the active delay type, active segment timers and child
+     * spans are ended and a new segment is initiated. If only {@code newReason} changes, a
+     * structured transition event is appended to the active span without span re-creation.
+     */
+    synchronized void updateDelay(String newType, String newReason) {
+      if (getRealStream() != null) {
+        return;
+      }
+      if (!newType.equals(activeDelayType)) {
+        // Delay type changed (e.g., from RLS lookup to connecting). End the previous delay.
+        endDelay();
+        activeDelayType = newType;
+        activeDelayReason = newReason;
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.recordDelayStart(newType, newReason);
+        }
+      } else if (!newReason.equals(activeDelayReason)) {
+        // Delay type is unchanged, but the reason changed (e.g., priority failover).
+        activeDelayReason = newReason;
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.recordDelayReasonChanged(newType, newReason);
+        }
+      }
+    }
+
+    /**
+     * Ends active attempt delay segment telemetry upon stream creation or stream cancellation.
+     */
+    synchronized void endDelay() {
+      String delayType = activeDelayType;
+      if (delayType != null) {
+        activeDelayType = null;
+        activeDelayReason = null;
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.recordDelayEnd(delayType);
+        }
+      }
+    }
+
+    Runnable setStreamAndEndDelay(ClientStream stream) {
+      endDelay();
+      return setStream(stream);
+    }
+
+    /** Runnable may be null. */
+    private Runnable createRealStream(ClientTransport transport, String authorityOverride) {
       ClientStream realStream;
       Context origContext = context.attach();
       try {
         realStream = transport.newStream(
-            args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions());
+            args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions(),
+            tracers);
       } finally {
         context.detach(origContext);
       }
-      setStream(realStream);
+      if (authorityOverride != null) {
+        // User code provided authority takes precedence over the LB provided one; this will be
+        // overwritten by an enqueud call from ClientCallImpl if the application sets an authority
+        // override. We must call the real stream directly because stream.start() has likely already
+        // been called on the delayed stream.
+        realStream.setAuthority(authorityOverride);
+      }
+      return setStreamAndEndDelay(realStream);
     }
 
     @Override
@@ -366,7 +496,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
           boolean justRemovedAnElement = pendingStreams.remove(this);
           if (!hasPendingStreams() && justRemovedAnElement) {
             syncContext.executeLater(reportTransportNotInUse);
-            if (shutdownStatus != null) {
+            if (pickerState.shutdownStatus != null) {
               syncContext.executeLater(reportTransportTerminated);
               reportTransportTerminated = null;
             }
@@ -374,6 +504,54 @@ final class DelayedClientTransport implements ManagedClientTransport {
         }
       }
       syncContext.drain();
+    }
+
+    @Override
+    protected void onEarlyCancellation(Status reason) {
+      endDelay();
+      for (ClientStreamTracer tracer : tracers) {
+        tracer.streamClosed(reason);
+      }
+    }
+
+    @Override
+    public void appendTimeoutInsight(InsightBuilder insight) {
+      if (args.getCallOptions().isWaitForReady()) {
+        insight.append("wait_for_ready");
+        Status status = lastPickStatus;
+        if (status != null && !status.isOk()) {
+          insight.appendKeyValue("Last Pick Failure", status);
+        }
+      }
+      super.appendTimeoutInsight(insight);
+    }
+  }
+
+  static final class PickerState {
+    /**
+     * The last picker that {@link #reprocess} has used. May be set to null when the channel has
+     * moved to idle.
+     */
+    @Nullable
+    final SubchannelPicker lastPicker;
+    /**
+     * When {@code shutdownStatus != null && !hasPendingStreams()}, then the transport is considered
+     * terminated.
+     */
+    @Nullable
+    final Status shutdownStatus;
+
+    private PickerState(SubchannelPicker lastPicker, Status shutdownStatus) {
+      this.lastPicker = lastPicker;
+      this.shutdownStatus = shutdownStatus;
+    }
+
+    public PickerState withPicker(SubchannelPicker newPicker) {
+      return new PickerState(newPicker, this.shutdownStatus);
+    }
+
+    public PickerState withShutdownStatus(Status newShutdownStatus) {
+      return new PickerState(this.lastPicker, newShutdownStatus);
     }
   }
 }

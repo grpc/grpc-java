@@ -31,22 +31,27 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.US_ASCII;
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR;
 import static io.netty.handler.codec.http2.Http2Exception.connectionError;
 import static io.netty.util.AsciiString.isUpperCase;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import com.google.common.io.BaseEncoding;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Metadata;
+import io.netty.handler.codec.CharSequenceValueConverter;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersDecoder;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
 import io.netty.util.internal.PlatformDependent;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A headers utils providing custom gRPC implementations of {@link DefaultHttp2HeadersDecoder}.
@@ -96,7 +101,8 @@ class GrpcHttp2HeadersUtils {
     private int namesAndValuesIdx;
 
     GrpcHttp2InboundHeaders(int numHeadersGuess) {
-      checkArgument(numHeadersGuess > 0, "numHeadersGuess needs to be gt zero.");
+      checkArgument(numHeadersGuess > 0, "numHeadersGuess needs to be positive: %s",
+          numHeadersGuess);
       namesAndValues = new byte[numHeadersGuess * 2][];
       values = new AsciiString[numHeadersGuess];
     }
@@ -143,6 +149,11 @@ class GrpcHttp2HeadersUtils {
     }
 
     @Override
+    public boolean contains(CharSequence name) {
+      return get(name) != null;
+    }
+
+    @Override
     public CharSequence status() {
       return get(Http2Headers.PseudoHeaderName.STATUS.value());
     }
@@ -157,6 +168,44 @@ class GrpcHttp2HeadersUtils {
         }
       }
       return returnValues;
+    }
+
+    @CanIgnoreReturnValue
+    @Override
+    public boolean remove(CharSequence csName) {
+      AsciiString name = requireAsciiString(csName);
+      int i = 0;
+      for (; i < namesAndValuesIdx; i += 2) {
+        if (equals(name, namesAndValues[i])) {
+          break;
+        }
+      }
+      if (i >= namesAndValuesIdx) {
+        return false;
+      }
+      int dest = i;
+      for (; i < namesAndValuesIdx; i += 2) {
+        if (equals(name, namesAndValues[i])) {
+          continue;
+        }
+        values[dest / 2] = values[i / 2];
+        namesAndValues[dest] = namesAndValues[i];
+        namesAndValues[dest + 1] = namesAndValues[i + 1];
+        dest += 2;
+      }
+      namesAndValuesIdx = dest;
+      return true;
+    }
+
+    @Override
+    public Http2Headers set(CharSequence name, CharSequence value) {
+      remove(name);
+      return add(name, value);
+    }
+
+    @Override
+    public Http2Headers setLong(CharSequence name, long value) {
+      return set(name, AsciiString.of(CharSequenceValueConverter.INSTANCE.convertLong(value)));
     }
 
     /**
@@ -242,6 +291,11 @@ class GrpcHttp2HeadersUtils {
       return numHeaders();
     }
 
+    @Override
+    public Iterator<Map.Entry<CharSequence, CharSequence>> iterator() {
+      return namesAndValuesToImmutableList().iterator();
+    }
+
     protected static void appendNameAndValue(StringBuilder builder, CharSequence name,
         CharSequence value, boolean prependSeparator) {
       if (prependSeparator) {
@@ -250,14 +304,27 @@ class GrpcHttp2HeadersUtils {
       builder.append(name).append(": ").append(value);
     }
 
-    protected final String namesAndValuesToString() {
-      StringBuilder builder = new StringBuilder();
-      boolean prependSeparator = false;
+    private List<Map.Entry<CharSequence, CharSequence>> namesAndValuesToImmutableList() {
+      ArrayList<Map.Entry<CharSequence, CharSequence>> list = new ArrayList<>(values.length);
+      addNamesAndValuesToList(list);
+      return Collections.unmodifiableList(list);
+    }
+
+    protected final void addNamesAndValuesToList(
+        List<Map.Entry<CharSequence, CharSequence>> list) {
       for (int i = 0; i < namesAndValuesIdx; i += 2) {
         String name = new String(namesAndValues[i], US_ASCII);
         // If binary headers, the value is base64 encoded.
         AsciiString value = values[i / 2];
-        appendNameAndValue(builder, name, value, prependSeparator);
+        list.add(new AbstractMap.SimpleImmutableEntry<CharSequence, CharSequence>(name, value));
+      }
+    }
+
+    protected final String namesAndValuesToString() {
+      StringBuilder builder = new StringBuilder();
+      boolean prependSeparator = false;
+      for (Map.Entry<CharSequence, CharSequence> entry : namesAndValuesToImmutableList()) {
+        appendNameAndValue(builder, entry.getKey(), entry.getValue(), prependSeparator);
         prependSeparator = true;
       }
       return builder.toString();
@@ -294,7 +361,12 @@ class GrpcHttp2HeadersUtils {
       AsciiString name = validateName(requireAsciiString(csName));
       AsciiString value = requireAsciiString(csValue);
       if (isPseudoHeader(name)) {
-        addPseudoHeader(name, value);
+        AsciiString previous = getPseudoHeader(name);
+        if (previous != null) {
+          PlatformDependent.throwException(
+              connectionError(PROTOCOL_ERROR, "Duplicate %s header", name));
+        }
+        setPseudoHeader(name, value);
         return this;
       }
       if (equals(TE_HEADER, name)) {
@@ -307,17 +379,30 @@ class GrpcHttp2HeadersUtils {
     @Override
     public CharSequence get(CharSequence csName) {
       AsciiString name = requireAsciiString(csName);
-      checkArgument(!isPseudoHeader(name), "Use direct accessor methods for pseudo headers.");
+      if (isPseudoHeader(name)) {
+        return getPseudoHeader(name);
+      }
       if (equals(TE_HEADER, name)) {
         return te;
       }
       return get(name);
     }
 
-    private void addPseudoHeader(CharSequence csName, CharSequence csValue) {
-      AsciiString name = requireAsciiString(csName);
-      AsciiString value = requireAsciiString(csValue);
+    private AsciiString getPseudoHeader(AsciiString name) {
+      if (equals(PATH_HEADER, name)) {
+        return path;
+      } else if (equals(AUTHORITY_HEADER, name)) {
+        return authority;
+      } else if (equals(METHOD_HEADER, name)) {
+        return method;
+      } else if (equals(SCHEME_HEADER, name)) {
+        return scheme;
+      } else {
+        return null;
+      }
+    }
 
+    private void setPseudoHeader(AsciiString name, AsciiString value) {
       if (equals(PATH_HEADER, name)) {
         path = value;
       } else if (equals(AUTHORITY_HEADER, name)) {
@@ -329,6 +414,7 @@ class GrpcHttp2HeadersUtils {
       } else {
         PlatformDependent.throwException(
             connectionError(PROTOCOL_ERROR, "Illegal pseudo-header '%s' in request.", name));
+        throw new AssertionError(); // Make flow control obvious to javac
       }
     }
 
@@ -352,20 +438,40 @@ class GrpcHttp2HeadersUtils {
       return scheme;
     }
 
-    /**
-     * This method is called in tests only.
-     */
     @Override
     public List<CharSequence> getAll(CharSequence csName) {
       AsciiString name = requireAsciiString(csName);
       if (isPseudoHeader(name)) {
-        // This code should never be reached.
-        throw new IllegalArgumentException("Use direct accessor methods for pseudo headers.");
+        AsciiString value = getPseudoHeader(name);
+        if (value == null) {
+          return Collections.emptyList();
+        } else {
+          return Collections.singletonList(value);
+        }
       }
       if (equals(TE_HEADER, name)) {
         return Collections.singletonList((CharSequence) te);
       }
       return super.getAll(csName);
+    }
+
+    @Override
+    public boolean remove(CharSequence csName) {
+      AsciiString name = requireAsciiString(csName);
+      if (isPseudoHeader(name)) {
+        if (getPseudoHeader(name) == null) {
+          return false;
+        } else {
+          setPseudoHeader(name, null);
+          return true;
+        }
+      }
+      if (equals(TE_HEADER, name)) {
+        boolean wasPresent = te != null;
+        te = null;
+        return wasPresent;
+      }
+      return super.remove(name);
     }
 
     /**
@@ -391,6 +497,27 @@ class GrpcHttp2HeadersUtils {
       }
       size += super.size();
       return size;
+    }
+
+    @Override
+    public Iterator<Map.Entry<CharSequence, CharSequence>> iterator() {
+      List<Map.Entry<CharSequence, CharSequence>> list = new ArrayList<>(size());
+      addIfPresent(list, PATH_HEADER, path);
+      addIfPresent(list, AUTHORITY_HEADER, authority);
+      addIfPresent(list, METHOD_HEADER, method);
+      addIfPresent(list, SCHEME_HEADER, scheme);
+      addIfPresent(list, TE_HEADER, te);
+      addNamesAndValuesToList(list);
+      return Collections.unmodifiableList(list).iterator();
+    }
+
+    private static void addIfPresent(
+        List<Map.Entry<CharSequence, CharSequence>> list, AsciiString name, AsciiString value) {
+      if (value != null) {
+        list.add(
+            new AbstractMap.SimpleImmutableEntry<CharSequence, CharSequence>(
+                name.toString(), value));
+      }
     }
 
     @Override

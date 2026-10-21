@@ -1,40 +1,48 @@
-apply plugin: 'com.github.kt3k.coveralls'
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.github.kt3k.coveralls"
+}
 
 description = "gRPC: All"
-
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath 'org.kt3k.gradle.plugin:coveralls-gradle-plugin:2.0.1' }
-}
 
 def subprojects = [
     project(':grpc-api'),
     project(':grpc-auth'),
     project(':grpc-core'),
-    project(':grpc-context'),
+    project(':grpc-grpclb'),
+    project(':grpc-gcp-csm-observability'),
+    project(':grpc-inprocess'),
     project(':grpc-netty'),
     project(':grpc-okhttp'),
+    project(':grpc-opentelemetry'),
     project(':grpc-protobuf'),
     project(':grpc-protobuf-lite'),
+    project(':grpc-rls'),
+    project(':grpc-services'),
+    project(':grpc-servlet'),
+    project(':grpc-servlet-jakarta'),
     project(':grpc-stub'),
     project(':grpc-testing'),
+    project(':grpc-util'),
+    project(':grpc-xds'),
 ]
 
-for (subproject in rootProject.subprojects) {
+for (subproject in subprojects) {
     if (subproject == project) {
         continue
     }
     evaluationDependsOn(subproject.path)
 }
+evaluationDependsOn(':grpc-interop-testing')
 
 dependencies {
-    compile subprojects.minus(project(':grpc-protobuf-lite'))
+    api subprojects.minus([project.project(':grpc-protobuf-lite')])
+    implementation libraries.guava.jre // JRE required by transitive protobuf-java-util
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     classpath = files(subprojects.collect { subproject ->
         subproject.javadoc.classpath
     })
@@ -43,40 +51,29 @@ javadoc {
             continue;
         }
         source subproject.javadoc.source
-        options.links subproject.javadoc.options.links.toArray(new String[0])
+        options.linksOffline.addAll subproject.javadoc.options.linksOffline
     }
 }
 
-task jacocoMerge(type: JacocoMerge) {
-    dependsOn(subprojects.jacocoTestReport.dependsOn)
+tasks.named("jacocoTestReport").configure {
     mustRunAfter(subprojects.jacocoTestReport.mustRunAfter)
-    destinationFile = file("${buildDir}/jacoco/test.exec")
-    executionData = files(subprojects.jacocoTestReport.executionData)
+    mustRunAfter(project(':grpc-interop-testing').jacocoTestReport.mustRunAfter)
+    executionData.from files(subprojects.jacocoTestReport.executionData)
             .plus(project(':grpc-interop-testing').jacocoTestReport.executionData)
-            .filter { f -> f.exists() }
-}
-
-jacocoTestReport {
-    dependsOn(jacocoMerge)
     reports {
-        xml.enabled = true
-        html.enabled = true
+        xml.required = true
+        html.required = true
     }
 
-    additionalSourceDirs = files(subprojects.sourceSets.main.allSource.srcDirs)
-    sourceDirectories = files(subprojects.sourceSets.main.allSource.srcDirs)
-    classDirectories = files(subprojects.sourceSets.main.output)
-    classDirectories = files(classDirectories.files.collect {
-        fileTree(dir: it,
-        exclude: [
-                '**/io/grpc/internal/testing/**',
-                '**/io/grpc/okhttp/internal/**',
-        ])
-    })
+    subprojects.each { subproject ->
+        additionalSourceDirs.from(subproject.jacocoTestReport.additionalSourceDirs)
+        sourceDirectories.from(subproject.jacocoTestReport.sourceDirectories)
+        classDirectories.from(subproject.jacocoTestReport.classDirectories)
+    }
 }
 
 coveralls {
     sourceDirs = subprojects.sourceSets.main.allSource.srcDirs.flatten()
 }
 
-tasks.coveralls { dependsOn(jacocoTestReport) }
+tasks.named("coveralls").configure { dependsOn tasks.named("jacocoTestReport") }

@@ -16,10 +16,10 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Charsets.US_ASCII;
-import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.Metadata.ASCII_STRING_MARSHALLER;
 import static io.grpc.Metadata.BINARY_BYTE_MARSHALLER;
+import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -31,7 +31,6 @@ import com.google.common.io.BaseEncoding;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Metadata.BinaryMarshaller;
-import io.grpc.Metadata.Key;
 import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -47,22 +46,25 @@ public class TransportFrameUtilTest {
 
   private static final BinaryMarshaller<String> UTF8_STRING_MARSHALLER =
       new BinaryMarshaller<String>() {
-    @Override
-    public byte[] toBytes(String value) {
-      return value.getBytes(UTF_8);
-    }
+        @Override
+        public byte[] toBytes(String value) {
+          return value.getBytes(UTF_8);
+        }
 
-    @Override
-    public String parseBytes(byte[] serialized) {
-      return new String(serialized, UTF_8);
-    }
-  };
+        @Override
+        public String parseBytes(byte[] serialized) {
+          return new String(serialized, UTF_8);
+        }
+      };
 
-  private static final Key<String> PLAIN_STRING = Key.of("plainstring", ASCII_STRING_MARSHALLER);
-  private static final Key<String> BINARY_STRING = Key.of("string-bin", UTF8_STRING_MARSHALLER);
-  private static final Key<String> BINARY_STRING_WITHOUT_SUFFIX =
-      Key.of("string", ASCII_STRING_MARSHALLER);
-  private static final Key<byte[]> BINARY_BYTES = Key.of("bytes-bin", BINARY_BYTE_MARSHALLER);
+  private static final Metadata.Key<String> PLAIN_STRING =
+      Metadata.Key.of("plainstring", ASCII_STRING_MARSHALLER);
+  private static final Metadata.Key<String> BINARY_STRING =
+      Metadata.Key.of("string-bin", UTF8_STRING_MARSHALLER);
+  private static final Metadata.Key<String> BINARY_STRING_WITHOUT_SUFFIX =
+      Metadata.Key.of("string", ASCII_STRING_MARSHALLER);
+  private static final Metadata.Key<byte[]> BINARY_BYTES =
+      Metadata.Key.of("bytes-bin", BINARY_BYTE_MARSHALLER);
 
   @Test
   public void testToHttp2Headers() {
@@ -86,7 +88,16 @@ public class TransportFrameUtilTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void binaryHeaderWithoutSuffix() {
-    Key.of("plainstring", UTF8_STRING_MARSHALLER);
+    Metadata.Key.of("plainstring", UTF8_STRING_MARSHALLER);
+  }
+
+  @Test
+  public void binaryHeaderEncodedWithoutPadding() {
+    Metadata headers = new Metadata();
+    headers.put(BINARY_BYTES, new byte[] {1, 2, 3, 4, 5});
+    byte[][] http2Headers = TransportFrameUtil.toHttp2Headers(headers);
+    assertContains(
+        http2Headers, BINARY_BYTES.name().getBytes(US_ASCII), "AQIDBAU".getBytes(US_ASCII));
   }
 
   @Test
@@ -126,6 +137,24 @@ public class TransportFrameUtilTest {
             BaseEncoding.base64().decode("more"),
             BaseEncoding.base64().decode("")},
         values));
+  }
+
+  @Test
+  public void binaryHeaderDecodesPaddedBase64() {
+    byte[][] http2Headers = new byte[][] {
+        BINARY_BYTES.name().getBytes(US_ASCII), "AQIDBAU=".getBytes(US_ASCII)};
+    byte[][] rawSerialized = TransportFrameUtil.toRawSerializedHeaders(http2Headers);
+    Metadata recoveredHeaders = InternalMetadata.newMetadata(rawSerialized);
+    assertArrayEquals(new byte[] {1, 2, 3, 4, 5}, recoveredHeaders.get(BINARY_BYTES));
+  }
+
+  @Test
+  public void binaryHeaderDecodesUnpaddedBase64() {
+    byte[][] http2Headers = new byte[][] {
+        BINARY_BYTES.name().getBytes(US_ASCII), "AQIDBAU".getBytes(US_ASCII)};
+    byte[][] rawSerialized = TransportFrameUtil.toRawSerializedHeaders(http2Headers);
+    Metadata recoveredHeaders = InternalMetadata.newMetadata(rawSerialized);
+    assertArrayEquals(new byte[] {1, 2, 3, 4, 5}, recoveredHeaders.get(BINARY_BYTES));
   }
 
   private static void assertContains(byte[][] headers, byte[] key, byte[] value) {

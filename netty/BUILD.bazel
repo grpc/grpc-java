@@ -1,8 +1,10 @@
+load("@rules_java//java:defs.bzl", "java_library")
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
 java_library(
     name = "netty",
     srcs = glob([
         "src/main/java/**/*.java",
-        "third_party/netty/java/**/*.java",
     ]),
     resources = glob([
         "src/main/resources/**",
@@ -11,19 +13,33 @@ java_library(
     deps = [
         "//api",
         "//core:internal",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-        "@io_netty_netty_buffer//jar",
-        "@io_netty_netty_codec//jar",
-        "@io_netty_netty_codec_http//jar",
-        "@io_netty_netty_codec_http2//jar",
-        "@io_netty_netty_codec_socks//jar",
-        "@io_netty_netty_common//jar",
-        "@io_netty_netty_handler//jar",
-        "@io_netty_netty_handler_proxy//jar",
-        "@io_netty_netty_resolver//jar",
-        "@io_netty_netty_transport//jar",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("io.netty:netty-buffer"),
+        artifact("io.netty:netty-codec-base"),
+        artifact("io.netty:netty-codec-http"),
+        artifact("io.netty:netty-codec-http2"),
+        artifact("io.netty:netty-codec-socks"),
+        artifact("io.netty:netty-common"),
+        artifact("io.netty:netty-handler"),
+        artifact("io.netty:netty-handler-proxy"),
+        artifact("io.netty:netty-resolver"),
+        artifact("io.netty:netty-transport"),
+        artifact("io.netty:netty-transport-native-unix-common"),
+        artifact("io.perfmark:perfmark-api"),
+        artifact("org.codehaus.mojo:animal-sniffer-annotations"),
     ],
+)
+
+# Mirrors the dependencies included in the artifact on Maven Central for usage
+# with maven_install's override_targets. Should only be used as a dep for
+# pre-compiled binaries on Maven Central.
+#
+# Not actually shaded; libraries should not be referencing unstable APIs so
+# there should not be any references to the shaded package.
+java_library(
+    name = "shaded_maven",
+    visibility = ["//visibility:public"],
+    runtime_deps = ["//netty/shaded"],
 )

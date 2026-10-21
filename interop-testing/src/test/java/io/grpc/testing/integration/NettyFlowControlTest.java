@@ -24,7 +24,11 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
-import io.grpc.netty.InternalHandlerSettings;
+import io.grpc.netty.GrpcHttp2ConnectionHandler;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
+import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
+import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
@@ -32,18 +36,18 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import io.netty.util.concurrent.DefaultThreadFactory;
+import io.netty.channel.ChannelHandler;
+import io.netty.handler.codec.http2.Http2Stream;
+import io.netty.util.AsciiString;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -63,27 +67,14 @@ public class NettyFlowControlTest {
   private static final int REGULAR_WINDOW = 64 * 1024;
   private static final int MAX_WINDOW = 8 * 1024 * 1024;
 
-  private static ManagedChannel channel;
-  private static Server server;
-  private static TrafficControlProxy proxy;
+  private final CapturingProtocolNegotiationFactory capturingPnFactory
+      = new CapturingProtocolNegotiationFactory();
+  private ManagedChannel channel;
+  private Server server;
+  private TrafficControlProxy proxy;
 
   private int proxyPort;
   private int serverPort;
-
-  private static final ThreadPoolExecutor executor =
-      new ThreadPoolExecutor(1, 10, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
-          new DefaultThreadFactory("flowcontrol-test-pool", true));
-
-  @BeforeClass
-  public static void setUp() {
-    InternalHandlerSettings.enable(true);
-    InternalHandlerSettings.autoWindowOn(true);
-  }
-
-  @AfterClass
-  public static void shutDownTests() {
-    executor.shutdown();
-  }
 
   @Before
   public void initTest() {
@@ -93,8 +84,13 @@ public class NettyFlowControlTest {
 
   @After
   public void endTest() throws IOException {
-    proxy.shutDown();
-    server.shutdown();
+    if (proxy != null) {
+      proxy.shutDown();
+    }
+    server.shutdownNow();
+    if (channel != null) {
+      channel.shutdownNow();
+    }
   }
 
   @Test
@@ -102,7 +98,7 @@ public class NettyFlowControlTest {
     proxy = new TrafficControlProxy(serverPort, HIGH_BAND, MED_LAT, TimeUnit.MILLISECONDS);
     proxy.start();
     proxyPort = proxy.getPort();
-    resetConnection(REGULAR_WINDOW);
+    createAndStartChannel(REGULAR_WINDOW);
     doTest(HIGH_BAND, MED_LAT);
   }
 
@@ -111,16 +107,17 @@ public class NettyFlowControlTest {
     proxy = new TrafficControlProxy(serverPort, LOW_BAND, MED_LAT, TimeUnit.MILLISECONDS);
     proxy.start();
     proxyPort = proxy.getPort();
-    resetConnection(REGULAR_WINDOW);
+    createAndStartChannel(REGULAR_WINDOW);
     doTest(LOW_BAND, MED_LAT);
   }
 
   @Test
+  @Ignore("enable once 2 pings between data is no longer necessary")
   public void verySmallWindowMakesProgress() throws InterruptedException, IOException {
     proxy = new TrafficControlProxy(serverPort, HIGH_BAND, MED_LAT, TimeUnit.MILLISECONDS);
     proxy.start();
     proxyPort = proxy.getPort();
-    resetConnection(TINY_WINDOW);
+    createAndStartChannel(TINY_WINDOW);
     doTest(HIGH_BAND, MED_LAT);
   }
 
@@ -142,17 +139,19 @@ public class NettyFlowControlTest {
         .addResponseParameters(ResponseParameters.newBuilder().setSize(streamSize / 2));
     StreamingOutputCallRequest request = builder.build();
 
-    TestStreamObserver observer = new TestStreamObserver(expectedWindow);
+    TestStreamObserver observer =
+        new TestStreamObserver(capturingPnFactory.grpcHandlerRef, expectedWindow);
     stub.streamingOutputCall(request, observer);
-    int lastWindow = observer.waitFor();
+    int lastWindow = observer.waitFor(5, TimeUnit.SECONDS);
 
     // deal with cases that either don't cause a window update or hit max window
     expectedWindow = Math.min(MAX_WINDOW, Math.max(expectedWindow, REGULAR_WINDOW));
 
-    // Range looks large, but this allows for only one extra/missed window update
+    // Range looks large, but this allows for only one extra/missed window update plus
+    // bdpPing variations.
     // (one extra update causes a 2x difference and one missed update causes a .5x difference)
     assertTrue("Window was " + lastWindow + " expecting " + expectedWindow,
-        lastWindow < 2 * expectedWindow);
+        lastWindow < 2.2 * expectedWindow);
     assertTrue("Window was " + lastWindow + " expecting " + expectedWindow,
         expectedWindow < 2 * lastWindow);
   }
@@ -160,24 +159,21 @@ public class NettyFlowControlTest {
   /**
    * Resets client/server and their flow control windows.
    */
-  private void resetConnection(int clientFlowControlWindow)
-      throws InterruptedException {
-    if (channel != null) {
-      if (!channel.isShutdown()) {
-        channel.shutdown();
-        channel.awaitTermination(100, TimeUnit.MILLISECONDS);
-      }
-    }
-    channel = NettyChannelBuilder.forAddress(new InetSocketAddress("localhost", proxyPort))
-        .flowControlWindow(clientFlowControlWindow)
-        .negotiationType(NegotiationType.PLAINTEXT)
-        .build();
+  private void createAndStartChannel(int clientFlowControlWindow) {
+    NettyChannelBuilder channelBuilder =
+        NettyChannelBuilder
+            .forAddress(new InetSocketAddress("localhost", proxyPort))
+            .initialFlowControlWindow(clientFlowControlWindow)
+            .negotiationType(NegotiationType.PLAINTEXT);
+    InternalNettyChannelBuilder.setProtocolNegotiatorFactory(channelBuilder, capturingPnFactory);
+    channel = channelBuilder.build();
   }
 
   private void startServer(int serverFlowControlWindow) {
     ServerBuilder<?> builder =
-        NettyServerBuilder.forAddress(new InetSocketAddress("localhost", 0))
-        .flowControlWindow(serverFlowControlWindow);
+        NettyServerBuilder
+            .forAddress(new InetSocketAddress("localhost", 0))
+            .initialFlowControlWindow(serverFlowControlWindow);
     builder.addService(ServerInterceptors.intercept(
         new TestServiceImpl(Executors.newScheduledThreadPool(2)),
         ImmutableList.<ServerInterceptor>of()));
@@ -193,22 +189,34 @@ public class NettyFlowControlTest {
    */
   private static class TestStreamObserver implements StreamObserver<StreamingOutputCallResponse> {
 
-    long startRequestNanos;
-    long endRequestNanos;
-    private final CountDownLatch latch = new CountDownLatch(1);
-    long expectedWindow;
+    final AtomicReference<GrpcHttp2ConnectionHandler> grpcHandlerRef;
+    final CountDownLatch latch = new CountDownLatch(1);
+    final long expectedWindow;
     int lastWindow;
+    boolean wasCompleted;
 
-    public TestStreamObserver(long window) {
-      startRequestNanos = System.nanoTime();
+    public TestStreamObserver(
+        AtomicReference<GrpcHttp2ConnectionHandler> grpcHandlerRef, long window) {
+      this.grpcHandlerRef = grpcHandlerRef;
       expectedWindow = window;
     }
 
     @Override
     public void onNext(StreamingOutputCallResponse value) {
-      lastWindow = InternalHandlerSettings.getLatestClientWindow();
-      if (lastWindow >= expectedWindow) {
-        onCompleted();
+      GrpcHttp2ConnectionHandler grpcHandler = grpcHandlerRef.get();
+      Http2Stream connectionStream = grpcHandler.connection().connectionStream();
+      int curWindow = grpcHandler.decoder().flowController().initialWindowSize(connectionStream);
+      synchronized (this) {
+        if (curWindow >= expectedWindow) {
+          if (wasCompleted) {
+            return;
+          }
+          wasCompleted = true;
+          lastWindow = curWindow;
+          onCompleted();
+        } else if (!wasCompleted) {
+          lastWindow = curWindow;
+        }
       }
     }
 
@@ -223,13 +231,40 @@ public class NettyFlowControlTest {
       latch.countDown();
     }
 
-    public long getElapsedTime() {
-      return endRequestNanos - startRequestNanos;
+    public int waitFor(long duration, TimeUnit unit) throws InterruptedException {
+      latch.await(duration, unit);
+      return lastWindow;
+    }
+  }
+
+  private static class CapturingProtocolNegotiationFactory implements ProtocolNegotiatorFactory {
+
+    AtomicReference<GrpcHttp2ConnectionHandler> grpcHandlerRef = new AtomicReference<>();
+
+    @Override
+    public ProtocolNegotiator buildProtocolNegotiator() {
+      return new CapturingProtocolNegotiator();
     }
 
-    public int waitFor() throws InterruptedException {
-      latch.await();
-      return lastWindow;
+    private class CapturingProtocolNegotiator implements ProtocolNegotiator {
+
+      final ProtocolNegotiator delegate = InternalProtocolNegotiators.plaintext();
+
+      @Override
+      public AsciiString scheme() {
+        return delegate.scheme();
+      }
+
+      @Override
+      public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+        CapturingProtocolNegotiationFactory.this.grpcHandlerRef.set(grpcHandler);
+        return delegate.newHandler(grpcHandler);
+      }
+
+      @Override
+      public void close() {
+        delegate.close();
+      }
     }
   }
 }

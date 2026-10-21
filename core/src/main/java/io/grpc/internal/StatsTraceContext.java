@@ -20,10 +20,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerStreamTracer.ServerCallInfo;
 import io.grpc.Status;
@@ -39,6 +39,14 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class StatsTraceContext {
+  /**
+   * Internal hook for server tracers that can use the resolved method descriptor before
+   * {@link ServerStreamTracer#serverCallStarted(ServerCallInfo)} runs.
+   */
+  public interface ServerCallMethodListener {
+    void serverCallMethodResolved(MethodDescriptor<?, ?> method);
+  }
+
   public static final StatsTraceContext NOOP = new StatsTraceContext(new StreamTracer[0]);
 
   private final StreamTracer[] tracers;
@@ -48,21 +56,12 @@ public final class StatsTraceContext {
    * Factory method for the client-side.
    */
   public static StatsTraceContext newClientContext(
-      final CallOptions callOptions, final Attributes transportAttrs, Metadata headers) {
-    List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
-    if (factories.isEmpty()) {
-      return NOOP;
+      ClientStreamTracer[] tracers, Attributes transportAtts, Metadata headers) {
+    StatsTraceContext ctx = new StatsTraceContext(tracers);
+    for (ClientStreamTracer tracer : tracers) {
+      tracer.streamCreated(transportAtts, headers);
     }
-    ClientStreamTracer.StreamInfo info =
-        ClientStreamTracer.StreamInfo.newBuilder()
-            .setTransportAttrs(transportAttrs).setCallOptions(callOptions).build();
-    // This array will be iterated multiple times per RPC. Use primitive array instead of Collection
-    // so that for-each doesn't create an Iterator every time.
-    StreamTracer[] tracers = new StreamTracer[factories.size()];
-    for (int i = 0; i < tracers.length; i++) {
-      tracers[i] = factories.get(i).newClientStreamTracer(info, headers);
-    }
-    return new StatsTraceContext(tracers);
+    return ctx;
   }
 
   /**
@@ -111,9 +110,9 @@ public final class StatsTraceContext {
    *
    * <p>Called from abstract stream implementations.
    */
-  public void clientInboundHeaders() {
+  public void clientInboundHeaders(Metadata headers) {
     for (StreamTracer tracer : tracers) {
-      ((ClientStreamTracer) tracer).inboundHeaders();
+      ((ClientStreamTracer) tracer).inboundHeaders(headers);
     }
   }
 
@@ -129,10 +128,11 @@ public final class StatsTraceContext {
   }
 
   /**
-   * See {@link ServerStreamTracer#filterContext}.  For server-side only.
+   * See {@link ServerStreamTracer#filterContext}. For server-side only.
    *
    * <p>Called from {@link io.grpc.internal.ServerImpl}.
    */
+  @SuppressWarnings("UnusedTypeParameter")
   public <ReqT, RespT> Context serverFilterContext(Context context) {
     Context ctx = checkNotNull(context, "context");
     for (StreamTracer tracer : tracers) {
@@ -150,6 +150,20 @@ public final class StatsTraceContext {
   public void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
     for (StreamTracer tracer : tracers) {
       ((ServerStreamTracer) tracer).serverCallStarted(callInfo);
+    }
+  }
+
+  /**
+   * Notifies server tracers that a primary-registry method descriptor was resolved before
+   * {@link ServerStreamTracer#serverCallStarted(ServerCallInfo)}.
+   *
+   * <p>Called from {@link io.grpc.internal.ServerImpl}.
+   */
+  public void serverCallMethodResolved(MethodDescriptor<?, ?> method) {
+    for (StreamTracer tracer : tracers) {
+      if (tracer instanceof ServerCallMethodListener) {
+        ((ServerCallMethodListener) tracer).serverCallMethodResolved(method);
+      }
     }
   }
 

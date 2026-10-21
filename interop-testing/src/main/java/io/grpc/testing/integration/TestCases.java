@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import com.google.common.base.Preconditions;
+import java.util.Locale;
 
 /**
  * Enum of interop test cases.
@@ -54,7 +55,12 @@ public enum TestCases {
   CANCEL_AFTER_FIRST_RESPONSE("cancel on first response"),
   TIMEOUT_ON_SLEEPING_SERVER("timeout before receiving a response"),
   VERY_LARGE_REQUEST("very large request"),
-  PICK_FIRST_UNARY("all requests are sent to one server despite multiple servers are resolved");
+  PICK_FIRST_UNARY("all requests are sent to one server despite multiple servers are resolved"),
+  RPC_SOAK("sends 'soak_iterations' large_unary rpcs in a loop, each on the same channel"),
+  CHANNEL_SOAK("sends 'soak_iterations' large_unary rpcs in a loop, each on a new channel"),
+  ORCA_PER_RPC("report backend metrics per query"),
+  ORCA_OOB("report backend metrics out-of-band"),
+  MAX_CONCURRENT_STREAMS_CONNECTION_SCALING("max concurrent streaming connection scaling");
 
   private final String description;
 
@@ -75,6 +81,11 @@ public enum TestCases {
    */
   public static TestCases fromString(String s) {
     Preconditions.checkNotNull(s, "s");
-    return TestCases.valueOf(s.toUpperCase());
+    return TestCases.valueOf(s.toUpperCase(Locale.ROOT));
+  }
+
+  @Override
+  public String toString() {
+    return name().toLowerCase(Locale.ROOT);
   }
 }

@@ -61,11 +61,6 @@ class NettyReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
-  public void readBytes(ByteBuffer dest) {
-    buffer.readBytes(dest);
-  }
-
-  @Override
   public void readBytes(OutputStream dest, int length) {
     try {
       buffer.readBytes(dest, length);
@@ -92,6 +87,36 @@ class NettyReadableBuffer extends AbstractReadableBuffer {
   @Override
   public int arrayOffset() {
     return buffer.arrayOffset() + buffer.readerIndex();
+  }
+
+  @Override
+  public void touch() {
+    buffer.touch();
+  }
+
+  @Override
+  public boolean markSupported() {
+    return true;
+  }
+
+  @Override
+  public void mark() {
+    buffer.markReaderIndex();
+  }
+
+  @Override
+  public void reset() {
+    buffer.resetReaderIndex();
+  }
+
+  @Override
+  public boolean byteBufferSupported() {
+    return buffer.nioBufferCount() > 0;
+  }
+
+  @Override
+  public ByteBuffer getByteBuffer() {
+    return buffer.nioBufferCount() == 1 ? buffer.nioBuffer() : buffer.nioBuffers()[0];
   }
 
   /**

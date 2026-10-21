@@ -1,68 +1,57 @@
-apply plugin: 'com.android.library'
+plugins {
+    id "maven-publish"
 
-group = "io.grpc"
-version = "1.22.0-SNAPSHOT" // CURRENT_GRPC_VERSION
-description = 'gRPC: Android'
-
-buildscript {
-    repositories {
-        google()
-        jcenter()
-        mavenCentral()
-        maven { url "https://plugins.gradle.org/m2/" }
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:3.3.0'
-        classpath "net.ltgt.gradle:gradle-errorprone-plugin:0.6"
-        classpath 'com.github.dcendents:android-maven-gradle-plugin:2.1'
-    }
+    id "com.android.library"
 }
 
-apply plugin: "net.ltgt.errorprone"
-apply plugin: 'com.github.dcendents.android-maven'
-apply plugin: "signing"
+description = 'gRPC: Android'
 
 android {
-    compileSdkVersion 27
+    namespace = 'io.grpc.android'
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    compileSdkVersion 34
     defaultConfig {
-        consumerProguardFiles "proguard-rules.txt"
-        minSdkVersion 14
-        targetSdkVersion 27
+        minSdkVersion 24
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
-        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
-    lintOptions { abortOnError false }
+    lintOptions { abortOnError = true }
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 repositories {
     google()
-    jcenter()
-    mavenCentral()
-    mavenLocal()
 }
 
 dependencies {
-    errorprone 'com.google.errorprone:error_prone_core:2.3.2'
-    errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
-
-    implementation 'io.grpc:grpc-core:1.22.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-
-    testImplementation 'io.grpc:grpc-okhttp:1.22.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    testImplementation 'junit:junit:4.12'
-    testImplementation 'org.robolectric:robolectric:3.7.1'
-    testImplementation 'com.google.truth:truth:0.45'
+    api project(':grpc-api')
+    implementation project(':grpc-core')
+    implementation libraries.guava
+    testImplementation project('::grpc-okhttp')
+    testImplementation libraries.androidx.test.core
+    testImplementation libraries.junit
+    testImplementation libraries.robolectric
+    testImplementation libraries.truth
 }
 
-signing {
-    required false
-    sign configurations.archives
-}
-
-task javadocs(type: Javadoc) {
+tasks.register("javadocs", Javadoc) {
     source = android.sourceSets.main.java.srcDirs
-    // TODO(ericgribkoff) Fix javadoc errors
-    failOnError false
+    classpath += files(android.getBootClasspath())
+    classpath += files({
+        android.libraryVariants.collect { variant ->
+            variant.javaCompileProvider.get().classpath
+        }
+    })
     options {
         // Disable JavaDoc doclint on Java 8.
         if (JavaVersion.current().isJava8Compatible()) {
@@ -71,79 +60,23 @@ task javadocs(type: Javadoc) {
     }
 }
 
-task javadocsJar(type: Jar, dependsOn: javadocs) {
-    classifier = 'javadoc'
+tasks.register("javadocJar", Jar) {
+    dependsOn javadocs
+    archiveClassifier = 'javadoc'
     from javadocs.destinationDir
 }
 
-task sourcesJar(type: Jar) {
-    classifier = 'sources'
+tasks.register("sourcesJar", Jar) {
+    archiveClassifier = 'sources'
     from android.sourceSets.main.java.srcDirs
 }
 
-artifacts {
-    archives sourcesJar
-    archives javadocsJar
-}
-
-uploadArchives.repositories.mavenDeployer {
-    beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-    if (rootProject.hasProperty('repositoryDir')) {
-        repository(url: new File(rootProject.repositoryDir).toURI())
-    } else {
-        String stagingUrl
-        if (rootProject.hasProperty('repositoryId')) {
-            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
-                    rootProject.repositoryId
-        } else {
-            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
-        }
-        def configureAuth = {
-            if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
-                authentication(userName: rootProject.ossrhUsername, password: rootProject.ossrhPassword)
+publishing {
+    publications {
+        maven {
+            afterEvaluate {
+                from components.release
             }
         }
-        repository(url: stagingUrl, configureAuth)
-        snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots/', configureAuth)
-    }
-}
-
-[
-    install.repositories.mavenInstaller,
-    uploadArchives.repositories.mavenDeployer,
-]*.pom*.whenConfigured { pom ->
-    pom.project {
-        name "$project.group:$project.name"
-        description project.description
-        url 'https://conscrypt.org/'
-
-        scm {
-            connection 'scm:git:https://github.com/grpc/grpc-java.git'
-            developerConnection 'scm:git:git@github.com:grpc/grpc-java.git'
-            url 'https://github.com/grpc/grpc-java'
-        }
-
-        licenses {
-            license {
-                name 'Apache 2.0'
-                url 'https://opensource.org/licenses/Apache-2.0'
-            }
-        }
-
-        developers {
-            developer {
-                id "grpc.io"
-                name "gRPC Contributors"
-                email "grpc-io@googlegroups.com"
-                url "https://grpc.io/"
-                organization = "gRPC Authors"
-                organizationUrl "https://www.google.com"
-            }
-        }
-    }
-    def core = pom.dependencies.find {dep -> dep.artifactId == 'grpc-core'}
-    if (core != null) {
-        // Depend on specific version of grpc-core because internal package is unstable
-        core.version = "[" + core.version + "]"
     }
 }

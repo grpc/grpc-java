@@ -17,20 +17,22 @@
 package io.grpc.internal;
 
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status;
 import java.util.concurrent.Executor;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * The client-side transport typically encapsulating a single connection to a remote
  * server. However, streams created before the client has discovered any server address may
  * eventually be issued on different connections.  All methods on the transport and its callbacks
  * are expected to execute quickly.
+ *
+ * <p>This interface is thread-safe.
  */
-@ThreadSafe
 public interface ClientTransport extends InternalInstrumented<SocketStats> {
 
   /**
@@ -46,16 +48,21 @@ public interface ClientTransport extends InternalInstrumented<SocketStats> {
    * @param method the descriptor of the remote method to be called for this stream.
    * @param headers to send at the beginning of the call
    * @param callOptions runtime options of the call
+   * @param tracers a non-empty array of tracers. The last element in it is reserved to be set by
+   *        the load balancer's pick result and otherwise is a no-op tracer.
    * @return the newly created stream.
    */
   // TODO(nmittler): Consider also throwing for stopping.
-  ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions);
+  ClientStream newStream(
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      // Using array for tracers instead of a list or composition for better performance.
+      ClientStreamTracer[] tracers);
 
   /**
    * Pings a remote endpoint. When an acknowledgement is received, the given callback will be
    * invoked using the given executor.
    *
-   * <p>Pings are not necessarily sent to the same endpont, thus a successful ping only means at
+   * <p>Pings are not necessarily sent to the same endpoint, thus a successful ping only means at
    * least one endpoint responded, but doesn't imply the availability of other endpoints (if there
    * is any).
    *
@@ -84,6 +91,6 @@ public interface ClientTransport extends InternalInstrumented<SocketStats> {
      *
      * @param cause the cause of the ping failure
      */
-    void onFailure(Throwable cause);
+    void onFailure(Status cause);
   }
 }

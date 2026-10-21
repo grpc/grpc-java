@@ -19,19 +19,19 @@ package io.grpc;
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall.Listener;
-import io.grpc.internal.NoopServerCall;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -41,7 +41,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentMatchers;
@@ -55,9 +54,6 @@ import org.mockito.junit.MockitoRule;
 public class ServerInterceptorsTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Mock
   private Marshaller<String> requestMarshaller;
@@ -102,30 +98,30 @@ public class ServerInterceptorsTest {
   /** Final checks for all tests. */
   @After
   public void makeSureExpectedMocksUnused() {
-    verifyZeroInteractions(requestMarshaller);
-    verifyZeroInteractions(responseMarshaller);
-    verifyZeroInteractions(listener);
+    verifyNoInteractions(requestMarshaller);
+    verifyNoInteractions(responseMarshaller);
+    verifyNoInteractions(listener);
   }
 
   @Test
   public void npeForNullServiceDefinition() {
     ServerServiceDefinition serviceDef = null;
     List<ServerInterceptor> interceptors = Arrays.asList();
-    thrown.expect(NullPointerException.class);
-    ServerInterceptors.intercept(serviceDef, interceptors);
+    assertThrows(NullPointerException.class,
+        () -> ServerInterceptors.intercept(serviceDef, interceptors));
   }
 
   @Test
   public void npeForNullInterceptorList() {
-    thrown.expect(NullPointerException.class);
-    ServerInterceptors.intercept(serviceDefinition, (List<ServerInterceptor>) null);
+    assertThrows(NullPointerException.class,
+        () -> ServerInterceptors.intercept(serviceDefinition, (List<ServerInterceptor>) null));
   }
 
   @Test
   public void npeForNullInterceptor() {
     List<ServerInterceptor> interceptors = Arrays.asList((ServerInterceptor) null);
-    thrown.expect(NullPointerException.class);
-    ServerInterceptors.intercept(serviceDefinition, interceptors);
+    assertThrows(NullPointerException.class,
+        () -> ServerInterceptors.intercept(serviceDefinition, interceptors));
   }
 
   @Test
@@ -284,7 +280,6 @@ public class ServerInterceptorsTest {
 
   @Test
   public void argumentsPassed() {
-    @SuppressWarnings("unchecked")
     final ServerCall<String, Integer> call2 = new NoopServerCall<>();
     @SuppressWarnings("unchecked")
     final ServerCall.Listener<String> listener2 = mock(ServerCall.Listener.class);
@@ -423,6 +418,80 @@ public class ServerInterceptorsTest {
     assertEquals(
         Arrays.asList("i2onMessage", "i1onMessage", "handler", "i1sendMessage", "i2sendMessage"),
         order);
+  }
+
+  /**
+   * Tests the ServerInterceptors#useMarshalledMessages()} with two marshallers. Makes sure that
+   * on incoming request the request marshaller's stream method is called and on response the
+   * response marshaller's parse method is called
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  public void distinctMarshallerForRequestAndResponse() {
+    final List<String> requestFlowOrder = new ArrayList<>();
+
+    final Marshaller<String> requestMarshaller = new Marshaller<String>() {
+      @Override
+      public InputStream stream(String value) {
+        requestFlowOrder.add("RequestStream");
+        return null;
+      }
+
+      @Override
+      public String parse(InputStream stream) {
+        requestFlowOrder.add("RequestParse");
+        return null;
+      }
+    };
+    final Marshaller<String> responseMarshaller = new Marshaller<String>() {
+      @Override
+      public InputStream stream(String value) {
+        requestFlowOrder.add("ResponseStream");
+        return null;
+      }
+
+      @Override
+      public String parse(InputStream stream) {
+        requestFlowOrder.add("ResponseParse");
+        return null;
+      }
+    };
+    final Marshaller<Holder> dummyMarshaller = new Marshaller<Holder>() {
+      @Override
+      public InputStream stream(Holder value) {
+        return value.get();
+      }
+
+      @Override
+      public Holder parse(InputStream stream) {
+        return new Holder(stream);
+      }
+    };
+    ServerCallHandler<Holder, Holder> handler = (call, headers) -> new Listener<Holder>() {
+      @Override
+      public void onMessage(Holder message) {
+        requestFlowOrder.add("handler");
+        call.sendMessage(message);
+      }
+    };
+
+    MethodDescriptor<Holder, Holder> wrappedMethod = MethodDescriptor.<Holder, Holder>newBuilder()
+        .setType(MethodType.UNKNOWN)
+        .setFullMethodName("basic/wrapped")
+        .setRequestMarshaller(dummyMarshaller)
+        .setResponseMarshaller(dummyMarshaller)
+        .build();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder(
+            new ServiceDescriptor("basic", wrappedMethod))
+        .addMethod(wrappedMethod, handler).build();
+    ServerServiceDefinition intercepted = ServerInterceptors.useMarshalledMessages(serviceDef,
+        requestMarshaller, responseMarshaller);
+    ServerMethodDefinition<String, String> serverMethod =
+        (ServerMethodDefinition<String, String>) intercepted.getMethod("basic/wrapped");
+    ServerCall<String, String> serverCall = new NoopServerCall<>();
+    serverMethod.getServerCallHandler().startCall(serverCall, headers).onMessage("TestMessage");
+
+    assertEquals(Arrays.asList("RequestStream",  "handler", "ResponseParse"), requestFlowOrder);
   }
 
   @SuppressWarnings("unchecked")

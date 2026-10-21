@@ -1,0 +1,1853 @@
+/*
+ * Copyright 2024 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.xds;
+
+import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.applyHeaderMutations;
+import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.collectAttributes;
+import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.markDataPlaneCallClosed;
+import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.markExtProcStreamCompleted;
+import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.markExtProcStreamFailed;
+import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.outboundStreamToByteString;
+import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.toHeaderMap;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.Struct;
+import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
+import io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation;
+import io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse;
+import io.envoyproxy.envoy.service.ext_proc.v3.CommonResponse;
+import io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc;
+import io.envoyproxy.envoy.service.ext_proc.v3.HttpBody;
+import io.envoyproxy.envoy.service.ext_proc.v3.HttpHeaders;
+import io.envoyproxy.envoy.service.ext_proc.v3.HttpTrailers;
+import io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse;
+import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
+import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse;
+import io.envoyproxy.envoy.service.ext_proc.v3.ProtocolConfiguration;
+import io.envoyproxy.envoy.service.ext_proc.v3.StreamedBodyResponse;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.Context;
+import io.grpc.Deadline;
+import io.grpc.DoubleHistogramMetricInstrument;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.MetricInstrumentRegistry;
+import io.grpc.MetricRecorder;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.grpc.internal.DelayedClientCall;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.SerializingExecutor;
+import io.grpc.stub.ClientCallStreamObserver;
+import io.grpc.stub.ClientResponseObserver;
+import io.grpc.stub.MetadataUtils;
+import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
+import io.grpc.xds.Filter.FilterContext;
+import io.grpc.xds.internal.extproc.DataPlaneCallState;
+import io.grpc.xds.internal.extproc.EventType;
+import io.grpc.xds.internal.extproc.ExtProcStreamState;
+import io.grpc.xds.internal.extproc.KnownLengthInputStream;
+import io.grpc.xds.internal.grpcservice.CachedChannelManager;
+import io.grpc.xds.internal.grpcservice.HeaderValue;
+import io.grpc.xds.internal.headermutations.HeaderMutationDisallowedException;
+import io.grpc.xds.internal.headermutations.HeaderMutationFilter;
+import io.grpc.xds.internal.headermutations.HeaderMutationRulesConfig;
+import io.grpc.xds.internal.headermutations.HeaderMutator;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
+
+/**
+ * Client-side interceptor for external processing filter.
+ */
+final class ExternalProcessorClientInterceptor implements ClientInterceptor {
+
+  @VisibleForTesting
+  static DoubleHistogramMetricInstrument clientHeadersDuration;
+  @VisibleForTesting
+  static DoubleHistogramMetricInstrument clientHalfCloseDuration;
+  @VisibleForTesting
+  static DoubleHistogramMetricInstrument serverHeadersDuration;
+  @VisibleForTesting
+  static DoubleHistogramMetricInstrument serverTrailersDuration;
+
+  // Copied from io.grpc.opentelemetry.internal.OpenTelemetryConstants.LATENCY_BUCKETS
+  private static final List<Double> LATENCY_BUCKETS = ImmutableList.of(
+      0d,     0.00001d, 0.00005d, 0.0001d, 0.0003d, 0.0006d, 0.0008d, 0.001d, 0.002d,
+      0.003d, 0.004d,   0.005d,   0.006d,  0.008d,  0.01d,   0.013d,  0.016d, 0.02d,
+      0.025d, 0.03d,    0.04d,    0.05d,   0.065d,  0.08d,   0.1d,    0.13d,  0.16d,
+      0.2d,   0.25d,    0.3d,     0.4d,    0.5d,    0.65d,   0.8d,    1d,     2d,
+      5d,     10d,      20d,      50d,     100d);
+
+  static {
+    initMetricInstruments();
+  }
+
+  static synchronized void initMetricInstruments() {
+    if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+      if (clientHeadersDuration == null) {
+        MetricInstrumentRegistry registry = MetricInstrumentRegistry.getDefaultRegistry();
+
+        clientHeadersDuration = registry.registerDoubleHistogram(
+            "grpc.client_ext_proc.client_headers_duration",
+            "Time between when the ext_proc filter sees the client's headers and when "
+                + "it allows those headers to continue on to the next filter",
+            "s",
+            LATENCY_BUCKETS,
+            ImmutableList.of("grpc.target"),
+            ImmutableList.of(),
+            true);
+
+        clientHalfCloseDuration = registry.registerDoubleHistogram(
+            "grpc.client_ext_proc.client_half_close_duration",
+            "Time between when the ext_proc filter sees the client's half-close and when "
+                + "it allows that half-close to continue on to the next filter",
+            "s",
+            LATENCY_BUCKETS,
+            ImmutableList.of("grpc.target"),
+            ImmutableList.of(),
+            true);
+
+        serverHeadersDuration = registry.registerDoubleHistogram(
+            "grpc.client_ext_proc.server_headers_duration",
+            "Time between when the ext_proc filter sees the server's headers and when "
+                + "it allows those headers to continue on to the next filter",
+            "s",
+            LATENCY_BUCKETS,
+            ImmutableList.of("grpc.target"),
+            ImmutableList.of(),
+            true);
+
+        serverTrailersDuration = registry.registerDoubleHistogram(
+            "grpc.client_ext_proc.server_trailers_duration",
+            "Time between when the ext_proc filter sees the server's trailers and when "
+                + "it allows those trailers to continue on to the next filter",
+            "s",
+            LATENCY_BUCKETS,
+            ImmutableList.of("grpc.target"),
+            ImmutableList.of(),
+            true);
+      }
+    }
+  }
+
+  private final ExternalProcessorFilterConfig filterConfig;
+  private final ScheduledExecutorService scheduler;
+  private final MetricRecorder metricsRecorder;
+  private final ManagedChannel extProcChannel;
+
+  @VisibleForTesting
+  ExternalProcessorClientInterceptor(ExternalProcessorFilterConfig filterConfig,
+      CachedChannelManager cachedChannelManager,
+      ScheduledExecutorService scheduler,
+      FilterContext context) {
+    this.filterConfig = filterConfig;
+    checkNotNull(cachedChannelManager, "cachedChannelManager");
+    this.scheduler = checkNotNull(scheduler, "scheduler");
+    this.metricsRecorder = checkNotNull(context.metricsRecorder(), "metricsRecorder");
+    this.extProcChannel = cachedChannelManager.getChannel(filterConfig.getGrpcServiceConfig());
+  }
+
+  @VisibleForTesting
+  ExternalProcessorFilterConfig getFilterConfig() {
+    return filterConfig;
+  }
+
+  @Override
+  @SuppressWarnings("unchecked")
+  public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+      MethodDescriptor<ReqT, RespT> method,
+      CallOptions callOptions,
+      Channel next) {
+    SerializingExecutor serializingExecutor = new SerializingExecutor(callOptions.getExecutor());
+    
+    ExternalProcessorGrpc.ExternalProcessorStub extProcStub = ExternalProcessorGrpc.newStub(
+        extProcChannel)
+        .withExecutor(serializingExecutor);
+    
+    if (filterConfig.getGrpcServiceConfig().timeout().isPresent()) {
+      long timeoutNanos = filterConfig.getGrpcServiceConfig().timeout().get().toNanos();
+      if (timeoutNanos > 0) {
+        extProcStub = extProcStub.withDeadlineAfter(timeoutNanos, TimeUnit.NANOSECONDS);
+      }
+    }
+    if (filterConfig.getGrpcServiceConfig().initialMetadata() != null
+        && !filterConfig.getGrpcServiceConfig().initialMetadata().isEmpty()) {
+      Metadata extraHeaders = new Metadata();
+      for (HeaderValue headerValue : filterConfig.getGrpcServiceConfig().initialMetadata()) {
+        String key = headerValue.key();
+        if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          if (headerValue.rawValue().isPresent()) {
+            Metadata.Key<byte[]> metadataKey =
+                Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
+            extraHeaders.put(metadataKey, headerValue.rawValue().get().toByteArray());
+          }
+        } else {
+          if (headerValue.value().isPresent()) {
+            Metadata.Key<String> metadataKey =
+                Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
+            extraHeaders.put(metadataKey, headerValue.value().get());
+          }
+        }
+      }
+      extProcStub = extProcStub.withInterceptors(
+          MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
+    }
+
+    // The filter chain is preceded by RawMessageClientInterceptor when payload access is
+    // required, in which case ReqT and RespT are InputStream.
+    ClientCall<ReqT, RespT> rawCall =
+        new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          private final AtomicBoolean cancelled = new AtomicBoolean(false);
+
+          @Override
+          public void cancel(@Nullable String message, @Nullable Throwable cause) {
+            if (cancelled.compareAndSet(false, true)) {
+              super.cancel(message, cause);
+            }
+          }
+        };
+
+    // Create a local subclass instance to buffer outbound actions
+    DataPlaneDelayedCall<ReqT, RespT> delayedCall =
+        new DataPlaneDelayedCall<>(
+            serializingExecutor, scheduler, callOptions.getDeadline());
+
+    DataPlaneClientCall<ReqT, RespT> dataPlaneCall = new DataPlaneClientCall<>(
+        delayedCall, rawCall, extProcStub, filterConfig, filterConfig.getMutationRulesConfig(),
+        scheduler, method, next, metricsRecorder, next.authority());
+
+    return dataPlaneCall;
+  }
+
+  // --- SHARED UTILITY METHODS ---
+
+  /**
+   * A local subclass to expose the protected constructor of DelayedClientCall.
+   */
+  private static class DataPlaneDelayedCall<ReqT, RespT> extends DelayedClientCall<ReqT, RespT> {
+    DataPlaneDelayedCall(
+        Executor executor, ScheduledExecutorService scheduler, @Nullable Deadline deadline) {
+      super("ext_proc", executor, scheduler, deadline);
+    }
+  }
+
+  /**
+   * Handles the bidirectional stream with the External Processor.
+   * Buffers the actual RPC start until the Ext Proc header response is received.
+   */
+  private static class DataPlaneClientCall<ReqT, RespT>
+      extends SimpleForwardingClientCall<ReqT, RespT> {
+
+    private final ExternalProcessorGrpc.ExternalProcessorStub stub;
+    private final ExternalProcessorFilterConfig config;
+    private final ClientCall<ReqT, RespT> rawCall;
+    private final DataPlaneDelayedCall<ReqT, RespT> delayedCall;
+    private final ScheduledExecutorService scheduler;
+    final Object streamLock = new Object();
+    @Nullable private volatile EventType expectedRequestResponse;
+    @Nullable private volatile EventType expectedResponseResponse;
+    @Nullable private volatile ClientCallStreamObserver<ProcessingRequest>
+        extProcClientCallRequestObserver;
+    @GuardedBy("streamLock")
+    private final Queue<ReqT> pendingDrainingMessages =
+        new ConcurrentLinkedQueue<>();
+    @Nullable private volatile DataPlaneListener<RespT> wrappedListener;
+    private final HeaderMutationFilter mutationFilter;
+    private final HeaderMutator mutator = HeaderMutator.create();
+    private final AtomicInteger pendingRequests = new AtomicInteger(0);
+    private final ProcessingMode currentProcessingMode;
+
+    // Default initial window size
+    private static final long DEFAULT_INITIAL_WINDOW_SIZE = 65536;
+
+    // Outbound (sending) windows
+    @GuardedBy("streamLock")
+    private long downstreamToSidestreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+    @GuardedBy("streamLock")
+    private long upstreamToSidestreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+
+    // Inbound (receiving) windows
+    @GuardedBy("streamLock")
+    private long sidestreamToUpstreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+    @GuardedBy("streamLock")
+    private long sidestreamToDownstreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+
+    // Threshold to trigger standalone client window updates
+    private static final long WINDOW_UPDATE_THRESHOLD = DEFAULT_INITIAL_WINDOW_SIZE / 2;
+
+    // Path 1: Pending/buffered request body messages from downstream
+    @GuardedBy("streamLock")
+    private final Queue<ByteString> pendingRequestBodyMessages = new ConcurrentLinkedQueue<>();
+    // Deferred half-close flag for upstream direction
+    private final AtomicBoolean pendingUpstreamHalfClose = new AtomicBoolean(false);
+
+    // Path 2: Buffered request body messages from ext_proc server to forward upstream
+    @GuardedBy("streamLock")
+    private final Queue<ByteString> pendingUpstreamBodyMessages =
+        new ConcurrentLinkedQueue<>();
+    // Path 4: Outstanding requests from downstream for pulling responses
+    @GuardedBy("streamLock")
+    private int downstreamRequestsPending = 0;
+    // Buffered mutated response bodies from ext_proc server
+    @GuardedBy("streamLock")
+    private final Queue<ByteString> pendingMutatedResponseBodies =
+        new ConcurrentLinkedQueue<>();
+
+    // Accumulated client window updates to send to ext_proc
+    @GuardedBy("streamLock")
+    private long accumulatedWindowUpdateSidestreamToUpstream = 0;
+    @GuardedBy("streamLock")
+    private long accumulatedWindowUpdateSidestreamToDownstream = 0;
+
+    // Flag to track if FlowControlInit was sent in the initial message
+    @GuardedBy("streamLock")
+    private boolean flowControlInitSent = false;
+
+    private final MethodDescriptor<?, ?> method;
+    private final Channel channel;
+    private final MetricRecorder metricsRecorder;
+    private final String target;
+    private volatile Context callContext = Context.ROOT;
+
+    private volatile long clientHeadersStartNanos;
+    private volatile long clientHalfCloseStartNanos;
+    private volatile long serverHeadersStartNanos;
+    private volatile long serverTrailersStartNanos;
+
+    private boolean protocolConfigSent = false;
+    private ImmutableMap<String, Struct> collectedAttributes;
+    private boolean requestAttributesSent = false;
+    @Nullable private volatile Metadata requestHeaders;
+    final AtomicReference<DataPlaneCallState> dataPlaneCallState =
+        new AtomicReference<>(DataPlaneCallState.IDLE);
+    final AtomicReference<ExtProcStreamState> extProcStreamState =
+        new AtomicReference<>(ExtProcStreamState.ACTIVE);
+    final AtomicBoolean passThroughMode = new AtomicBoolean(false);
+    final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
+    final AtomicBoolean appHalfClosed = new AtomicBoolean(false);
+    final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
+    final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
+    final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
+
+    protected DataPlaneClientCall(
+        DataPlaneDelayedCall<ReqT, RespT> delayedCall,
+        ClientCall<ReqT, RespT> rawCall,
+        ExternalProcessorGrpc.ExternalProcessorStub stub,
+        ExternalProcessorFilterConfig config,
+        Optional<HeaderMutationRulesConfig> mutationRulesConfig,
+        ScheduledExecutorService scheduler,
+        MethodDescriptor<?, ?> method,
+        Channel channel,
+        MetricRecorder metricsRecorder,
+        String target) {
+      super(delayedCall);
+      this.delayedCall = delayedCall;
+      this.rawCall = rawCall;
+      this.stub = stub;
+      this.config = config;
+      this.currentProcessingMode = config.getExternalProcessor().getProcessingMode();
+      this.mutationFilter = new HeaderMutationFilter(mutationRulesConfig);
+      this.scheduler = scheduler;
+      this.method = method;
+      this.channel = channel;
+      this.metricsRecorder = checkNotNull(metricsRecorder, "metricsRecorder");
+      this.target = checkNotNull(target, "target");
+    }
+
+    private boolean activateCall() {
+      if ((extProcStreamState.get() == ExtProcStreamState.FAILED
+              && !config.getFailureModeAllow()
+              && !config.getObservabilityMode())
+          || !dataPlaneCallState.compareAndSet(
+              DataPlaneCallState.IDLE, DataPlaneCallState.ACTIVE)) {
+        return false;
+      }
+      if (clientHeadersStartNanos > 0) {
+        long durationNanos = System.nanoTime() - clientHeadersStartNanos;
+        recordDuration(clientHeadersDuration, durationNanos);
+        clientHeadersStartNanos = 0;
+      }
+      Runnable toRun = delayedCall.setCall(rawCall);
+      if (toRun != null) {
+        callContext.run(toRun);
+      }
+      drainPendingRequests();
+      onReadyNotify();
+      return true;
+    }
+
+    private void recordDuration(DoubleHistogramMetricInstrument instrument, long durationNanos) {
+      if (instrument != null) {
+        double durationSecs = (double) durationNanos / 1_000_000_000.0;
+        metricsRecorder.recordDoubleHistogram(
+            instrument,
+            durationSecs,
+            ImmutableList.of(target),
+            ImmutableList.of());
+      }
+    }
+
+    /**
+     * Validates whether the body response uses unsupported gRPC message compression.
+     * If compression is unsupported, this method will cancel the call, transition the
+     * stream to a failed state, send an error to the external processor, and return false.
+     *
+     * @param bodyResponse the response to validate
+     * @return true if validation passes (compression is supported or not used),
+     *     false if validation fails
+     */
+    private boolean validateCompressionSupport(BodyResponse bodyResponse) {
+      if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
+        BodyMutation mutation = 
+            bodyResponse.getResponse().getBodyMutation();
+        if (mutation.hasStreamedResponse()
+            && mutation.getStreamedResponse().getGrpcMessageCompressed()) {
+          StatusRuntimeException ex = Status.UNAVAILABLE
+              .withDescription("gRPC message compression not supported in ext_proc")
+              .asRuntimeException();
+          synchronized (streamLock) {
+            if (markExtProcStreamFailed(extProcStreamState)) {
+              if (extProcClientCallRequestObserver != null) {
+                extProcClientCallRequestObserver.onError(ex);
+                extProcClientCallRequestObserver = null;
+              }
+            }
+          }
+          activateCall();
+          cancelDownstream("gRPC message compression not supported in ext_proc", ex);
+          closeExtProcStream();
+          return false;
+        }
+      }
+      return true;
+    }
+
+    @Override
+    public void start(Listener<RespT> responseListener, Metadata headers) {
+      this.callContext = Context.current();
+      clientHeadersStartNanos = System.nanoTime();
+      this.requestHeaders = headers;
+      this.wrappedListener = new DataPlaneListener<>(responseListener, this);
+
+      // DelayedClientCall.start will buffer the listener and headers until setCall is called.
+      super.start(wrappedListener, headers);
+
+      stub.process(new ClientResponseObserver<ProcessingRequest, ProcessingResponse>() {
+        @Override
+        public void beforeStart(ClientCallStreamObserver<ProcessingRequest> requestStream) {
+          synchronized (streamLock) {
+            extProcClientCallRequestObserver = requestStream;
+          }
+          requestStream.setOnReadyHandler(DataPlaneClientCall.this::onExtProcStreamReady);
+        }
+
+        @Override
+        public void onNext(ProcessingResponse response) {
+          try {
+            if (config.getObservabilityMode()) {
+              return;
+            }
+
+            if (response.hasServerWindowUpdate()) {
+              ProcessingResponse.ServerWindowUpdate update = response.getServerWindowUpdate();
+              boolean wasReady;
+              synchronized (streamLock) {
+                wasReady = isReady();
+                downstreamToSidestreamWindow += update.getWindowIncrementDownstreamToSidestream();
+                upstreamToSidestreamWindow += update.getWindowIncrementUpstreamToSidestream();
+                drainPendingRequestBodyMessages();
+                drainPendingRequests();
+                if (wrappedListener != null) {
+                  wrappedListener.drainSavedMessages();
+                }
+              }
+              // If isReady() becomes true (depends on updated downstreamToSidestreamWindow),
+              // notify the client application via onReadyNotify() (runs unlocked).
+              if (!wasReady && isReady()) {
+                onReadyNotify();
+              }
+            }
+
+            if (response.hasImmediateResponse()) {
+              if (config.getDisableImmediateResponse()) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Immediate response is disabled but received from external processor")
+                    .asRuntimeException());
+                return;
+              }
+              handleImmediateResponse(response.getImmediateResponse(), wrappedListener);
+              return;
+            }
+
+            if (response.hasRequestHeaders()) {
+              EventType expected = expectedRequestResponse;
+              if (expected == null || expected != EventType.REQUEST_HEADERS) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. Expected: " 
+                        + expected + ", Received: REQUEST_HEADERS")
+                    .asRuntimeException());
+                return;
+              }
+              expectedRequestResponse = null;
+            } else if (response.hasResponseHeaders()) {
+              EventType expected = expectedResponseResponse;
+              if (expected == null || expected != EventType.RESPONSE_HEADERS) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. Expected: " 
+                        + expected + ", Received: RESPONSE_HEADERS")
+                    .asRuntimeException());
+                return;
+              }
+              expectedResponseResponse = null;
+            } else if (response.hasResponseTrailers()) {
+              EventType expected = expectedResponseResponse;
+              if (expected == null || expected != EventType.RESPONSE_TRAILERS) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription("Protocol error: received response out of order. Expected: " 
+                        + expected + ", Received: RESPONSE_TRAILERS")
+                    .asRuntimeException());
+                return;
+              }
+              expectedResponseResponse = null;
+            } else if (response.hasRequestBody()) {
+              if (currentProcessingMode.getRequestBodyMode()
+                  != ProcessingMode.BodySendMode.GRPC) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received unexpected request_body response when"
+                            + " request_body_mode is not GRPC.")
+                    .asRuntimeException());
+                return;
+              }
+              EventType expected = expectedRequestResponse;
+              if (expected == EventType.REQUEST_HEADERS) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received request_body before request_headers response.")
+                    .asRuntimeException());
+                return;
+              }
+            } else if (response.hasResponseBody()) {
+              if (currentProcessingMode.getResponseBodyMode()
+                  != ProcessingMode.BodySendMode.GRPC) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received unexpected response_body response when"
+                            + " response_body_mode is not GRPC.")
+                    .asRuntimeException());
+                return;
+              }
+              EventType expected = expectedResponseResponse;
+              if (expected == EventType.RESPONSE_HEADERS) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received response_body before headers response.")
+                    .asRuntimeException());
+                return;
+              }
+            }
+
+            if (response.getRequestDrain()) {
+              extProcStreamState.set(ExtProcStreamState.DRAINING);
+              halfCloseExtProcStream();
+              activateCall();
+            }
+
+            // 1. Client Headers
+            if (response.hasRequestHeaders()) {
+              if (response.getRequestHeaders().hasResponse()) {
+                if (response.getRequestHeaders().getResponse().getStatus()
+                    == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
+                  internalOnError(Status.UNAVAILABLE
+                      .withDescription("CONTINUE_AND_REPLACE is not supported")
+                      .asRuntimeException());
+                  return;
+                }
+                applyHeaderMutations(
+                    requestHeaders,
+                    response.getRequestHeaders().getResponse().getHeaderMutation(),
+                    mutationFilter,
+                    mutator);
+              }
+              activateCall();
+            }
+            // 2. Client Message (Request Body)
+            else if (response.hasRequestBody()) {
+              if (validateCompressionSupport(response.getRequestBody())) {
+                handleRequestBodyResponse(response.getRequestBody());
+              }
+            }
+            // 4. Server Headers
+            else if (response.hasResponseHeaders()) {
+              if (response.getResponseHeaders().hasResponse()) {
+                if (response.getResponseHeaders().getResponse().getStatus()
+                    == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
+                  internalOnError(Status.UNAVAILABLE
+                      .withDescription("CONTINUE_AND_REPLACE is not supported")
+                      .asRuntimeException());
+                  return;
+                }
+                Metadata target = wrappedListener.isTrailersOnly()
+                    ? wrappedListener.getSavedTrailers() : wrappedListener.getSavedHeaders();
+                applyHeaderMutations(
+                    target,
+                    response.getResponseHeaders().getResponse().getHeaderMutation(),
+                    mutationFilter,
+                    mutator);
+              }
+              if (wrappedListener.isTrailersOnly()) {
+                wrappedListener.proceedWithClose();
+              } else {
+                wrappedListener.proceedWithHeaders();
+              }
+            }
+            // 5. Server Message (Response Body)
+            else if (response.hasResponseBody()) {
+              if (validateCompressionSupport(response.getResponseBody())) {
+                handleResponseBodyResponse(response.getResponseBody(), wrappedListener);
+              }
+            }
+            // 6. Response Trailers
+            else if (response.hasResponseTrailers()) {
+              if (response.getResponseTrailers().hasHeaderMutation()) {
+                applyHeaderMutations(
+                    wrappedListener.getSavedTrailers(),
+                    response.getResponseTrailers().getHeaderMutation(),
+                    mutationFilter,
+                    mutator);
+              }
+              wrappedListener.proceedWithClose();
+            }
+
+            checkEndOfStream(response);
+          } catch (Throwable t) {
+            internalOnError(t);
+          }
+        }
+
+        @Override
+        public void onError(Throwable t) {
+          if (markExtProcStreamFailed(extProcStreamState)) {
+            synchronized (streamLock) {
+              extProcClientCallRequestObserver = null;
+            }
+            if (config.getObservabilityMode()
+                || (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get())) {
+              handleFailOpen(wrappedListener);
+            } else {
+              String message = "External processor stream failed";
+              cancelDownstream(message, t);
+              wrappedListener.proceedWithClose();
+            }
+          }
+        }
+
+        @Override
+        public void onCompleted() {
+          if (markExtProcStreamCompleted(extProcStreamState)) {
+            synchronized (streamLock) {
+              extProcClientCallRequestObserver = null;
+            }
+            handleFailOpen(wrappedListener);
+          }
+        }
+      });
+
+      this.collectedAttributes = collectAttributes(
+          config.getRequestAttributes(), method, channel.authority(), headers);
+
+      boolean sendRequestHeaders =
+          currentProcessingMode.getRequestHeaderMode() == ProcessingMode.HeaderSendMode.SEND
+          || currentProcessingMode.getRequestHeaderMode()
+              == ProcessingMode.HeaderSendMode.DEFAULT;
+
+      if (sendRequestHeaders) {
+        sendToExtProc(ProcessingRequest.newBuilder()
+            .setRequestHeaders(HttpHeaders.newBuilder()
+                .setHeaders(toHeaderMap(headers, config.getForwardRulesConfig()))
+                .setEndOfStream(false)
+                .build())
+            .build());
+      }
+
+      if (config.getObservabilityMode() || !sendRequestHeaders) {
+        activateCall();
+      }
+    }
+
+    private void sendToExtProc(ProcessingRequest request) {
+      synchronized (streamLock) {
+        if (extProcStreamState.get().isCompleted() || extProcClientCallRequestObserver == null) {
+          return;
+        }
+        
+        if (request.hasRequestHeaders()) {
+          expectedRequestResponse = EventType.REQUEST_HEADERS;
+        } else if (request.hasResponseHeaders()) {
+          expectedResponseResponse = EventType.RESPONSE_HEADERS;
+        } else if (request.hasResponseTrailers()) {
+          expectedResponseResponse = EventType.RESPONSE_TRAILERS;
+        }
+
+        ProcessingRequest requestToSend = request;
+        if (!protocolConfigSent) {
+          requestToSend = ProcessingRequest.newBuilder(requestToSend)
+              .setProtocolConfig(ProtocolConfiguration.newBuilder()
+                  .setRequestBodyMode(currentProcessingMode.getRequestBodyMode())
+                  .setResponseBodyMode(currentProcessingMode.getResponseBodyMode())
+                  .build())
+              .build();
+          protocolConfigSent = true;
+        }
+
+        boolean isClientServerMessage =
+            requestToSend.hasRequestHeaders() || requestToSend.hasRequestBody();
+        if (isClientServerMessage
+            && !requestAttributesSent
+            && collectedAttributes != null
+            && !collectedAttributes.isEmpty()) {
+          requestToSend = ProcessingRequest.newBuilder(requestToSend)
+              .putAllAttributes(collectedAttributes)
+              .build();
+          requestAttributesSent = true;
+        }
+
+        if (config.getObservabilityMode()) {
+          requestToSend = ProcessingRequest.newBuilder(requestToSend)
+              .setObservabilityMode(true)
+              .build();
+        } else if (!flowControlInitSent) {
+          requestToSend = ProcessingRequest.newBuilder(requestToSend)
+              .setFlowControlInit(ProcessingRequest.FlowControlInit.newBuilder()
+                  .setInitialWindowDownstreamToSidestream(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .setInitialWindowSidestreamToUpstream(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .setInitialWindowUpstreamToSidestream(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .setInitialWindowSidestreamToDownstream(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .build())
+              .build();
+          flowControlInitSent = true;
+        }
+
+        extProcClientCallRequestObserver.onNext(requestToSend);
+      }
+    }
+
+    // Note: This method not only modifies the builder, but has the side effect of modifying
+    // the window update bookkeeping.
+    @GuardedBy("streamLock")
+    void mergeAccumulatedWindowUpdates(ProcessingRequest.Builder requestBuilder) {
+      long incrementUpstream = accumulatedWindowUpdateSidestreamToUpstream;
+      long incrementDownstream = accumulatedWindowUpdateSidestreamToDownstream;
+
+      if (incrementUpstream > 0 || incrementDownstream > 0) {
+        requestBuilder.setClientWindowUpdate(
+            ProcessingRequest.ClientWindowUpdate.newBuilder()
+                .setWindowIncrementSidestreamToUpstream(incrementUpstream)
+                .setWindowIncrementSidestreamToDownstream(incrementDownstream)
+                .build());
+        accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
+        accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
+        sidestreamToUpstreamWindow += incrementUpstream;
+        sidestreamToDownstreamWindow += incrementDownstream;
+      }
+    }
+
+    private void trySendAccumulatedWindowUpdates() {
+      synchronized (streamLock) {
+        if (extProcStreamState.get().isCompleted()) {
+          return;
+        }
+        long incrementUpstream = accumulatedWindowUpdateSidestreamToUpstream;
+        long incrementDownstream = accumulatedWindowUpdateSidestreamToDownstream;
+
+        boolean shouldSend = (incrementUpstream > 0 || incrementDownstream > 0) && (
+            (incrementUpstream >= WINDOW_UPDATE_THRESHOLD)
+            || (incrementDownstream >= WINDOW_UPDATE_THRESHOLD)
+            || (sidestreamToUpstreamWindow <= 0 && accumulatedWindowUpdateSidestreamToUpstream > 0)
+            || (sidestreamToDownstreamWindow <= 0
+                && accumulatedWindowUpdateSidestreamToDownstream > 0)
+        );
+
+        if (shouldSend) {
+          accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
+          accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
+          sidestreamToUpstreamWindow += incrementUpstream;
+          sidestreamToDownstreamWindow += incrementDownstream;
+
+          sendToExtProc(ProcessingRequest.newBuilder()
+              .setClientWindowUpdate(ProcessingRequest.ClientWindowUpdate.newBuilder()
+                  .setWindowIncrementSidestreamToUpstream(incrementUpstream)
+                  .setWindowIncrementSidestreamToDownstream(incrementDownstream)
+                  .build())
+              .build());
+        }
+      }
+    }
+
+    private void onExtProcStreamReady() {
+      drainPendingRequests();
+      onReadyNotify();
+    }
+
+    void drainPendingRequests() {
+      synchronized (streamLock) {
+        if (config.getObservabilityMode()
+            || currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC
+            || extProcStreamState.get().isCompleted()) {
+          int toRequest = pendingRequests.getAndSet(0);
+          if (toRequest > 0) {
+            super.request(toRequest);
+          }
+          return;
+        }
+
+        // Normal mode flow control: pull 1 message at a time
+        if (isSidecarReady() && upstreamToSidestreamWindow > 0 && pendingRequests.get() > 0) {
+          super.request(1);
+          pendingRequests.decrementAndGet();
+        }
+      }
+    }
+
+    private void closeExtProcStream() {
+      synchronized (streamLock) {
+        if (markExtProcStreamCompleted(extProcStreamState)) {
+          if (extProcClientCallRequestObserver != null) {
+            extProcClientCallRequestObserver.onCompleted();
+            extProcClientCallRequestObserver = null;
+          }
+        }
+      }
+    }
+
+    private void internalOnError(Throwable t) {
+      if (markExtProcStreamFailed(extProcStreamState)) {
+        synchronized (streamLock) {
+          if (extProcClientCallRequestObserver != null) {
+            extProcClientCallRequestObserver.onError(t);
+            extProcClientCallRequestObserver = null;
+          }
+        }
+        if (config.getObservabilityMode()
+            || (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get())) {
+          handleFailOpen(wrappedListener);
+        } else {
+          String message = "External processor stream failed";
+          cancelDownstream(message, t);
+          wrappedListener.proceedWithClose();
+        }
+      }
+    }
+
+    private void halfCloseExtProcStream() {
+      synchronized (streamLock) {
+        if (!extProcStreamState.get().isCompleted() && extProcClientCallRequestObserver != null) {
+          extProcClientCallRequestObserver.onCompleted();
+        }
+      }
+    }
+
+    private void onReadyNotify() {
+      wrappedListener.onReadyNotify();
+    }
+
+    void onReady() {
+      boolean isPassThrough;
+      boolean isCompleted;
+      boolean isDraining;
+
+      synchronized (streamLock) {
+        isPassThrough = passThroughMode.get();
+        ExtProcStreamState state = extProcStreamState.get();
+        isCompleted = state.isCompleted();
+        isDraining = state.isDraining();
+      }
+
+      if (isPassThrough) {
+        onReadyNotify();
+        return;
+      }
+
+      if (isCompleted) {
+        drainPendingDrainingMessages();
+        return;
+      }
+
+      // Normal or Draining operation
+      drainPendingUpstreamBodyMessages();
+      if (!isDraining) {
+        trySendAccumulatedWindowUpdates();
+      }
+      drainPendingRequests();
+      onReadyNotify();
+    }
+
+    @GuardedBy("streamLock")
+    boolean isSidecarReady() {
+      ExtProcStreamState state = extProcStreamState.get();
+      if (state.isCompleted()) {
+        return true;
+      }
+      if (state.isDraining()) {
+        return false;
+      }
+      ClientCallStreamObserver<ProcessingRequest> observer = extProcClientCallRequestObserver;
+      return observer != null && observer.isReady();
+    }
+
+    @Override
+    public boolean isReady() {
+      if (passThroughMode.get()) {
+        return super.isReady();
+      }
+      if (extProcStreamState.get().isCompleted()) {
+        return super.isReady();
+      }
+      if (dataPlaneCallState.get() == DataPlaneCallState.IDLE && !config.getObservabilityMode()) {
+        return false;
+      }
+      synchronized (streamLock) {
+        boolean sidecarReady = isSidecarReady();
+        if (config.getObservabilityMode()) {
+          return super.isReady() && sidecarReady;
+        }
+        return downstreamToSidestreamWindow > 0 && sidecarReady
+            && pendingRequestBodyMessages.isEmpty();
+      }
+    }
+
+    @Override
+    public void request(int numMessages) {
+      if (passThroughMode.get() || extProcStreamState.get().isCompleted()) {
+        super.request(numMessages);
+        return;
+      }
+      if (!config.getObservabilityMode()
+          && currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
+        super.request(numMessages);
+        return;
+      }
+      synchronized (streamLock) {
+        // We send response bodies to ext_proc server (either in normal GRPC mode or
+        // observability mode).
+        // Gated by ext_proc server readiness.
+        // i.e. normal GRPC response body mode
+        boolean normalFlowControl = !config.getObservabilityMode();
+
+        if (normalFlowControl) {
+          pendingRequests.addAndGet(numMessages);
+          downstreamRequestsPending += numMessages;
+          drainPendingMutatedResponseBodies();
+          if (isSidecarReady()) {
+            drainPendingRequests();
+          }
+        } else {
+          // Observability mode: gate on readiness but pull all at once
+          if (isSidecarReady()) {
+            super.request(numMessages);
+          } else {
+            pendingRequests.addAndGet(numMessages);
+          }
+        }
+      }
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void sendMessage(ReqT message) {
+      if (requestSideClosed.get()) {
+        // External processor already closed the request stream. Discard further messages.
+        return;
+      }
+
+      if (passThroughMode.get()) {
+        super.sendMessage(message);
+        return;
+      }
+
+      synchronized (streamLock) {
+        if (passThroughMode.get()) {
+          super.sendMessage(message);
+          return;
+        }
+
+        ExtProcStreamState state = extProcStreamState.get();
+        if (state.isDraining() || state.isCompleted()) {
+          if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
+            super.sendMessage(message);
+            return;
+          }
+          try {
+            ByteString copiedBody = outboundStreamToByteString((InputStream) message);
+            pendingDrainingMessages.add((ReqT) new KnownLengthInputStream(copiedBody));
+          } catch (IOException e) {
+            cancelDownstream("Failed to copy outbound message for buffering", e);
+          }
+          return;
+        }
+
+        if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
+          super.sendMessage(message);
+          return;
+        }
+
+        // Mode is GRPC
+        try {
+          ByteString bodyByteString = outboundStreamToByteString((InputStream) message);
+          if (config.getObservabilityMode()) {
+            sendToExtProc(ProcessingRequest.newBuilder()
+                .setRequestBody(HttpBody.newBuilder()
+                    .setBody(bodyByteString)
+                    .setEndOfStream(false)
+                    .build())
+                .build());
+            bodyMessageSentToExtProc.set(true);
+            super.sendMessage((ReqT) new KnownLengthInputStream(bodyByteString));
+          } else {
+            if (downstreamToSidestreamWindow <= 0 || !pendingRequestBodyMessages.isEmpty()) {
+              pendingRequestBodyMessages.add(bodyByteString);
+            } else {
+              sendRequestBodyToExtProc(bodyByteString);
+            }
+          }
+        } catch (IOException e) {
+          cancelDownstream("Failed to serialize message for External Processor", e);
+        }
+      }
+    }
+
+    @GuardedBy("streamLock")
+    private void sendRequestBodyToExtProc(ByteString body) {
+      downstreamToSidestreamWindow -= body.size();
+      ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
+          .setRequestBody(HttpBody.newBuilder()
+              .setBody(body)
+              .setEndOfStream(false)
+              .build());
+      mergeAccumulatedWindowUpdates(builder);
+      sendToExtProc(builder.build());
+      bodyMessageSentToExtProc.set(true);
+    }
+
+    @GuardedBy("streamLock")
+    private void drainPendingRequestBodyMessages() {
+      while (downstreamToSidestreamWindow > 0 && !pendingRequestBodyMessages.isEmpty()) {
+        ByteString body = pendingRequestBodyMessages.poll();
+        sendRequestBodyToExtProc(body);
+      }
+      if (pendingRequestBodyMessages.isEmpty() && pendingHalfClose.compareAndSet(true, false)) {
+        halfClose();
+      }
+    }
+
+    private void proceedWithHalfClose() {
+      if (clientHalfCloseStartNanos > 0) {
+        long durationNanos = System.nanoTime() - clientHalfCloseStartNanos;
+        recordDuration(clientHalfCloseDuration, durationNanos);
+        clientHalfCloseStartNanos = 0;
+      }
+      super.halfClose();
+    }
+
+    @Override
+    public void halfClose() {
+      if (appHalfClosed.compareAndSet(false, true)) {
+        clientHalfCloseStartNanos = System.nanoTime();
+      }
+      if (passThroughMode.get()) {
+        if (requestSideClosed.compareAndSet(false, true)) {
+          proceedWithHalfClose();
+        }
+        return;
+      }
+
+      if (extProcStreamState.get().isCompleted()) {
+        if (passThroughMode.get()) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
+        } else {
+          pendingHalfClose.set(true);
+        }
+        return;
+      }
+
+      if (extProcStreamState.get().isDraining()) {
+        boolean canProceed = false;
+        synchronized (streamLock) {
+          if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE
+              || (!bodyMessageSentToExtProc.get() && pendingDrainingMessages.isEmpty())) {
+            canProceed = true;
+          }
+        }
+        if (canProceed) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
+        } else {
+          pendingHalfClose.set(true);
+        }
+        return;
+      }
+
+      if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
+        if (requestSideClosed.compareAndSet(false, true)) {
+          proceedWithHalfClose();
+        }
+        return;
+      }
+
+      // Mode is GRPC
+      synchronized (streamLock) {
+        if (!pendingRequestBodyMessages.isEmpty()) {
+          pendingHalfClose.set(true);
+          return;
+        }
+
+        ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
+            .setRequestBody(HttpBody.newBuilder()
+                .setEndOfStream(true)
+                .setEndOfStreamWithoutMessage(true)
+                .build());
+        mergeAccumulatedWindowUpdates(builder);
+        sendToExtProc(builder.build());
+      }
+      if (config.getObservabilityMode()) {
+        if (requestSideClosed.compareAndSet(false, true)) {
+          proceedWithHalfClose();
+        }
+      }
+    }
+
+    void cancelDownstream(@Nullable String message, @Nullable Throwable cause) {
+      delayedCall.cancel(message, cause);
+    }
+
+    @Override
+    public void cancel(@Nullable String message, @Nullable Throwable cause) {
+      synchronized (streamLock) {
+        if (markExtProcStreamFailed(extProcStreamState)) {
+          if (extProcClientCallRequestObserver != null) {
+            extProcClientCallRequestObserver.onError(
+                Status.CANCELLED
+                    .withDescription(message)
+                    .withCause(cause)
+                    .asRuntimeException());
+            extProcClientCallRequestObserver = null;
+          }
+        }
+      }
+      cancelDownstream(message, cause);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void handleRequestBodyResponse(BodyResponse bodyResponse) {
+      if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
+        BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
+        if (mutation.hasStreamedResponse()) {
+          StreamedBodyResponse streamed = mutation.getStreamedResponse();
+          boolean isEndOfStream = streamed.getEndOfStream();
+          boolean isEndOfStreamWithoutMessage =
+              isEndOfStream && streamed.getEndOfStreamWithoutMessage();
+          if (!isEndOfStreamWithoutMessage) {
+            ByteString body = streamed.getBody();
+            boolean sendImmediately = false;
+            synchronized (streamLock) {
+              sidestreamToUpstreamWindow -= body.size();
+              if (pendingUpstreamBodyMessages.isEmpty() && super.isReady()) {
+                sendImmediately = true;
+                accumulatedWindowUpdateSidestreamToUpstream += body.size();
+              } else {
+                pendingUpstreamBodyMessages.add(body);
+              }
+            }
+            if (sendImmediately) {
+              super.sendMessage((ReqT) new KnownLengthInputStream(body));
+              trySendAccumulatedWindowUpdates();
+            }
+          }
+          if (isEndOfStream) {
+            synchronized (streamLock) {
+              if (pendingUpstreamBodyMessages.isEmpty()) {
+                if (requestSideClosed.compareAndSet(false, true)) {
+                  proceedWithHalfClose();
+                }
+              } else {
+                pendingUpstreamHalfClose.set(true);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    private void handleResponseBodyResponse(
+        BodyResponse bodyResponse, DataPlaneListener<RespT> listener) {
+      if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
+        BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
+        if (mutation.hasStreamedResponse()) {
+          StreamedBodyResponse streamed = mutation.getStreamedResponse();
+          ByteString body = streamed.getBody();
+          final int bodySize = body.size();
+          synchronized (streamLock) {
+            sidestreamToDownstreamWindow -= bodySize;
+          }
+          deliverResponseBody(body, listener);
+        }
+      }
+    }
+
+    private void deliverResponseBody(ByteString body, DataPlaneListener<RespT> listener) {
+      boolean shouldDeliver = false;
+      synchronized (streamLock) {
+        if (downstreamRequestsPending > 0) {
+          downstreamRequestsPending--;
+          shouldDeliver = true;
+        } else {
+          pendingMutatedResponseBodies.add(body);
+        }
+      }
+      if (shouldDeliver) {
+        final int bodySize = body.size();
+        callContext.run(() -> {
+          try {
+            listener.onExternalBody(body);
+          } finally {
+            synchronized (streamLock) {
+              accumulatedWindowUpdateSidestreamToDownstream += bodySize;
+            }
+            trySendAccumulatedWindowUpdates();
+          }
+        });
+      }
+    }
+
+    private void drainPendingMutatedResponseBodies() {
+      List<ByteString> toDeliver = new ArrayList<>();
+      synchronized (streamLock) {
+        while (downstreamRequestsPending > 0 && !pendingMutatedResponseBodies.isEmpty()) {
+          ByteString body = pendingMutatedResponseBodies.poll();
+          downstreamRequestsPending--;
+          pendingRequests.decrementAndGet();
+          toDeliver.add(body);
+        }
+      }
+      for (ByteString body : toDeliver) {
+        final int bodySize = body.size();
+        callContext.run(() -> {
+          try {
+            wrappedListener.onExternalBody(body);
+          } finally {
+            synchronized (streamLock) {
+              accumulatedWindowUpdateSidestreamToDownstream += bodySize;
+            }
+            trySendAccumulatedWindowUpdates();
+          }
+        });
+      }
+    }
+
+    // Used to immediately flush any mutated response chunks that we already received and buffered
+    // before the stream failed, ensuring the application receives them in the correct order
+    void drainPendingMutatedResponseBodiesDirect(DataPlaneListener<RespT> listener) {
+      List<ByteString> toDeliver = new ArrayList<>();
+      synchronized (streamLock) {
+        ByteString body;
+        while ((body = pendingMutatedResponseBodies.poll()) != null) {
+          toDeliver.add(body);
+        }
+      }
+      for (ByteString body : toDeliver) {
+        listener.onExternalBody(body);
+      }
+    }
+
+    @SuppressWarnings("unchecked")
+    void drainPendingUpstreamBodyMessages() {
+      while (true) {
+        ByteString body = null;
+        boolean triggerHalfClose = false;
+        synchronized (streamLock) {
+          if (!pendingUpstreamBodyMessages.isEmpty() && super.isReady()) {
+            body = pendingUpstreamBodyMessages.poll();
+            accumulatedWindowUpdateSidestreamToUpstream += body.size();
+            if (pendingUpstreamBodyMessages.isEmpty()
+                && pendingUpstreamHalfClose.compareAndSet(true, false)) {
+              triggerHalfClose = true;
+            }
+          }
+        }
+        if (body == null) {
+          break;
+        }
+        super.sendMessage((ReqT) new KnownLengthInputStream(body));
+        trySendAccumulatedWindowUpdates();
+        if (triggerHalfClose) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
+        }
+      }
+    }
+
+    private void handleImmediateResponse(
+        ImmediateResponse immediate, DataPlaneListener<RespT> listener)
+        throws HeaderMutationDisallowedException {
+      Status status = Status.fromCodeValue(immediate.getGrpcStatus().getStatus());
+      if (!immediate.getDetails().isEmpty()) {
+        status = status.withDescription(immediate.getDetails());
+      }
+
+      Metadata trailers = new Metadata();
+      if (immediate.hasHeaders()) {
+        applyHeaderMutations(trailers, immediate.getHeaders(), mutationFilter, mutator);
+      }
+
+      listener.setImmediateResponse(status, trailers);
+
+      if (isProcessingTrailers.get()) {
+        // If sent in response to a server trailers event, sets the status and optionally
+        // headers to be included in the trailers.
+        listener.unblockAfterStreamComplete();
+      } else {
+        // If sent in response to any other event, it will cause the data plane RPC to
+        // immediately fail with the specified status as if it were an out-of-band
+        // cancellation.
+        cancelDownstream(status.getDescription(), null);
+        listener.unblockAfterStreamComplete();
+      }
+      closeExtProcStream();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void drainPendingDrainingMessages() {
+      while (true) {
+        Object msg = null; // Can be ByteString or InputStream
+        boolean isMutated = false;
+        boolean triggerHalfClose = false;
+
+        synchronized (streamLock) {
+          if (!pendingUpstreamBodyMessages.isEmpty() && super.isReady()) {
+            msg = pendingUpstreamBodyMessages.poll();
+            isMutated = true;
+          } else if (pendingUpstreamBodyMessages.isEmpty()
+              && !pendingRequestBodyMessages.isEmpty() && super.isReady()) {
+            msg = pendingRequestBodyMessages.poll();
+            isMutated = true;
+          } else if (pendingUpstreamBodyMessages.isEmpty()
+              && pendingRequestBodyMessages.isEmpty()
+              && !pendingDrainingMessages.isEmpty() && super.isReady()) {
+            msg = pendingDrainingMessages.poll();
+            isMutated = false;
+          }
+
+          if (msg == null) {
+            if (pendingUpstreamBodyMessages.isEmpty()
+                && pendingRequestBodyMessages.isEmpty()
+                && pendingDrainingMessages.isEmpty()) {
+              passThroughMode.set(true);
+              if (appHalfClosed.get()) {
+                triggerHalfClose = true;
+              }
+            }
+          }
+        }
+
+        if (msg == null) {
+          if (triggerHalfClose) {
+            if (requestSideClosed.compareAndSet(false, true)) {
+              proceedWithHalfClose();
+            }
+          }
+          break;
+        }
+
+        if (isMutated) {
+          super.sendMessage((ReqT) new KnownLengthInputStream((ByteString) msg));
+        } else {
+          super.sendMessage((ReqT) msg);
+        }
+      }
+    }
+
+    private void handleFailOpen(DataPlaneListener<RespT> listener) {
+      if (!activateCall()) {
+        drainPendingRequests();
+      }
+      listener.unblockAfterStreamComplete();
+      closeExtProcStream();
+    }
+
+    private void checkEndOfStream(ProcessingResponse response) {
+      boolean terminal = false;
+      if (response.hasResponseTrailers()) {
+        terminal = true;
+      } else if (response.hasResponseHeaders() && wrappedListener.isTrailersOnly()) {
+        terminal = true;
+      }
+
+      if (terminal) {
+        wrappedListener.unblockAfterStreamComplete();
+        closeExtProcStream();
+      }
+    }
+
+    long getServerHeadersStartNanos() {
+      return serverHeadersStartNanos;
+    }
+
+    void setServerHeadersStartNanos(long serverHeadersStartNanos) {
+      this.serverHeadersStartNanos = serverHeadersStartNanos;
+    }
+
+    long getServerTrailersStartNanos() {
+      return serverTrailersStartNanos;
+    }
+
+    void setServerTrailersStartNanos(long serverTrailersStartNanos) {
+      this.serverTrailersStartNanos = serverTrailersStartNanos;
+    }
+
+    AtomicReference<ExtProcStreamState> getExtProcStreamState() {
+      return extProcStreamState;
+    }
+
+    ProcessingMode getCurrentProcessingMode() {
+      return currentProcessingMode;
+    }
+
+    AtomicBoolean getPassThroughMode() {
+      return passThroughMode;
+    }
+
+    ExternalProcessorFilterConfig getConfig() {
+      return config;
+    }
+
+    Context getCallContext() {
+      return callContext;
+    }
+
+    ScheduledExecutorService getScheduler() {
+      return scheduler;
+    }
+
+    AtomicBoolean getIsProcessingTrailers() {
+      return isProcessingTrailers;
+    }
+  }
+
+  private static class DataPlaneListener<RespT> extends SimpleForwardingClientCallListener<RespT> {
+    private final DataPlaneClientCall<?, RespT> dataPlaneClientCall;
+    // Path 3: Upstream response bodies queued because upstream to sidestream window not available,
+    // response headers not cleared by ext_proc or ext_proc stream draining
+    private final Queue<RespT> savedMessages = new ConcurrentLinkedQueue<>();
+    private boolean inboundPassThrough = false;
+    @Nullable private volatile Metadata savedHeaders;
+    @Nullable private volatile Metadata savedTrailers;
+    @Nullable private volatile Status savedStatus;
+    private final AtomicBoolean terminationTriggered = new AtomicBoolean(false);
+    private final AtomicBoolean responseHeadersSent = new AtomicBoolean(false);
+    private final AtomicBoolean trailersOnly = new AtomicBoolean(false);
+
+    protected DataPlaneListener(
+        ClientCall.Listener<RespT> delegate,
+        DataPlaneClientCall<?, RespT> dataPlaneClientCall) {
+      super(delegate);
+      this.dataPlaneClientCall = dataPlaneClientCall;
+    }
+
+    boolean isTrailersOnly() {
+      return trailersOnly.get();
+    }
+
+    Metadata getSavedHeaders() {
+      return savedHeaders;
+    }
+
+    Metadata getSavedTrailers() {
+      return savedTrailers;
+    }
+
+    void setImmediateResponse(Status status, Metadata trailers) {
+      this.savedStatus = status;
+      this.savedTrailers = trailers;
+    }
+
+    @Override
+    public void onReady() {
+      dataPlaneClientCall.onReady();
+    }
+
+    @Override
+    public void onHeaders(Metadata headers) {
+      dataPlaneClientCall.setServerHeadersStartNanos(System.nanoTime());
+      responseHeadersSent.set(true);
+      boolean sendResponseHeaders =
+          dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
+              == ProcessingMode.HeaderSendMode.SEND
+          || dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
+              == ProcessingMode.HeaderSendMode.DEFAULT;
+
+      if (dataPlaneClientCall.getExtProcStreamState().get().isDraining() && sendResponseHeaders) {
+        this.savedHeaders = headers;
+        return;
+      }
+
+      if (dataPlaneClientCall.getPassThroughMode().get()
+          || dataPlaneClientCall.getExtProcStreamState().get().isCompleted() 
+          || !sendResponseHeaders) {
+        proceedWithHeaders(headers);
+        return;
+      }
+
+      this.savedHeaders = headers;
+      dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
+          .setResponseHeaders(HttpHeaders.newBuilder()
+              .setHeaders(
+                  toHeaderMap(headers, dataPlaneClientCall.getConfig().getForwardRulesConfig()))
+              .build())
+          .build());
+
+      if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
+        proceedWithHeaders();
+      }
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void onMessage(RespT message) {
+      synchronized (dataPlaneClientCall.streamLock) {
+        if (inboundPassThrough) {
+          dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
+          return;
+        }
+
+        boolean checkDrain = dataPlaneClientCall.getExtProcStreamState().get().isDraining()
+            && dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
+                == ProcessingMode.BodySendMode.GRPC;
+
+        if (savedHeaders != null || checkDrain) {
+          if (message instanceof InputStream) {
+            try {
+              ByteString copiedBody = ByteString.readFrom((InputStream) message);
+              savedMessages.add((RespT) new KnownLengthInputStream(copiedBody));
+            } catch (IOException e) {
+              dataPlaneClientCall.cancelDownstream(
+                  "Failed to copy inbound message for buffering", e);
+            }
+          } else {
+            savedMessages.add(message);
+          }
+          return;
+        }
+
+        if (dataPlaneClientCall.getPassThroughMode().get()
+            || dataPlaneClientCall.getExtProcStreamState().get().isCompleted()
+            || dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
+                != ProcessingMode.BodySendMode.GRPC) {
+          dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
+          return;
+        }
+
+        try {
+          ByteString bodyByteString = ByteString.readFrom((InputStream) message);
+          // TODO: Consider having separate classes handling normal mode and observability mode
+          if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
+            sendResponseBodyToExtProc(bodyByteString, false);
+            dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
+            dataPlaneClientCall.getCallContext().run(
+                () -> delegate().onMessage((RespT) bodyByteString.newInput()));
+          } else {
+            if (dataPlaneClientCall.upstreamToSidestreamWindow <= 0 || !savedMessages.isEmpty()) {
+              savedMessages.add((RespT) new KnownLengthInputStream(bodyByteString));
+            } else {
+              dataPlaneClientCall.upstreamToSidestreamWindow -= bodyByteString.size();
+              sendResponseBodyToExtProc(bodyByteString, false);
+              dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
+            }
+            dataPlaneClientCall.drainPendingRequests();
+          }
+        } catch (IOException e) {
+          dataPlaneClientCall.cancelDownstream("Failed to read server response", e);
+        }
+      }
+    }
+
+    void drainSavedMessages() {
+      synchronized (dataPlaneClientCall.streamLock) {
+        if (dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
+            != ProcessingMode.BodySendMode.GRPC) {
+          return;
+        }
+        while (dataPlaneClientCall.isSidecarReady()
+            && dataPlaneClientCall.upstreamToSidestreamWindow > 0
+            && !savedMessages.isEmpty()) {
+          RespT msg = savedMessages.poll();
+          if (msg != null) {
+            try {
+              ByteString bodyByteString = ByteString.readFrom((InputStream) msg);
+              dataPlaneClientCall.upstreamToSidestreamWindow -= bodyByteString.size();
+              sendResponseBodyToExtProc(bodyByteString, false);
+              dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
+            } catch (IOException e) {
+              dataPlaneClientCall.cancelDownstream("Failed to read buffered response body", e);
+            }
+          }
+        }
+        dataPlaneClientCall.drainPendingRequests();
+      }
+    }
+
+    @Override
+    public void onClose(Status status, Metadata trailers) {
+      dataPlaneClientCall.setServerTrailersStartNanos(System.nanoTime());
+      ExtProcStreamState extProcStreamState =
+          dataPlaneClientCall.getExtProcStreamState().get();
+      if (extProcStreamState.isFailed()
+          && !dataPlaneClientCall.getConfig().getObservabilityMode()
+          && (!dataPlaneClientCall.getConfig().getFailureModeAllow()
+              || dataPlaneClientCall.bodyMessageSentToExtProc.get())) {
+        if (markDataPlaneCallClosed(dataPlaneClientCall.dataPlaneCallState)) {
+          proceedWithClose(Status.INTERNAL.withDescription("External processor stream failed")
+              .withCause(status.getCause()), new Metadata());
+        }
+        return;
+      }
+      if (dataPlaneClientCall.getPassThroughMode().get()) {
+        if (markDataPlaneCallClosed(dataPlaneClientCall.dataPlaneCallState)) {
+          proceedWithClose(status, trailers);
+        }
+        return;
+      }
+
+      if (this.savedStatus == null) {
+        this.savedStatus = status;
+        this.savedTrailers = trailers;
+      }
+
+      // If we are still waiting for the external processor to validate response headers,
+      // buffer the close status/trailers and defer the close until headers are processed.
+      if (savedHeaders != null) {
+        return;
+      }
+
+      boolean sendResponseTrailers =
+          dataPlaneClientCall.getCurrentProcessingMode().getResponseTrailerMode()
+              == ProcessingMode.HeaderSendMode.SEND;
+
+      if (dataPlaneClientCall.getExtProcStreamState().get().isDraining() && sendResponseTrailers) {
+        return;
+      }
+
+      if (!responseHeadersSent.get()) {
+        trailersOnly.set(true);
+      }
+
+      triggerCloseHandshake();
+    }
+
+    void onReadyNotify() {
+      dataPlaneClientCall.getCallContext().run(() -> delegate().onReady());
+    }
+
+    void proceedWithHeaders() {
+      if (savedHeaders != null) {
+        proceedWithHeaders(savedHeaders);
+        synchronized (dataPlaneClientCall.streamLock) {
+          savedHeaders = null;
+          if (!dataPlaneClientCall.getExtProcStreamState().get().isDraining()) {
+            RespT msg;
+            while ((msg = savedMessages.poll()) != null) {
+              onMessage(msg);
+            }
+          }
+        }
+        onReadyNotify();
+        if (savedStatus != null) {
+          triggerCloseHandshake();
+        }
+      }
+    }
+
+    private void proceedWithHeaders(Metadata headers) {
+      if (dataPlaneClientCall.getServerHeadersStartNanos() > 0) {
+        long durationNanos = System.nanoTime() - dataPlaneClientCall.getServerHeadersStartNanos();
+        dataPlaneClientCall.recordDuration(serverHeadersDuration, durationNanos);
+        dataPlaneClientCall.setServerHeadersStartNanos(0);
+      }
+      dataPlaneClientCall.getCallContext().run(() -> delegate().onHeaders(headers));
+    }
+
+    void proceedWithClose() {
+      if (savedStatus != null) {
+        if (markDataPlaneCallClosed(dataPlaneClientCall.dataPlaneCallState)) {
+          proceedWithClose(savedStatus, savedTrailers);
+        }
+        savedStatus = null;
+        savedTrailers = null;
+      }
+    }
+
+    private void proceedWithClose(Status status, Metadata trailers) {
+      if (dataPlaneClientCall.getServerTrailersStartNanos() > 0) {
+        long durationNanos = System.nanoTime() - dataPlaneClientCall.getServerTrailersStartNanos();
+        dataPlaneClientCall.recordDuration(serverTrailersDuration, durationNanos);
+        dataPlaneClientCall.setServerTrailersStartNanos(0);
+      }
+      dataPlaneClientCall.getCallContext().run(() -> delegate().onClose(status, trailers));
+    }
+
+    @SuppressWarnings("unchecked")
+    void onExternalBody(ByteString body) {
+      // If needed, downstream reading can be made more optimal by creating a wrapped
+      // Inputstream wraps the underlying bytestring and that implements HasByteBuffer,
+      // Detachable, KnownLength
+      dataPlaneClientCall.getCallContext().run(
+          () -> delegate().onMessage((RespT) body.newInput()));
+    }
+
+    void unblockAfterStreamComplete() {
+      proceedWithHeaders();
+      // 1. Drain mutated responses first
+      dataPlaneClientCall.drainPendingMutatedResponseBodiesDirect(this);
+      // 2. Drain raw responses
+      proceedWithSavedMessages();
+      // 3. Drain outbound requests
+      dataPlaneClientCall.drainPendingDrainingMessages();
+      proceedWithClose();
+    }
+
+    private void proceedWithSavedMessages() {
+      synchronized (dataPlaneClientCall.streamLock) {
+        RespT msg;
+        while ((msg = savedMessages.poll()) != null) {
+          final RespT finalMsg = msg;
+          dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(finalMsg));
+        }
+        inboundPassThrough = true;
+      }
+    }
+
+    private void triggerCloseHandshake() {
+      if (dataPlaneClientCall.getExtProcStreamState().get().isCompleted()
+          || !terminationTriggered.compareAndSet(false, true)) {
+        return;
+      }
+
+      boolean sendResponseHeaders =
+          dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
+              == ProcessingMode.HeaderSendMode.SEND
+          || dataPlaneClientCall.getCurrentProcessingMode().getResponseHeaderMode()
+              == ProcessingMode.HeaderSendMode.DEFAULT;
+
+      boolean sendResponseTrailers =
+          dataPlaneClientCall.getCurrentProcessingMode().getResponseTrailerMode()
+              == ProcessingMode.HeaderSendMode.SEND;
+
+      if (trailersOnly.get()) {
+        if (sendResponseHeaders) {
+          dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
+              .setResponseHeaders(HttpHeaders.newBuilder()
+                  .setHeaders(
+                      toHeaderMap(
+                          savedTrailers,
+                          dataPlaneClientCall.getConfig().getForwardRulesConfig()))
+                  .setEndOfStream(true)
+                  .build())
+              .build());
+        } else {
+          proceedWithClose();
+          if (!dataPlaneClientCall.getConfig().getObservabilityMode()) {
+            dataPlaneClientCall.closeExtProcStream();
+          }
+        }
+      } else if (sendResponseTrailers) {
+        dataPlaneClientCall.getIsProcessingTrailers().set(true);
+        dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
+            .setResponseTrailers(HttpTrailers.newBuilder()
+                .setTrailers(
+                    toHeaderMap(
+                        savedTrailers,
+                        dataPlaneClientCall.getConfig().getForwardRulesConfig()))
+                .build())
+            .build());
+      } else {
+        proceedWithClose();
+        if (!dataPlaneClientCall.getConfig().getObservabilityMode()) {
+          dataPlaneClientCall.closeExtProcStream();
+        }
+      }
+
+      if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
+        proceedWithClose();
+        @SuppressWarnings("unused")
+        ScheduledFuture<?> unused = dataPlaneClientCall.getScheduler().schedule(
+            dataPlaneClientCall::closeExtProcStream,
+            dataPlaneClientCall.getConfig().getDeferredCloseTimeoutNanos(),
+            TimeUnit.NANOSECONDS);
+      }
+    }
+
+    @GuardedBy("dataPlaneClientCall.streamLock")
+    private void sendResponseBodyToExtProc(
+        @Nullable ByteString bodyByteString, boolean endOfStream) {
+      if (dataPlaneClientCall.getExtProcStreamState().get().isCompleted()
+          || dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
+              != ProcessingMode.BodySendMode.GRPC) {
+        return;
+      }
+
+      HttpBody.Builder bodyBuilder =
+          HttpBody.newBuilder();
+      if (bodyByteString != null) {
+        bodyBuilder.setBody(bodyByteString);
+      }
+      bodyBuilder.setEndOfStream(endOfStream);
+
+      ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
+          .setResponseBody(bodyBuilder.build());
+      dataPlaneClientCall.mergeAccumulatedWindowUpdates(builder);
+      dataPlaneClientCall.sendToExtProc(builder.build());
+    }
+  }
+}

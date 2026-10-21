@@ -45,7 +45,9 @@ public class NoopClientStream implements ClientStream {
   public void request(int numMessages) {}
 
   @Override
-  public void writeMessage(InputStream message) {}
+  public void writeMessage(InputStream message) {
+    GrpcUtil.closeQuietly(message);
+  }
 
   @Override
   public void flush() {}
@@ -67,6 +69,9 @@ public class NoopClientStream implements ClientStream {
   }
 
   @Override
+  public void optimizeForDirectExecutor() {}
+
+  @Override
   public void setCompressor(Compressor compressor) {}
 
   @Override
@@ -83,4 +88,9 @@ public class NoopClientStream implements ClientStream {
 
   @Override
   public void setDeadline(@Nonnull Deadline deadline) {}
+
+  @Override
+  public void appendTimeoutInsight(InsightBuilder insight) {
+    insight.append("noop");
+  }
 }

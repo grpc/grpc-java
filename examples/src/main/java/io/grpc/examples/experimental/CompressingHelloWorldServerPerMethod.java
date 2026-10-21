@@ -17,10 +17,12 @@
 package io.grpc.examples.experimental;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
@@ -39,7 +41,7 @@ public class CompressingHelloWorldServerPerMethod {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         .build()
         .start();
@@ -49,15 +51,19 @@ public class CompressingHelloWorldServerPerMethod {
       public void run() {
         // Use stderr here since the logger may have been reset by its JVM shutdown hook.
         System.err.println("*** shutting down gRPC server since JVM is shutting down");
-        CompressingHelloWorldServerPerMethod.this.stop();
+        try {
+          CompressingHelloWorldServerPerMethod.this.stop();
+        } catch (InterruptedException e) {
+          e.printStackTrace(System.err);
+        }
         System.err.println("*** server shut down");
       }
     });
   }
 
-  private void stop() {
+  private void stop() throws InterruptedException {
     if (server != null) {
-      server.shutdown();
+      server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
     }
   }
 

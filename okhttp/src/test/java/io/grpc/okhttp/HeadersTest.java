@@ -53,6 +53,7 @@ public class HeadersTest {
         path,
         authority,
         userAgent,
+        false,
         false);
 
     // 7 reserved headers, 1 user header

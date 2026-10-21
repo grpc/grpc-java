@@ -25,7 +25,7 @@ import java.lang.annotation.Target;
 /**
  * {@link RpcMethod} contains a limited subset of information about the RPC to assist
  * <a href="https://docs.oracle.com/javase/6/docs/api/javax/annotation/processing/Processor.html">
- * Java Annotation Processors.</a>
+ * Java Annotation Processors</a>.
  *
  * <p>
  *   This annotation is used by the gRPC stub compiler to annotate {@link MethodDescriptor}

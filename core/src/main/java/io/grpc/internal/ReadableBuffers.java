@@ -16,15 +16,20 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Charsets.UTF_8;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Detachable;
+import io.grpc.HasByteBuffer;
 import io.grpc.KnownLength;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.InvalidMarkException;
 import java.nio.charset.Charset;
+import javax.annotation.Nullable;
 
 /**
  * Utility methods for creating {@link ReadableBuffer} instances.
@@ -127,6 +132,7 @@ public final class ReadableBuffers {
     int offset;
     final int end;
     final byte[] bytes;
+    int mark = -1;
 
     ByteArrayWrapper(byte[] bytes) {
       this(bytes, 0, bytes.length);
@@ -166,15 +172,6 @@ public final class ReadableBuffers {
     }
 
     @Override
-    public void readBytes(ByteBuffer dest) {
-      Preconditions.checkNotNull(dest, "dest");
-      int length = dest.remaining();
-      checkReadable(length);
-      dest.put(bytes, offset, length);
-      offset += length;
-    }
-
-    @Override
     public void readBytes(OutputStream dest, int length) throws IOException {
       checkReadable(length);
       dest.write(bytes, offset, length);
@@ -203,6 +200,24 @@ public final class ReadableBuffers {
     public int arrayOffset() {
       return offset;
     }
+
+    @Override
+    public boolean markSupported() {
+      return true;
+    }
+
+    @Override
+    public void mark() {
+      mark = offset;
+    }
+
+    @Override
+    public void reset() {
+      if (mark == -1) {
+        throw new InvalidMarkException();
+      }
+      offset = mark;
+    }
   }
 
   /**
@@ -229,7 +244,7 @@ public final class ReadableBuffers {
     @Override
     public void skipBytes(int length) {
       checkReadable(length);
-      bytes.position(bytes.position() + length);
+      ((Buffer) bytes).position(bytes.position() + length);
     }
 
     @Override
@@ -239,26 +254,11 @@ public final class ReadableBuffers {
     }
 
     @Override
-    public void readBytes(ByteBuffer dest) {
-      Preconditions.checkNotNull(dest, "dest");
-      int length = dest.remaining();
-      checkReadable(length);
-
-      // Change the limit so that only length bytes are available.
-      int prevLimit = bytes.limit();
-      bytes.limit(bytes.position() + length);
-
-      // Write the bytes and restore the original limit.
-      dest.put(bytes);
-      bytes.limit(prevLimit);
-    }
-
-    @Override
     public void readBytes(OutputStream dest, int length) throws IOException {
       checkReadable(length);
       if (hasArray()) {
         dest.write(array(), arrayOffset(), length);
-        bytes.position(bytes.position() + length);
+        ((Buffer) bytes).position(bytes.position() + length);
       } else {
         // The buffer doesn't support array(). Copy the data to an intermediate buffer.
         byte[] array = new byte[length];
@@ -271,8 +271,8 @@ public final class ReadableBuffers {
     public ByteReadableBufferWrapper readBytes(int length) {
       checkReadable(length);
       ByteBuffer buffer = bytes.duplicate();
-      buffer.limit(bytes.position() + length);
-      bytes.position(bytes.position() + length);
+      ((Buffer) buffer).limit(bytes.position() + length);
+      ((Buffer) bytes).position(bytes.position() + length);
       return new ByteReadableBufferWrapper(buffer);
     }
 
@@ -290,13 +290,39 @@ public final class ReadableBuffers {
     public int arrayOffset() {
       return bytes.arrayOffset() + bytes.position();
     }
+
+    @Override
+    public boolean markSupported() {
+      return true;
+    }
+
+    @Override
+    public void mark() {
+      bytes.mark();
+    }
+
+    @Override
+    public void reset() {
+      bytes.reset();
+    }
+
+    @Override
+    public boolean byteBufferSupported() {
+      return true;
+    }
+
+    @Override
+    public ByteBuffer getByteBuffer() {
+      return bytes.slice();
+    }
   }
 
   /**
    * An {@link InputStream} that is backed by a {@link ReadableBuffer}.
    */
-  private static final class BufferInputStream extends InputStream implements KnownLength {
-    final ReadableBuffer buffer;
+  private static final class BufferInputStream extends InputStream
+      implements KnownLength, HasByteBuffer, Detachable {
+    private ReadableBuffer buffer;
 
     public BufferInputStream(ReadableBuffer buffer) {
       this.buffer = Preconditions.checkNotNull(buffer, "buffer");
@@ -326,6 +352,47 @@ public final class ReadableBuffers {
       length = Math.min(buffer.readableBytes(), length);
       buffer.readBytes(dest, destOffset, length);
       return length;
+    }
+
+    @Override
+    public long skip(long n) throws IOException {
+      int length = (int) Math.min(buffer.readableBytes(), n);
+      buffer.skipBytes(length);
+      return length;
+    }
+
+    @Override
+    public void mark(int readlimit) {
+      buffer.mark();
+    }
+
+    @Override
+    public void reset() throws IOException {
+      buffer.reset();
+    }
+
+    @Override
+    public boolean markSupported() {
+      return buffer.markSupported();
+    }
+
+    @Override
+    public boolean byteBufferSupported() {
+      return buffer.byteBufferSupported();
+    }
+
+    @Nullable
+    @Override
+    public ByteBuffer getByteBuffer() {
+      return buffer.getByteBuffer();
+    }
+
+    @Override
+    public InputStream detach() {
+      ReadableBuffer detachedBuffer = buffer;
+      buffer = buffer.readBytes(0);
+      detachedBuffer.touch();
+      return new BufferInputStream(detachedBuffer);
     }
 
     @Override

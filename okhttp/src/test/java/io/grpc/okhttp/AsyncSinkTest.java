@@ -30,11 +30,11 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.base.Charsets;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import java.io.IOException;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
@@ -56,7 +56,7 @@ public class AsyncSinkTest {
   private final QueueingExecutor queueingExecutor = new QueueingExecutor();
   private final TransportExceptionHandler exceptionHandler = mock(TransportExceptionHandler.class);
   private final AsyncSink sink =
-      AsyncSink.sink(new SerializingExecutor(queueingExecutor), exceptionHandler);
+      AsyncSink.sink(new SerializingExecutor(queueingExecutor), exceptionHandler, 10000);
 
   @Test
   public void noCoalesceRequired() throws IOException {
@@ -73,8 +73,8 @@ public class AsyncSinkTest {
 
   @Test
   public void flushCoalescing_shouldNotMergeTwoDistinctFlushes() throws IOException {
-    byte[] firstData = "a string".getBytes(Charsets.UTF_8);
-    byte[] secondData = "a longer string".getBytes(Charsets.UTF_8);
+    byte[] firstData = "a string".getBytes(StandardCharsets.UTF_8);
+    byte[] secondData = "a longer string".getBytes(StandardCharsets.UTF_8);
 
     sink.becomeConnected(mockedSink, socket);
     Buffer buffer = new Buffer();
@@ -95,8 +95,8 @@ public class AsyncSinkTest {
 
   @Test
   public void flushCoalescing_shouldMergeTwoQueuedFlushesAndWrites() throws IOException {
-    byte[] firstData = "a string".getBytes(Charsets.UTF_8);
-    byte[] secondData = "a longer string".getBytes(Charsets.UTF_8);
+    byte[] firstData = "a string".getBytes(StandardCharsets.UTF_8);
+    byte[] secondData = "a longer string".getBytes(StandardCharsets.UTF_8);
     Buffer buffer = new Buffer().write(firstData);
     sink.becomeConnected(mockedSink, socket);
     sink.write(buffer, buffer.size());
@@ -115,8 +115,8 @@ public class AsyncSinkTest {
 
   @Test
   public void flushCoalescing_shouldMergeWrites() throws IOException {
-    byte[] firstData = "a string".getBytes(Charsets.UTF_8);
-    byte[] secondData = "a longer string".getBytes(Charsets.UTF_8);
+    byte[] firstData = "a string".getBytes(StandardCharsets.UTF_8);
+    byte[] secondData = "a longer string".getBytes(StandardCharsets.UTF_8);
     Buffer buffer = new Buffer();
     sink.becomeConnected(mockedSink, socket);
     sink.write(buffer.write(firstData), buffer.size());

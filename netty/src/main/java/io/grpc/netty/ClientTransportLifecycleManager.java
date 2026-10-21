@@ -16,7 +16,10 @@
 
 package io.grpc.netty;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import io.grpc.Attributes;
 import io.grpc.Status;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.ManagedClientTransport;
 
 /** Maintainer of transport lifecycle status. */
@@ -28,11 +31,17 @@ final class ClientTransportLifecycleManager {
   /** null iff !transportShutdown. */
   private Status shutdownStatus;
   /** null iff !transportShutdown. */
-  private Throwable shutdownThrowable;
   private boolean transportTerminated;
 
   public ClientTransportLifecycleManager(ManagedClientTransport.Listener listener) {
     this.listener = listener;
+  }
+
+  public Attributes filterAttributes(Attributes attributes) {
+    if (transportReady || transportShutdown) {
+      return attributes;
+    }
+    return listener.filterTransport(attributes);
   }
 
   public void notifyReady() {
@@ -43,14 +52,27 @@ final class ClientTransportLifecycleManager {
     listener.transportReady();
   }
 
-  public void notifyShutdown(Status s) {
+  /**
+   * Marks transport as shutdown, but does not set the error status. This must eventually be
+   * followed by a call to notifyShutdown.
+   */
+  public void notifyGracefulShutdown(Status s, DisconnectError disconnectError) {
     if (transportShutdown) {
       return;
     }
     transportShutdown = true;
+    listener.transportShutdown(s, disconnectError);
+  }
+
+  /** Returns {@code true} if was the first shutdown. */
+  @CanIgnoreReturnValue
+  public boolean notifyShutdown(Status s, DisconnectError disconnectError) {
+    notifyGracefulShutdown(s, disconnectError);
+    if (shutdownStatus != null) {
+      return false;
+    }
     shutdownStatus = s;
-    shutdownThrowable = s.asException();
-    listener.transportShutdown(s);
+    return true;
   }
 
   public void notifyInUse(boolean inUse) {
@@ -61,12 +83,12 @@ final class ClientTransportLifecycleManager {
     listener.transportInUse(inUse);
   }
 
-  public void notifyTerminated(Status s) {
+  public void notifyTerminated(Status s, DisconnectError disconnectError) {
     if (transportTerminated) {
       return;
     }
     transportTerminated = true;
-    notifyShutdown(s);
+    notifyShutdown(s, disconnectError);
     listener.transportTerminated();
   }
 
@@ -74,7 +96,4 @@ final class ClientTransportLifecycleManager {
     return shutdownStatus;
   }
 
-  public Throwable getShutdownThrowable() {
-    return shutdownThrowable;
-  }
 }

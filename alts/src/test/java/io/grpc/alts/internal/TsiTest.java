@@ -26,6 +26,7 @@ import io.grpc.alts.internal.TsiFrameProtector.Consumer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -33,13 +34,13 @@ import java.util.Collections;
 import java.util.List;
 import javax.crypto.AEADBadTagException;
 
-/** Utility class that provides tests for implementations of @{link TsiHandshaker}. */
+/** Utility class that provides tests for implementations of {@link TsiHandshaker}. */
 public final class TsiTest {
-  private static final String DECRYPTION_FAILURE_RE = "Tag mismatch!";
+  private static final String DECRYPTION_FAILURE_RE = "Tag mismatch|BAD_DECRYPT";
 
   private TsiTest() {}
 
-  /** A @{code TsiHandshaker} pair for running tests. */
+  /** A {@code TsiHandshaker} pair for running tests. */
   public static class Handshakers {
     private final TsiHandshaker client;
     private final TsiHandshaker server;
@@ -83,7 +84,7 @@ public final class TsiTest {
 
     byte[] transportBufferBytes = new byte[transportBufferSize];
     ByteBuffer transportBuffer = ByteBuffer.wrap(transportBufferBytes);
-    transportBuffer.limit(0); // Start off with an empty buffer
+    ((Buffer) transportBuffer).limit(0); // Start off with an empty buffer
 
     while (clientHandshaker.isInProgress() || serverHandshaker.isInProgress()) {
       for (TsiHandshaker handshaker : new TsiHandshaker[] {clientHandshaker, serverHandshaker}) {
@@ -94,9 +95,9 @@ public final class TsiTest {
           }
           // Put new bytes on the wire, if needed.
           if (handshaker.isInProgress()) {
-            transportBuffer.clear();
+            ((Buffer) transportBuffer).clear();
             handshaker.getBytesToSendToPeer(transportBuffer);
-            transportBuffer.flip();
+            ((Buffer) transportBuffer).flip();
           }
         }
       }
@@ -282,7 +283,7 @@ public final class TsiTest {
       receiver.unprotect(protect, unprotectOut, alloc);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_RE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_RE);
     }
 
     sender.destroy();
@@ -321,7 +322,7 @@ public final class TsiTest {
       receiver.unprotect(protect, unprotectOut, alloc);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_RE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_RE);
     }
 
     sender.destroy();
@@ -360,7 +361,7 @@ public final class TsiTest {
       receiver.unprotect(protect, unprotectOut, alloc);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_RE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_RE);
     }
 
     sender.destroy();
@@ -396,7 +397,7 @@ public final class TsiTest {
       sender.unprotect(protect.slice(), unprotectOut, alloc);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_RE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_RE);
     }
 
     sender.destroy();

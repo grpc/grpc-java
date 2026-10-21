@@ -43,7 +43,7 @@ public abstract class CallCredentials {
    * <p>It is called for each individual RPC, within the {@link Context} of the call, before the
    * stream is about to be created on a transport. Implementations should not block in this
    * method. If metadata is not immediately available, e.g., needs to be fetched from network, the
-   * implementation may give the {@code applier} to an asynchronous task which will eventually call
+   * implementation may give the {@code appExecutor} an asynchronous task which will eventually call
    * the {@code applier}. The RPC proceeds only after the {@code applier} is called.
    *
    * @param requestInfo request-related information
@@ -56,18 +56,38 @@ public abstract class CallCredentials {
       RequestInfo requestInfo, Executor appExecutor, CallCredentials.MetadataApplier applier);
 
   /**
-   * Should be a noop but never called; tries to make it clearer to implementors that they may break
-   * in the future.
+   * With this class now being stable this method moves from an abstract one to a normal one with
+   * a no-op implementation. This method is marked deprecated to allow extenders time to remove the
+   * method before it is removed here.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  public abstract void thisUsesUnstableApi();
+  @Deprecated
+  public void thisUsesUnstableApi() {
+  }
+
+  /**
+   * Determines whether the security level of the transport is higher than or equal to the minimum
+   * security level required to transfer these {@link CallCredentials}.
+   *
+   * <p>It is intended to be called from {@link #applyRequestMetadata} before sending any individual
+   * RPC. The credentials should not be sent if this method returns {@code false}. More details can
+   * be found in <a
+   * href="https://github.com/grpc/proposal/blob/master/L62-core-call-credential-security-level.md">
+   * gRFC L62</a>.
+   *
+   * @param requestInfo request-related information
+   * @param minSecurity minimum security level required by these {@code CallCredentials}
+   */
+  protected static final boolean allowedSecurityLevel(
+      RequestInfo requestInfo, SecurityLevel minSecurity) {
+    return requestInfo.getSecurityLevel().compareTo(minSecurity) >= 0;
+  }
 
   /**
    * The outlet of the produced headers. Not thread-safe.
    *
    * <p>Exactly one of its methods must be called to make the RPC proceed.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   public abstract static class MetadataApplier {
     /**
      * Called when headers are successfully generated. They will be merged into the original
@@ -82,14 +102,20 @@ public abstract class CallCredentials {
   }
 
   /**
-   * The request-related information passed to {@code CallCredentials2.applyRequestMetadata()}.
+   * The request-related information passed to {@code CallCredentials.applyRequestMetadata()}.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   public abstract static class RequestInfo {
     /**
      * The method descriptor of this RPC.
      */
     public abstract MethodDescriptor<?, ?> getMethodDescriptor();
+
+    /**
+     * The call options used to call this RPC.
+     */
+    public CallOptions getCallOptions() {
+      throw new UnsupportedOperationException("Not implemented");
+    }
 
     /**
      * The security level on the transport.

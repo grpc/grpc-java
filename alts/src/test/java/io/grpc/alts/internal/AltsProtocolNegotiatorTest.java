@@ -16,6 +16,7 @@
 
 package io.grpc.alts.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
@@ -25,18 +26,21 @@ import static org.junit.Assert.assertTrue;
 
 import io.grpc.Attributes;
 import io.grpc.Channel;
+import io.grpc.ChannelLogger;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.Security;
 import io.grpc.ManagedChannel;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
+import io.grpc.alts.internal.AltsProtocolNegotiator.ServerAltsProtocolNegotiator;
 import io.grpc.alts.internal.TsiFrameProtector.Consumer;
 import io.grpc.alts.internal.TsiPeer.Property;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
+import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -47,6 +51,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
@@ -92,11 +97,9 @@ public class AltsProtocolNegotiatorTest {
   private EmbeddedChannel channel;
   private Throwable caughtException;
 
-  private ChannelHandler handler;
-
   private TsiPeer mockedTsiPeer = new TsiPeer(Collections.<Property<?>>emptyList());
-  private AltsAuthContext mockedAltsContext =
-      new AltsAuthContext(
+  private AltsInternalContext mockedAltsContext =
+      new AltsInternalContext(
           HandshakerResult.newBuilder()
               .setPeerRpcVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
               .build());
@@ -129,8 +132,8 @@ public class AltsProtocolNegotiatorTest {
     TsiHandshakerFactory handshakerFactory =
         new DelegatingTsiHandshakerFactory(FakeTsiHandshaker.clientHandshakerFactory()) {
           @Override
-          public TsiHandshaker newHandshaker(String authority) {
-            return new DelegatingTsiHandshaker(super.newHandshaker(authority)) {
+          public TsiHandshaker newHandshaker(String authority, ChannelLogger logger) {
+            return new DelegatingTsiHandshaker(super.newHandshaker(authority, logger)) {
               @Override
               public TsiPeer extractPeer() throws GeneralSecurityException {
                 return mockedTsiPeer;
@@ -146,9 +149,11 @@ public class AltsProtocolNegotiatorTest {
     ManagedChannel fakeChannel = NettyChannelBuilder.forTarget("localhost:8080").build();
     ObjectPool<Channel> fakeChannelPool = new FixedObjectPool<Channel>(fakeChannel);
     LazyChannel lazyFakeChannel = new LazyChannel(fakeChannelPool);
-    handler =
-        new AltsProtocolNegotiator.ServerAltsProtocolNegotiator(handshakerFactory, lazyFakeChannel)
-            .newHandler(grpcHandler);
+    ChannelHandler altsServerHandler = new ServerAltsProtocolNegotiator(
+        handshakerFactory, lazyFakeChannel)
+        .newHandler(grpcHandler);
+    // On real server, WBAEH fires default ProtocolNegotiationEvent. KickNH provides this behavior.
+    ChannelHandler handler = new KickNegotiationHandler(altsServerHandler);
     channel = new EmbeddedChannel(uncaughtExceptionHandler, handler);
   }
 
@@ -197,8 +202,11 @@ public class AltsProtocolNegotiatorTest {
     channel.flush();
 
     // Capture the protected data written to the wire.
-    assertEquals(1, channel.outboundMessages().size());
-    ByteBuf protectedData = channel.readOutbound();
+    assertThat(channel.outboundMessages()).isNotEmpty();
+    ByteBuf protectedData = channel.alloc().buffer();
+    while (!channel.outboundMessages().isEmpty()) {
+      protectedData.writeBytes((ByteBuf) channel.readOutbound());
+    }
     assertEquals(message.length(), writeCount.get());
 
     // Read the protected message at the server and verify it matches the original message.
@@ -322,16 +330,18 @@ public class AltsProtocolNegotiatorTest {
     String message = "hello";
     ByteBuf in = Unpooled.copiedBuffer(message, UTF_8);
 
-    assertEquals(0, protector.flushes.get());
+    int flushes = protector.flushes.get();
     Future<?> done = channel.write(in);
     channel.flush();
+    flushes++;
     done.get(5, TimeUnit.SECONDS);
-    assertEquals(1, protector.flushes.get());
+    assertEquals(flushes, protector.flushes.get());
 
+    // Flush does not propagate
     done = channel.write(Unpooled.EMPTY_BUFFER);
     channel.flush();
     done.get(5, TimeUnit.SECONDS);
-    assertEquals(1, protector.flushes.get());
+    assertEquals(flushes, protector.flushes.get());
   }
 
   @Test
@@ -347,6 +357,29 @@ public class AltsProtocolNegotiatorTest {
         .isEqualTo("embedded");
     assertThat(grpcHandler.attrs.get(GrpcAttributes.ATTR_SECURITY_LEVEL))
         .isEqualTo(SecurityLevel.PRIVACY_AND_INTEGRITY);
+  }
+
+  @Test
+  public void getAltsMaxConcurrentHandshakes_success() throws Exception {
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes("10")).isEqualTo(10);
+  }
+
+  @Test
+  public void getAltsMaxConcurrentHandshakes_envVariableNotSet() throws Exception {
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes(null))
+        .isEqualTo(AltsProtocolNegotiator.DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES);
+  }
+
+  @Test
+  public void getAltsMaxConcurrentHandshakes_envVariableNotANumber() throws Exception {
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes("not-a-number"))
+        .isEqualTo(AltsProtocolNegotiator.DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES);
+  }
+
+  @Test
+  public void getAltsMaxConcurrentHandshakes_envVariableNegative() throws Exception {
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes("-10"))
+        .isEqualTo(AltsProtocolNegotiator.DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES);
   }
 
   private void doHandshake() throws Exception {
@@ -381,7 +414,7 @@ public class AltsProtocolNegotiatorTest {
 
   private CapturingGrpcHttp2ConnectionHandler capturingGrpcHandler() {
     // Netty Boilerplate.  We don't really need any of this, but there is a tight coupling
-    // between a Http2ConnectionHandler and its dependencies.
+    // between an Http2ConnectionHandler and its dependencies.
     Http2Connection connection = new DefaultHttp2Connection(true);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter();
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(false);
@@ -396,22 +429,21 @@ public class AltsProtocolNegotiatorTest {
   private final class CapturingGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
 
     private Attributes attrs;
-    private Security securityInfo;
 
     private CapturingGrpcHttp2ConnectionHandler(
         Http2ConnectionDecoder decoder,
         Http2ConnectionEncoder encoder,
         Http2Settings initialSettings) {
-      super(null, decoder, encoder, initialSettings);
+      super(null, decoder, encoder, initialSettings, new NoopChannelLogger());
     }
 
     @Override
     public void handleProtocolNegotiationCompleted(
-        Attributes attrs, InternalChannelz.Security securityInfo) {
+        Attributes attrs,
+        @SuppressWarnings("UnusedVariable") InternalChannelz.Security securityInfo) {
       // If we are added to the pipeline, we need to remove ourselves.  The HTTP2 handler
       channel.pipeline().remove(this);
       this.attrs = attrs;
-      this.securityInfo = securityInfo;
     }
   }
 
@@ -424,8 +456,8 @@ public class AltsProtocolNegotiatorTest {
     }
 
     @Override
-    public TsiHandshaker newHandshaker(String authority) {
-      return delegate.newHandshaker(authority);
+    public TsiHandshaker newHandshaker(String authority, ChannelLogger logger) {
+      return delegate.newHandshaker(authority, logger);
     }
   }
 
@@ -477,6 +509,11 @@ public class AltsProtocolNegotiatorTest {
       protectors.add(protector);
       return protector;
     }
+
+    @Override
+    public void close() {
+      delegate.close();
+    }
   }
 
   private static class InterceptingProtector implements TsiFrameProtector {
@@ -505,6 +542,23 @@ public class AltsProtocolNegotiatorTest {
     @Override
     public void destroy() {
       delegate.destroy();
+    }
+  }
+
+  /** Kicks off negotiation of the server. */
+  private static final class KickNegotiationHandler extends ChannelInboundHandlerAdapter {
+
+    private final ChannelHandler next;
+
+    KickNegotiationHandler(ChannelHandler next) {
+      this.next = checkNotNull(next, "next");
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      super.handlerAdded(ctx);
+      ctx.pipeline().replace(ctx.name(), /*newName= */ null, next);
+      ctx.pipeline().fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
     }
   }
 }

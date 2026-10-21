@@ -1,16 +1,12 @@
-apply plugin: "cpp"
-apply plugin: "com.google.protobuf"
+plugins {
+    id "cpp"
+    id "java"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+}
 
 description = 'The protoc plugin for gRPC Java'
-
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-        mavenLocal()
-    }
-    dependencies { classpath libraries.protobuf_plugin }
-}
 
 def artifactStagingPath = "$buildDir/artifacts" as File
 // Adds space-delimited arguments from the environment variable env to the
@@ -54,10 +50,22 @@ model {
             }
         }
         gcc(Gcc) {
-            target("ppcle_64")
-            target("aarch_64")
+            target("ppcle_64") {
+                cppCompiler.executable = 'powerpc64le-linux-gnu-g++'
+                linker.executable = 'powerpc64le-linux-gnu-g++'
+            }
+            target("aarch_64") {
+                cppCompiler.executable = 'aarch64-linux-gnu-g++'
+                linker.executable = 'aarch64-linux-gnu-g++'
+            }
+            target("s390_64") {
+                cppCompiler.executable = 's390x-linux-gnu-g++'
+                linker.executable = 's390x-linux-gnu-g++'
+            }
+            target("loongarch_64")
         }
         clang(Clang) {
+            target("aarch_64") {}
         }
     }
 
@@ -66,6 +74,9 @@ model {
         x86_64 { architecture "x86_64" }
         ppcle_64 { architecture "ppcle_64" }
         aarch_64 { architecture "aarch_64" }
+        s390_64 { architecture "s390_64" }
+        loongarch_64 { architecture "loongarch_64" }
+        riscv_64 { architecture "riscv_64" }
     }
 
     components {
@@ -74,7 +85,10 @@ model {
                 'x86_32',
                 'x86_64',
                 'ppcle_64',
-                'aarch_64'
+                'riscv_64',
+                'aarch_64',
+                's390_64',
+                'loongarch_64'
             ]) {
                 // If arch is not within the defined platforms, we do not specify the
                 // targetPlatform so that Gradle will choose what is appropriate.
@@ -88,52 +102,49 @@ model {
         all {
             if (toolChain in Gcc || toolChain in Clang) {
                 cppCompiler.define("GRPC_VERSION", version)
-                cppCompiler.args "--std=c++0x"
+                cppCompiler.args "--std=c++17"
                 addEnvArgs("CXXFLAGS", cppCompiler.args)
                 addEnvArgs("CPPFLAGS", cppCompiler.args)
+                if (project.hasProperty('buildUniversal') &&
+                        project.getProperty('buildUniversal').toBoolean() &&
+                        osdetector.os == "osx") {
+                    cppCompiler.args "-arch", "arm64", "-arch", "x86_64"
+                    linker.args "-arch", "arm64", "-arch", "x86_64"
+                }
                 if (osdetector.os == "osx") {
                     cppCompiler.args "-mmacosx-version-min=10.7", "-stdlib=libc++"
+                    linker.args "-framework", "CoreFoundation"
                     addLibraryIfNotLinked('protoc', linker.args)
                     addLibraryIfNotLinked('protobuf', linker.args)
                 } else if (osdetector.os == "windows") {
                     linker.args "-static", "-lprotoc", "-lprotobuf", "-static-libgcc", "-static-libstdc++",
                             "-s"
+                } else if (osdetector.arch == "ppcle_64") {
+                    linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-Wl,-Bdynamic", "-lpthread", "-s"
                 } else {
                     // Link protoc, protobuf, libgcc and libstdc++ statically.
                     // Link other (system) libraries dynamically.
                     // Clang under OSX doesn't support these options.
                     linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-static-libgcc",
-                            "-static-libstdc++",
                             "-Wl,-Bdynamic", "-lpthread", "-s"
                 }
                 addEnvArgs("LDFLAGS", linker.args)
             } else if (toolChain in VisualCpp) {
                 usingVisualCpp = true
                 cppCompiler.define("GRPC_VERSION", version)
-                cppCompiler.args "/EHsc", "/MT"
+                cppCompiler.args "/EHsc", "/MT", "/std:c++17"
                 if (rootProject.hasProperty('vcProtobufInclude')) {
                     cppCompiler.args "/I${rootProject.vcProtobufInclude}"
-                }
-                linker.args "libprotobuf.lib", "libprotoc.lib"
+                } 
+                linker.args.add("libprotoc.lib")
+                linker.args.add("libprotobuf.lib")
                 if (rootProject.hasProperty('vcProtobufLibs')) {
-                    linker.args "/LIBPATH:${rootProject.vcProtobufLibs}"
+                    String libsList = rootProject.property('vcProtobufLibs') as String
+                    libsList.split(',').each() { lib -> linker.args.add(lib) }
                 }
             }
         }
     }
-}
-
-configurations {
-    testLiteCompile
-}
-
-dependencies {
-    testCompile project(':grpc-protobuf'),
-            project(':grpc-stub'),
-            libraries.javax_annotation
-    testLiteCompile project(':grpc-protobuf-lite'),
-            project(':grpc-stub'),
-            libraries.javax_annotation
 }
 
 sourceSets {
@@ -142,22 +153,27 @@ sourceSets {
     }
 }
 
-compileTestJava {
+dependencies {
+    testImplementation project(':grpc-protobuf'),
+            project(':grpc-stub')
+    testLiteImplementation project(':grpc-protobuf-lite'),
+            project(':grpc-stub')
+}
+
+tasks.named("compileTestJava").configure {
+    options.errorprone.excludedPaths = ".*/build/generated/sources/proto/.*"
+}
+
+tasks.named("compileTestLiteJava").configure {
+    options.compilerArgs = compileTestJava.options.compilerArgs
     options.compilerArgs += [
         "-Xlint:-cast"
     ]
-    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
+    options.errorprone.excludedPaths = ".*/build/generated/sources/proto/.*"
 }
 
-compileTestLiteJava {
-    options.compilerArgs = compileTestJava.options.compilerArgs
-    // Protobuf-generated Lite produces quite a few warnings.
-    options.compilerArgs += [
-        "-Xlint:-rawtypes",
-        "-Xlint:-unchecked",
-        "-Xlint:-fallthrough"
-    ]
-    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
+tasks.named("checkstyleTestLite").configure {
+    enabled = false
 }
 
 protobuf {
@@ -165,39 +181,41 @@ protobuf {
         if (project.hasProperty('protoc')) {
             path = project.protoc
         } else {
-            artifact = "com.google.protobuf:protoc:${protocVersion}"
+            artifact = libs.protobuf.protoc.get()
         }
     }
     plugins {
-        javalite {
-            if (project.hasProperty('protoc-gen-javalite')) {
-                path = project['protoc-gen-javalite']
-            } else {
-                artifact = libraries.protoc_lite
-            }
-        }
         grpc { path = javaPluginPath }
     }
     generateProtoTasks {
-        all().each { task ->
-            task.dependsOn 'java_pluginExecutable'
-            task.inputs.file javaPluginPath
+        all().configureEach {
+            dependsOn 'java_pluginExecutable'
+            inputs.file javaPluginPath
         }
-        ofSourceSet('test')*.plugins { grpc {} }
-        ofSourceSet('testLite')*.each { task ->
-            task.builtins { remove java }
-            task.plugins {
-                javalite {}
-                grpc { option 'lite' }
+        ofSourceSet('test').configureEach {
+            plugins {
+                grpc {
+                    option '@generated=javax'
+                }
+            }
+        }
+        ofSourceSet('testLite').configureEach {
+            builtins {
+                java { option 'lite' }
+            }
+            plugins {
+                grpc {
+                    option 'lite'
+                }
             }
         }
     }
 }
 
-println "*** Building codegen requires Protobuf version ${protocVersion}"
+println "*** Building codegen requires Protobuf"
 println "*** Please refer to https://github.com/grpc/grpc-java/blob/master/COMPILING.md#how-to-build-code-generation-plugin"
 
-task buildArtifacts(type: Copy) {
+tasks.register("buildArtifacts", Copy) {
     dependsOn 'java_pluginExecutable'
     from("$buildDir/exe") {
         if (osdetector.os != 'windows') {
@@ -207,9 +225,11 @@ task buildArtifacts(type: Copy) {
     into artifactStagingPath
 }
 
-archivesBaseName = "$protocPluginBaseName"
+base {
+    archivesName = "$protocPluginBaseName"
+}
 
-task checkArtifacts {
+def checkArtifacts = tasks.register("checkArtifacts") {
     dependsOn buildArtifacts
     doLast {
         if (!usingVisualCpp) {
@@ -231,9 +251,10 @@ task checkArtifacts {
             if (ret.exitValue != 0) {
                 throw new GradleException("dumpbin exited with " + ret.exitValue)
             }
-            def dlls = os.toString() =~ /Image has the following dependencies:\s+(.*)\s+Summary/
-            if (dlls[0][1] != "KERNEL32.dll") {
-                throw new Exception("unexpected dll deps: " + dlls[0][1]);
+            def dlls_match_results = os.toString() =~ /Image has the following dependencies:([\S\s]*)Summary/
+            def dlls =  dlls_match_results[0][1].trim().split("\\s+").sort()
+            if (dlls != ["KERNEL32.dll", "dbghelp.dll"]) {
+                throw new Exception("unexpected dll deps: " + dlls);
             }
             os.reset()
             ret = exec {
@@ -277,26 +298,38 @@ publishing {
     }
 }
 
-def configureTestTask(Task task, String dep, String extraPackage, String serviceName) {
-    test.dependsOn task
+def configureTestTask(Task task, String dep, String serviceName) {
+    def genDir = files(tasks.named("generateTest${dep}Proto")).singleFile
+    def genFile = "${genDir}/grpc/io/grpc/testing/compiler/${serviceName}Grpc.java"
     task.dependsOn "generateTest${dep}Proto"
+    task.inputs.file genFile
     if (osdetector.os != 'windows') {
         task.executable "diff"
         task.args "-u"
     } else {
         task.executable "fc"
     }
-    // File isn't found on Windows if last slash is forward-slash
-    def slash = System.getProperty("file.separator")
-    task.args "$buildDir/generated/source/proto/test${dep}/grpc/io/grpc/testing/compiler${extraPackage}${slash}${serviceName}Grpc.java",
-            "$projectDir/src/test${dep}/golden/${serviceName}.java.txt"
+    task.args layout.projectDirectory.file("src/test${dep}/golden/${serviceName}.java.txt")
+    task.args genFile
+    // Register an output to allow up-to-date checking
+    task.outputs.file(layout.buildDirectory.file(task.name))
 }
 
-task testGolden(type: Exec)
-task testLiteGolden(type: Exec)
-task testDeprecatedGolden(type: Exec)
-task testDeprecatedLiteGolden(type: Exec)
-configureTestTask(testGolden, '', '', 'TestService')
-configureTestTask(testLiteGolden, 'Lite', '', 'TestService')
-configureTestTask(testDeprecatedGolden, '', '', 'TestDeprecatedService')
-configureTestTask(testDeprecatedLiteGolden, 'Lite', '', 'TestDeprecatedService')
+def testGolden = tasks.register("testGolden", Exec) {
+    configureTestTask(it, '', 'TestService')
+}
+def testLiteGolden = tasks.register("testLiteGolden", Exec) {
+    configureTestTask(it, 'Lite', 'TestService')
+}
+def testDeprecatedGolden = tasks.register("testDeprecatedGolden", Exec) {
+    configureTestTask(it, '', 'TestDeprecatedService')
+}
+def testDeprecatedLiteGolden = tasks.register("testDeprecatedLiteGolden", Exec) {
+    configureTestTask(it, 'Lite', 'TestDeprecatedService')
+}
+tasks.named("test").configure {
+    dependsOn testGolden
+    dependsOn testLiteGolden
+    dependsOn testDeprecatedGolden
+    dependsOn testDeprecatedLiteGolden
+}

@@ -43,6 +43,7 @@ public class StatusTest {
   @Test
   public void impossibleCodeValue() {
     assertEquals(Code.UNKNOWN, Status.fromCodeValue(-1).getCode());
+    assertEquals(Code.UNKNOWN, Status.fromCodeValue(17).getCode());
   }
 
   @Test

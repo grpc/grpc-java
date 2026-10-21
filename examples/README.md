@@ -1,12 +1,12 @@
-grpc Examples
+gRPC Examples
 ==============================================
 
-The examples require grpc-java to already be built. You are strongly encouraged
-to check out a git release tag, since there will already be a build of grpc
+The examples require `grpc-java` to already be built. You are strongly encouraged
+to check out a git release tag, since there will already be a build of gRPC
 available. Otherwise you must follow [COMPILING](../COMPILING.md).
 
 You may want to read through the
-[Quick Start Guide](https://grpc.io/docs/quickstart/java.html)
+[Quick Start](https://grpc.io/docs/languages/java/quickstart)
 before trying out the examples.
 
 ## Basic examples
@@ -23,15 +23,41 @@ before trying out the examples.
 
 - [Flow control](src/main/java/io/grpc/examples/manualflowcontrol)
 
+- [Wait For Ready](src/main/java/io/grpc/examples/waitforready)
+
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
-- [Google Authentication](example-gauth/GOOGLE_AUTH_EXAMPLE.md)
+- [Hedging example](src/main/java/io/grpc/examples/hedging)
 
-### To build the examples
+- [Retrying example](src/main/java/io/grpc/examples/retrying)
+
+- [Health Service example](src/main/java/io/grpc/examples/healthservice)
+
+- [Keep Alive](src/main/java/io/grpc/examples/keepalive)
+
+- [Cancellation](src/main/java/io/grpc/examples/cancellation)
+
+- [Custom Load Balance](src/main/java/io/grpc/examples/customloadbalance)
+
+- [Deadline](src/main/java/io/grpc/examples/deadline)
+
+- [Error Details](src/main/java/io/grpc/examples/errordetails)
+
+- [GRPC Proxy](src/main/java/io/grpc/examples/grpcproxy)
+
+- [Load Balance](src/main/java/io/grpc/examples/loadbalance)
+
+- [Multiplex](src/main/java/io/grpc/examples/multiplex)
+
+- [Name Resolve](src/main/java/io/grpc/examples/nameresolve)
+
+- [Pre-Serialized Messages](src/main/java/io/grpc/examples/preserialized)
+
+### <a name="to-build-the-examples"></a> To build the examples
 
 1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
 
-2. Run in this directory:
+2. From grpc-java/examples directory:
 ```
 $ ./gradlew installDist
 ```
@@ -55,9 +81,8 @@ $ ./build/install/examples/bin/hello-world-client
 
 That's it!
 
-Please refer to gRPC Java's [README](../README.md) and
-[tutorial](https://grpc.io/docs/tutorials/basic/java.html) for more
-information.
+For more information, refer to gRPC Java's [README](../README.md) and
+[tutorial](https://grpc.io/docs/languages/java/basics).
 
 ### Maven
 
@@ -94,21 +119,27 @@ $ bazel-bin/hello-world-client
 
   + [ALTS examples](example-alts)
 
-- [Kotlin examples](example-kotlin)
+- [Google Authentication](example-gauth)
 
-- [Kotlin Android examples](example-kotlin/android)
+- [JWT-based Authentication](example-jwt-auth)
+
+- [OAuth2-based Authentication](example-oauth)
+
+- [Pre-serialized messages](src/main/java/io/grpc/examples/preserialized)
 
 ## Unit test examples
 
 Examples for unit testing gRPC clients and servers are located in [examples/src/test](src/test).
 
-In general, we DO NOT allow overriding the client stub.
-We encourage users to leverage `InProcessTransport` as demonstrated in the examples to
-write unit tests. `InProcessTransport` is light-weight and runs the server
+In general, we DO NOT allow overriding the client stub and we DO NOT support mocking final methods
+in gRPC-Java library. Users should be cautious that using tools like PowerMock or
+[mockito-inline](https://search.maven.org/search?q=g:org.mockito%20a:mockito-inline) can easily
+break this rule of thumb. We encourage users to leverage `InProcessTransport` as demonstrated in the
+examples to write unit tests. `InProcessTransport` is light-weight and runs the server
 and client in the same process without any socket/TCP connection.
 
 Mocking the client stub provides a false sense of security when writing tests. Mocking stubs and responses
-allows for tests that don't map to reality, causing the tests to pass, but the system-under-test to fail. 
+allows for tests that don't map to reality, causing the tests to pass, but the system-under-test to fail.
 The gRPC client library is complicated, and accurately reproducing that complexity with mocks is very hard.
 You will be better off and write less code by using `InProcessTransport` instead.
 
@@ -122,9 +153,9 @@ Example bugs not caught by mocked stub tests include:
 
 For testing a gRPC client, create the client with a real stub
 using an
-[InProcessChannel](../core/src/main/java/io/grpc/inprocess/InProcessChannelBuilder.java),
+[InProcessChannel](../inprocess/src/main/java/io/grpc/inprocess/InProcessChannelBuilder.java),
 and test it against an
-[InProcessServer](../core/src/main/java/io/grpc/inprocess/InProcessServerBuilder.java)
+[InProcessServer](../inprocess/src/main/java/io/grpc/inprocess/InProcessServerBuilder.java)
 with a mock/fake service implementation.
 
 For testing a gRPC server, create the server as an InProcessServer,

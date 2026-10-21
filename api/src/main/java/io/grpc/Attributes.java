@@ -22,7 +22,6 @@ import com.google.common.base.Objects;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -47,11 +46,13 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 public final class Attributes {
 
-  private final Map<Key<?>, Object> data;
+  private final IdentityHashMap<Key<?>, Object> data;
 
-  public static final Attributes EMPTY = new Attributes(Collections.<Key<?>, Object>emptyMap());
+  private static final IdentityHashMap<Key<?>, Object> EMPTY_MAP =
+      new IdentityHashMap<Key<?>, Object>();
+  public static final Attributes EMPTY = new Attributes(EMPTY_MAP);
 
-  private Attributes(Map<Key<?>, Object> data) {
+  private Attributes(IdentityHashMap<Key<?>, Object> data) {
     assert data != null;
     this.data = data;
   }
@@ -109,10 +110,12 @@ public final class Attributes {
   }
 
   /**
-   * Key for an key-value pair.
+   * Key for an key-value pair. Uses reference equality.
+   *
    * @param <T> type of the value in the key-value pair
    */
   @Immutable
+  @SuppressWarnings("UnusedTypeParameter")
   public static final class Key<T> {
     private final String debugString;
 
@@ -179,7 +182,7 @@ public final class Attributes {
     if (data.size() != that.data.size()) {
       return false;
     }
-    for (Entry<Key<?>, Object> e : data.entrySet()) {
+    for (Map.Entry<Key<?>, Object> e : data.entrySet()) {
       if (!that.data.containsKey(e.getKey())) {
         return false;
       }
@@ -202,7 +205,7 @@ public final class Attributes {
   @Override
   public int hashCode() {
     int hashCode = 0;
-    for (Entry<Key<?>, Object> e : data.entrySet()) {
+    for (Map.Entry<Key<?>, Object> e : data.entrySet()) {
       hashCode += Objects.hashCode(e.getKey(), e.getValue());
     }
     return hashCode;
@@ -212,18 +215,22 @@ public final class Attributes {
    * The helper class to build an Attributes instance.
    */
   public static final class Builder {
+    // Exactly one of base and newdata will be set
     private Attributes base;
-    private Map<Key<?>, Object> newdata;
+    private IdentityHashMap<Key<?>, Object> newdata;
 
     private Builder(Attributes base) {
       assert base != null;
       this.base = base;
     }
 
-    private Map<Key<?>, Object> data(int size) {
+    private IdentityHashMap<Key<?>, Object> data(int size) {
       if (newdata == null) {
-        newdata = new IdentityHashMap<>(size);
+        newdata = new IdentityHashMap<>(base.data.size() + size);
+        newdata.putAll(base.data);
+        base = null;
       }
+      assert base == null;
       return newdata;
     }
 
@@ -233,20 +240,18 @@ public final class Attributes {
     }
 
     /**
-     * Removes the key and associated value from the attribtues.
+     * Removes the key and associated value from the attributes.
      *
      * @since 1.22.0
      * @param key The key to remove
      * @return this
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5777")
     public <T> Builder discard(Key<T> key) {
-      if (base.data.containsKey(key)) {
-        Map<Key<?>, Object> newBaseData = new IdentityHashMap<>(base.data);
-        newBaseData.remove(key);
-        base = new Attributes(newBaseData);
-      }
-      if (newdata != null) {
+      if (base != null) {
+        if (base.data.containsKey(key)) {
+          data(0).remove(key);
+        }
+      } else {
         newdata.remove(key);
       }
       return this;
@@ -262,11 +267,6 @@ public final class Attributes {
      */
     public Attributes build() {
       if (newdata != null) {
-        for (Entry<Key<?>, Object> entry : base.data.entrySet()) {
-          if (!newdata.containsKey(entry.getKey())) {
-            newdata.put(entry.getKey(), entry.getValue());
-          }
-        }
         base = new Attributes(newdata);
         newdata = null;
       }

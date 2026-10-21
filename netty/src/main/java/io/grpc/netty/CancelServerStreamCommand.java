@@ -27,10 +27,23 @@ import io.grpc.Status;
 final class CancelServerStreamCommand extends WriteQueue.AbstractQueuedCommand {
   private final NettyServerStream.TransportState stream;
   private final Status reason;
+  private final PeerNotify peerNotify;
 
-  CancelServerStreamCommand(NettyServerStream.TransportState stream, Status reason) {
+  private CancelServerStreamCommand(
+          NettyServerStream.TransportState stream, Status reason, PeerNotify peerNotify) {
     this.stream = Preconditions.checkNotNull(stream, "stream");
     this.reason = Preconditions.checkNotNull(reason, "reason");
+    this.peerNotify = Preconditions.checkNotNull(peerNotify, "peerNotify");
+  }
+
+  static CancelServerStreamCommand withReset(
+          NettyServerStream.TransportState stream, Status reason) {
+    return new CancelServerStreamCommand(stream, reason, PeerNotify.RESET);
+  }
+
+  static CancelServerStreamCommand withReason(
+          NettyServerStream.TransportState stream, Status reason) {
+    return new CancelServerStreamCommand(stream, reason, PeerNotify.BEST_EFFORT_STATUS);
   }
 
   NettyServerStream.TransportState stream() {
@@ -39,6 +52,10 @@ final class CancelServerStreamCommand extends WriteQueue.AbstractQueuedCommand {
 
   Status reason() {
     return reason;
+  }
+
+  boolean wantsHeaders() {
+    return peerNotify == PeerNotify.BEST_EFFORT_STATUS;
   }
 
   @Override
@@ -52,13 +69,14 @@ final class CancelServerStreamCommand extends WriteQueue.AbstractQueuedCommand {
 
     CancelServerStreamCommand that = (CancelServerStreamCommand) o;
 
-    return Objects.equal(this.stream, that.stream)
-        && Objects.equal(this.reason, that.reason);
+    return this.stream.equals(that.stream)
+        && this.reason.equals(that.reason)
+        && this.peerNotify.equals(that.peerNotify);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(stream, reason);
+    return Objects.hashCode(stream, reason, peerNotify);
   }
 
   @Override
@@ -66,6 +84,14 @@ final class CancelServerStreamCommand extends WriteQueue.AbstractQueuedCommand {
     return MoreObjects.toStringHelper(this)
         .add("stream", stream)
         .add("reason", reason)
+        .add("peerNotify", peerNotify)
         .toString();
+  }
+
+  private enum PeerNotify {
+    /** Notify the peer by sending a RST_STREAM with no other information. */
+    RESET,
+    /** Notify the peer about the {@link #reason} by sending structured headers, if possible. */
+    BEST_EFFORT_STATUS,
   }
 }

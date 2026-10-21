@@ -20,17 +20,24 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
+import io.perfmark.TaskCloseable;
 import java.io.InputStream;
-import javax.annotation.concurrent.GuardedBy;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * The stream and stream state as used by the application. Must only be called from the sending
  * application thread.
  */
 public abstract class AbstractStream implements Stream {
+  private static final Logger log = Logger.getLogger(AbstractStream.class.getName());
+
   /** The framer to use for sending messages. */
   protected abstract Framer framer();
 
@@ -41,8 +48,18 @@ public abstract class AbstractStream implements Stream {
   protected abstract TransportState transportState();
 
   @Override
+  public void optimizeForDirectExecutor() {
+    transportState().optimizeForDirectExecutor();
+  }
+
+  @Override
   public final void setMessageCompression(boolean enable) {
     framer().setMessageCompression(enable);
+  }
+
+  @Override
+  public final void request(int numMessages) {
+    transportState().requestMessagesFromDeframer(numMessages);
   }
 
   @Override
@@ -65,6 +82,19 @@ public abstract class AbstractStream implements Stream {
   }
 
   /**
+   * A hint to the stream that specifies how many bytes must be queued before
+   * {@link #isReady()} will return false. A stream may ignore this property if
+   * unsupported. This may only be set during stream initialization before
+   * any messages are set.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  protected void setOnReadyThreshold(int numBytes) {
+    transportState().setOnReadyThreshold(numBytes);
+  }
+
+  /**
    * Closes the underlying framer. Should be called when the outgoing stream is gracefully closed
    * (half closure on client; closure on server).
    */
@@ -79,9 +109,6 @@ public abstract class AbstractStream implements Stream {
 
   @Override
   public boolean isReady() {
-    if (framer().isClosed()) {
-      return false;
-    }
     return transportState().isReady();
   }
 
@@ -96,7 +123,7 @@ public abstract class AbstractStream implements Stream {
   }
 
   /**
-   * Stream state as used by the transport. This should only called from the transport thread
+   * Stream state as used by the transport. This should only be called from the transport thread
    * (except for private interactions with {@code AbstractStream}).
    */
   public abstract static class TransportState
@@ -112,6 +139,7 @@ public abstract class AbstractStream implements Stream {
     private final Object onReadyLock = new Object();
     private final StatsTraceContext statsTraceCtx;
     private final TransportTracer transportTracer;
+    private final MessageDeframer rawDeframer;
 
     /**
      * The number of bytes currently queued, waiting to be sent. When this falls below
@@ -132,23 +160,35 @@ public abstract class AbstractStream implements Stream {
     @GuardedBy("onReadyLock")
     private boolean deallocated;
 
+    @GuardedBy("onReadyLock")
+    private int onReadyThreshold;
+
+    @SuppressWarnings("this-escape")
     protected TransportState(
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer) {
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
       this.transportTracer = checkNotNull(transportTracer, "transportTracer");
-      deframer = new MessageDeframer(
+      this.rawDeframer = new MessageDeframer(
           this,
           Codec.Identity.NONE,
           maxMessageSize,
           statsTraceCtx,
           transportTracer);
+      // TODO(#7168): use MigratingThreadDeframer when enabling retry doesn't break.
+      deframer = this.rawDeframer;
+      onReadyThreshold = DEFAULT_ONREADY_THRESHOLD;
+    }
+
+    final void optimizeForDirectExecutor() {
+      rawDeframer.setListener(this);
+      deframer = rawDeframer;
     }
 
     protected void setFullStreamDecompressor(GzipInflatingBuffer fullStreamDecompressor) {
-      deframer.setFullStreamDecompressor(fullStreamDecompressor);
-      deframer = new ApplicationThreadDeframer(this, this, (MessageDeframer) deframer);
+      rawDeframer.setFullStreamDecompressor(fullStreamDecompressor);
+      deframer = new ApplicationThreadDeframer(this, this, rawDeframer);
     }
 
     final void setMaxInboundMessageSize(int maxSize) {
@@ -159,6 +199,20 @@ public abstract class AbstractStream implements Stream {
      * Override this method to provide a stream listener.
      */
     protected abstract StreamListener listener();
+
+    /**
+     * A hint to the stream that specifies how many bytes must be queued before
+     * {@link #isReady()} will return false. A stream may ignore this property if
+     * unsupported. This may only be set before any messages are sent.
+     *
+     * @param numBytes The number of bytes that must be queued. Must be a
+     *                 positive integer.
+     */
+    void setOnReadyThreshold(int numBytes) {
+      synchronized (onReadyLock) {
+        this.onReadyThreshold = numBytes;
+      }
+    }
 
     @Override
     public void messagesAvailable(StreamListener.MessageProducer producer) {
@@ -197,15 +251,38 @@ public abstract class AbstractStream implements Stream {
     }
 
     /**
-     * Called to request the given number of messages from the deframer. Must be called from the
-     * transport thread.
+     * Called to request the given number of messages from the deframer. May be called from any
+     * thread.
      */
-    public final void requestMessagesFromDeframer(final int numMessages) {
-      try {
-        deframer.request(numMessages);
-      } catch (Throwable t) {
-        deframeFailed(t);
+    private void requestMessagesFromDeframer(final int numMessages) {
+      if (deframer instanceof ThreadOptimizedDeframer) {
+        try (TaskCloseable ignore = PerfMark.traceTask("AbstractStream.request")) {
+          deframer.request(numMessages);
+        }
+        return;
       }
+      final Link link = PerfMark.linkOut();
+      class RequestRunnable implements Runnable {
+        @Override public void run() {
+          try (TaskCloseable ignore = PerfMark.traceTask("AbstractStream.request")) {
+            PerfMark.linkIn(link);
+            deframer.request(numMessages);
+          } catch (Throwable t) {
+            deframeFailed(t);
+          }
+        }
+      }
+
+      runOnTransportThread(new RequestRunnable());
+    }
+
+    /**
+     * Very rarely used. Prefer stream.request() instead of this; this method is only necessary if
+     * a stream is not available.
+     */
+    @VisibleForTesting
+    public final void requestMessagesFromDeframerForTesting(int numMessages) {
+      requestMessagesFromDeframer(numMessages);
     }
 
     public final StatsTraceContext getStatsTraceContext() {
@@ -218,7 +295,7 @@ public abstract class AbstractStream implements Stream {
 
     private boolean isReady() {
       synchronized (onReadyLock) {
-        return allocated && numSentBytesQueued < DEFAULT_ONREADY_THRESHOLD && !deallocated;
+        return allocated && numSentBytesQueued < onReadyThreshold && !deallocated;
       }
     }
 
@@ -250,6 +327,12 @@ public abstract class AbstractStream implements Stream {
       }
     }
 
+    protected boolean isStreamDeallocated() {
+      synchronized (onReadyLock) {
+        return deallocated;
+      }
+    }
+
     /**
      * Event handler to be called by the subclass when a number of bytes are being queued for
      * sending to the remote endpoint.
@@ -275,9 +358,9 @@ public abstract class AbstractStream implements Stream {
       synchronized (onReadyLock) {
         checkState(allocated,
             "onStreamAllocated was not called, but it seems the stream is active");
-        boolean belowThresholdBefore = numSentBytesQueued < DEFAULT_ONREADY_THRESHOLD;
+        boolean belowThresholdBefore = numSentBytesQueued < onReadyThreshold;
         numSentBytesQueued -= numBytes;
-        boolean belowThresholdAfter = numSentBytesQueued < DEFAULT_ONREADY_THRESHOLD;
+        boolean belowThresholdAfter = numSentBytesQueued < onReadyThreshold;
         doNotify = !belowThresholdBefore && belowThresholdAfter;
       }
       if (doNotify) {
@@ -293,6 +376,12 @@ public abstract class AbstractStream implements Stream {
       boolean doNotify;
       synchronized (onReadyLock) {
         doNotify = isReady();
+        if (!doNotify && log.isLoggable(Level.FINEST)) {
+          log.log(Level.FINEST,
+              "Stream not ready so skip notifying listener.\n"
+                  + "details: allocated/deallocated:{0}/{3}, sent queued: {1}, ready thresh: {2}",
+              new Object[] {allocated, numSentBytesQueued, onReadyThreshold, deallocated});
+        }
       }
       if (doNotify) {
         listener().onReady();

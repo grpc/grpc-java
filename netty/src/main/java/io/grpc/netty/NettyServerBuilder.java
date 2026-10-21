@@ -18,60 +18,72 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
+import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.errorprone.annotations.CheckReturnValue;
+import com.google.errorprone.annotations.InlineMe;
+import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
+import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
+import io.grpc.ServerBuilder;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
-import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.InternalServer;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.ServerImplBuilder;
+import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.SharedResourcePool;
+import io.grpc.internal.TransportTracer;
+import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
+import io.netty.util.AsciiString;
 import java.io.File;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.annotation.CheckReturnValue;
-import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 
 /**
  * A builder to help simplify the construction of a Netty-based GRPC server.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
-@CanIgnoreReturnValue
-public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
-  private static final Logger logger = Logger.getLogger(NettyServerBuilder.class.getName());
+@CheckReturnValue
+public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServerBuilder> {
 
-  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
+  // 1MiB
+  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
 
   static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
   static final long MAX_CONNECTION_AGE_NANOS_DISABLED = Long.MAX_VALUE;
   static final long MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE = Long.MAX_VALUE;
+  static final int MAX_RST_COUNT_DISABLED = 0;
 
-  private static final long MIN_KEEPALIVE_TIME_NANO = TimeUnit.MILLISECONDS.toNanos(1L);
-  private static final long MIN_KEEPALIVE_TIMEOUT_NANO = TimeUnit.MICROSECONDS.toNanos(499L);
   private static final long MIN_MAX_CONNECTION_IDLE_NANO = TimeUnit.SECONDS.toNanos(1L);
   private static final long MIN_MAX_CONNECTION_AGE_NANO = TimeUnit.SECONDS.toNanos(1L);
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
@@ -80,26 +92,38 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private static final ObjectPool<? extends EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL =
       SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
 
+  private final ServerImplBuilder serverImplBuilder;
   private final List<SocketAddress> listenAddresses = new ArrayList<>();
-  private Class<? extends ServerChannel> channelType = null;
+
+  private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
+  private ChannelFactory<? extends ServerChannel> channelFactory =
+      Utils.DEFAULT_SERVER_CHANNEL_FACTORY;
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
+  private final Map<ChannelOption<?>, Object> childChannelOptions = new HashMap<>();
   private ObjectPool<? extends EventLoopGroup> bossEventLoopGroupPool =
       DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
   private ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool =
       DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
-  private SslContext sslContext;
-  private ProtocolNegotiator protocolNegotiator;
+  private boolean forceHeapBuffer;
+  private ProtocolNegotiator.ServerFactory protocolNegotiatorFactory;
+  private final boolean freezeProtocolNegotiatorFactory;
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
+  private boolean autoFlowControl = true;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
+  private final Set<AsciiString> neverIndexedMetadataKeys = new HashSet<>();
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
-  private long keepAliveTimeInNanos =  DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
+  private int softLimitHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
+  private long keepAliveTimeInNanos = DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
   private long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
   private long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private boolean permitKeepAliveWithoutCalls;
-  private long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
+  private long permitKeepAliveTimeInNanos = DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
+  private int maxRstCount;
+  private long maxRstPeriodNanos;
+  private Attributes eagAttributes = Attributes.EMPTY;
 
   /**
    * Creates a server builder that will bind to the given port.
@@ -107,9 +131,18 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @param port the port on which the server is to be bound.
    * @return the server builder.
    */
-  @CheckReturnValue
   public static NettyServerBuilder forPort(int port) {
-    return new NettyServerBuilder(port);
+    return forAddress(new InetSocketAddress(port));
+  }
+
+  /**
+   * Creates a server builder that will bind to the given port.
+   *
+   * @param port the port on which the server is to be bound.
+   * @return the server builder.
+   */
+  public static NettyServerBuilder forPort(int port, ServerCredentials creds) {
+    return forAddress(new InetSocketAddress(port), creds);
   }
 
   /**
@@ -118,19 +151,51 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @param address the socket address on which the server is to be bound.
    * @return the server builder
    */
-  @CheckReturnValue
   public static NettyServerBuilder forAddress(SocketAddress address) {
     return new NettyServerBuilder(address);
   }
 
-  @CheckReturnValue
-  private NettyServerBuilder(int port) {
-    this.listenAddresses.add(new InetSocketAddress(port));
+  /**
+   * Creates a server builder configured with the given {@link SocketAddress}.
+   *
+   * @param address the socket address on which the server is to be bound.
+   * @return the server builder
+   */
+  public static NettyServerBuilder forAddress(SocketAddress address, ServerCredentials creds) {
+    ProtocolNegotiators.FromServerCredentialsResult result = ProtocolNegotiators.from(creds);
+    if (result.error != null) {
+      throw new IllegalArgumentException(result.error);
+    }
+    return new NettyServerBuilder(address, result.negotiator);
   }
 
-  @CheckReturnValue
+  private final class NettyClientTransportServersBuilder implements ClientTransportServersBuilder {
+    @Override
+    public InternalServer buildClientTransportServers(
+        List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+        MetricRecorder metricRecorder) {
+      return buildTransportServers(streamTracerFactories, metricRecorder);
+    }
+  }
+
   private NettyServerBuilder(SocketAddress address) {
+    serverImplBuilder = new ServerImplBuilder(new NettyClientTransportServersBuilder());
     this.listenAddresses.add(address);
+    this.protocolNegotiatorFactory = ProtocolNegotiators.serverPlaintextFactory();
+    this.freezeProtocolNegotiatorFactory = false;
+  }
+
+  NettyServerBuilder(SocketAddress address, ProtocolNegotiator.ServerFactory negotiatorFactory) {
+    serverImplBuilder = new ServerImplBuilder(new NettyClientTransportServersBuilder());
+    this.listenAddresses.add(address);
+    this.protocolNegotiatorFactory = checkNotNull(negotiatorFactory, "negotiatorFactory");
+    this.freezeProtocolNegotiatorFactory = true;
+  }
+
+  @Internal
+  @Override
+  protected ServerBuilder<?> delegate() {
+    return serverImplBuilder;
   }
 
   /**
@@ -138,22 +203,50 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * addresses are compatible with the Netty channel type, and that they don't conflict with each
    * other.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder addListenAddress(SocketAddress listenAddress) {
     this.listenAddresses.add(checkNotNull(listenAddress, "listenAddress"));
     return this;
   }
 
   /**
-   * Specify the channel type to use, by default we use {@link NioServerSocketChannel} or {@code
-   * EpollServerSocketChannel}.
+   * Specifies the channel type to use, by default we use {@code EpollServerSocketChannel} if
+   * available, otherwise using {@link NioServerSocketChannel}.
+   *
+   * <p>You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
+   * {@link ServerChannel} implementation has no no-args constructor.
+   *
+   * <p>It's an optional parameter. If the user has not provided an Channel type or ChannelFactory
+   * when the channel is built, the builder will use the default one which is static.
    *
    * <p>You must also provide corresponding {@link EventLoopGroup} using {@link
    * #workerEventLoopGroup(EventLoopGroup)} and {@link #bossEventLoopGroup(EventLoopGroup)}. For
    * example, {@link NioServerSocketChannel} must use {@link
    * io.netty.channel.nio.NioEventLoopGroup}, otherwise your server won't start.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder channelType(Class<? extends ServerChannel> channelType) {
-    this.channelType = Preconditions.checkNotNull(channelType, "channelType");
+    checkNotNull(channelType, "channelType");
+    return channelFactory(new ReflectiveChannelFactory<>(channelType));
+  }
+
+  /**
+   * Specifies the {@link ChannelFactory} to create {@link ServerChannel} instances. This method is
+   * usually only used if the specific {@code ServerChannel} requires complex logic which requires
+   * additional information to create the {@code ServerChannel}. Otherwise, recommend to use {@link
+   * #channelType(Class)}.
+   *
+   * <p>It's an optional parameter. If the user has not provided an Channel type or ChannelFactory
+   * when the channel is built, the builder will use the default one which is static.
+   *
+   * <p>You must also provide corresponding {@link EventLoopGroup} using {@link
+   * #workerEventLoopGroup(EventLoopGroup)} and {@link #bossEventLoopGroup(EventLoopGroup)}. For
+   * example, if the factory creates {@link NioServerSocketChannel} you must use {@link
+   * io.netty.channel.nio.NioEventLoopGroup}, otherwise your server won't start.
+   */
+  @CanIgnoreReturnValue
+  public NettyServerBuilder channelFactory(ChannelFactory<? extends ServerChannel> channelFactory) {
+    this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     return this;
   }
 
@@ -161,10 +254,23 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * Specifies a channel option. As the underlying channel as well as network implementation may
    * ignore this value applications should consider it a hint.
    *
+   * @since 1.30.0
+   */
+  @CanIgnoreReturnValue
+  public <T> NettyServerBuilder withOption(ChannelOption<T> option, T value) {
+    this.channelOptions.put(option, value);
+    return this;
+  }
+
+  /**
+   * Specifies a child channel option. As the underlying channel as well as network implementation
+   * may ignore this value applications should consider it a hint.
+   *
    * @since 1.9.0
    */
+  @CanIgnoreReturnValue
   public <T> NettyServerBuilder withChildOption(ChannelOption<T> option, T value) {
-    this.channelOptions.put(option, value);
+    this.childChannelOptions.put(option, value);
     return this;
   }
 
@@ -191,6 +297,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * A simple solution to this problem is to call {@link io.grpc.Server#awaitTermination()} to
    * keep the main thread alive until the server has terminated.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder bossEventLoopGroup(EventLoopGroup group) {
     if (group != null) {
       return bossEventLoopGroupPool(new FixedObjectPool<>(group));
@@ -198,6 +305,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return bossEventLoopGroupPool(DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL);
   }
 
+  @CanIgnoreReturnValue
   NettyServerBuilder bossEventLoopGroupPool(
       ObjectPool<? extends EventLoopGroup> bossEventLoopGroupPool) {
     this.bossEventLoopGroupPool = checkNotNull(bossEventLoopGroupPool, "bossEventLoopGroupPool");
@@ -227,6 +335,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * A simple solution to this problem is to call {@link io.grpc.Server#awaitTermination()} to
    * keep the main thread alive until the server has terminated.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder workerEventLoopGroup(EventLoopGroup group) {
     if (group != null) {
       return workerEventLoopGroupPool(new FixedObjectPool<>(group));
@@ -234,6 +343,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return workerEventLoopGroupPool(DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL);
   }
 
+  @CanIgnoreReturnValue
   NettyServerBuilder workerEventLoopGroupPool(
       ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool) {
     this.workerEventLoopGroupPool =
@@ -242,56 +352,65 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
+   * Force using heap buffer when custom allocator is enabled.
+   */
+  void setForceHeapBuffer(boolean value) {
+    forceHeapBuffer = value;
+  }
+
+  /**
    * Sets the TLS context to use for encryption. Providing a context enables encryption. It must
    * have been configured with {@link GrpcSslContexts}, but options could have been overridden.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder sslContext(SslContext sslContext) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ServerCredentials");
     if (sslContext != null) {
       checkArgument(sslContext.isServer(),
           "Client SSL context can not be used for server");
       GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
+      protocolNegotiatorFactory = ProtocolNegotiators.serverTlsFactory(sslContext);
+    } else {
+      protocolNegotiatorFactory = ProtocolNegotiators.serverPlaintextFactory();
     }
-    this.sslContext = sslContext;
     return this;
   }
 
   /**
-   * Sets the {@link ProtocolNegotiator} to be used. If non-{@code null}, overrides the value
-   * specified in {@link #sslContext(SslContext)}.
-   *
-   * <p>Default: {@code null}.
+   * Sets the {@link ProtocolNegotiator} to be used. Overrides the value specified in {@link
+   * #sslContext(SslContext)}.
    */
+  @CanIgnoreReturnValue
   @Internal
-  public final NettyServerBuilder protocolNegotiator(
-          @Nullable ProtocolNegotiator protocolNegotiator) {
-    this.protocolNegotiator = protocolNegotiator;
+  public final NettyServerBuilder protocolNegotiator(ProtocolNegotiator protocolNegotiator) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ServerCredentials");
+    this.protocolNegotiatorFactory = ProtocolNegotiators.fixedServerFactory(protocolNegotiator);
     return this;
   }
 
-  @Override
-  protected void setTracingEnabled(boolean value) {
-    super.setTracingEnabled(value);
+  void setTracingEnabled(boolean value) {
+    this.serverImplBuilder.setTracingEnabled(value);
   }
 
-  @Override
-  protected void setStatsEnabled(boolean value) {
-    super.setStatsEnabled(value);
+  void setStatsEnabled(boolean value) {
+    this.serverImplBuilder.setStatsEnabled(value);
   }
 
-  @Override
-  protected void setStatsRecordStartedRpcs(boolean value) {
-    super.setStatsRecordStartedRpcs(value);
+  void setStatsRecordStartedRpcs(boolean value) {
+    this.serverImplBuilder.setStatsRecordStartedRpcs(value);
   }
 
-  @Override
-  protected void setStatsRecordRealTimeMetrics(boolean value) {
-    super.setStatsRecordRealTimeMetrics(value);
+  void setStatsRecordRealTimeMetrics(boolean value) {
+    this.serverImplBuilder.setStatsRecordRealTimeMetrics(value);
   }
 
   /**
    * The maximum number of concurrent calls permitted for each incoming connection. Defaults to no
    * limit.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder maxConcurrentCallsPerConnection(int maxCalls) {
     checkArgument(maxCalls > 0, "max must be positive: %s", maxCalls);
     this.maxConcurrentCallsPerConnection = maxCalls;
@@ -299,12 +418,68 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Sets the HTTP/2 flow control window. If not called, the default value
-   * is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
+   * Sets the initial flow control window in bytes. Setting initial flow control window enables auto
+   * flow control tuning using bandwidth-delay product algorithm. To disable auto flow control
+   * tuning, use {@link #flowControlWindow(int)}. By default, auto flow control is enabled with
+   * initial flow control window size of {@link #DEFAULT_FLOW_CONTROL_WINDOW}.
    */
+  @CanIgnoreReturnValue
+  public NettyServerBuilder initialFlowControlWindow(int initialFlowControlWindow) {
+    checkArgument(initialFlowControlWindow > 0, "initialFlowControlWindow must be positive");
+    this.flowControlWindow = initialFlowControlWindow;
+    this.autoFlowControl = true;
+    return this;
+  }
+
+  /**
+   * Sets the flow control window in bytes. Setting flowControlWindow disables auto flow control
+   * tuning; use {@link #initialFlowControlWindow(int)} to enable auto flow control tuning. If not
+   * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}) with auto flow control
+   * tuning.
+   */
+  @CanIgnoreReturnValue
   public NettyServerBuilder flowControlWindow(int flowControlWindow) {
-    checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
+    checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
+        flowControlWindow);
     this.flowControlWindow = flowControlWindow;
+    this.autoFlowControl = false;
+    return this;
+  }
+
+  /**
+   * Configures an outbound metadata key to use HPACK's never-indexed literal representation.
+   *
+   * <p>All values associated with the key's normalized name will be sent as literals and will not
+   * be added to the peer's HPACK dynamic table. This method is additive and may be called multiple
+   * times. Configuring the same normalized key name more than once has no additional effect. By
+   * default, no metadata keys are configured as never indexed.
+   *
+   * @since 1.84.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12999")
+  @CanIgnoreReturnValue
+  public NettyServerBuilder neverIndexMetadataKey(Metadata.Key<?> key) {
+    neverIndexedMetadataKeys.add(AsciiString.of(checkNotNull(key, "key").name()));
+    return this;
+  }
+
+  /**
+   * Configures outbound metadata keys to use HPACK's never-indexed literal representation.
+   *
+   * <p>This method is equivalent to calling {@link #neverIndexMetadataKey} for each key in {@code
+   * keys}. Duplicate normalized key names are ignored.
+   *
+   * @since 1.84.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12999")
+  @CanIgnoreReturnValue
+  public NettyServerBuilder neverIndexMetadataKeys(
+      Collection<? extends Metadata.Key<?>> keys) {
+    Set<AsciiString> normalizedKeys = new HashSet<>();
+    for (Metadata.Key<?> key : checkNotNull(keys, "keys")) {
+      normalizedKeys.add(AsciiString.of(checkNotNull(key, "key").name()));
+    }
+    neverIndexedMetadataKeys.addAll(normalizedKeys);
     return this;
   }
 
@@ -317,15 +492,18 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @deprecated Call {@link #maxInboundMessageSize} instead. This method will be removed in a
    *     future release.
    */
+  @CanIgnoreReturnValue
   @Deprecated
+  @InlineMe(replacement = "this.maxInboundMessageSize(maxMessageSize)")
   public NettyServerBuilder maxMessageSize(int maxMessageSize) {
     return maxInboundMessageSize(maxMessageSize);
   }
 
   /** {@inheritDoc} */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder maxInboundMessageSize(int bytes) {
-    checkArgument(bytes >= 0, "bytes must be >= 0");
+    checkArgument(bytes >= 0, "bytes must be non-negative: %s", bytes);
     this.maxMessageSize = bytes;
     return this;
   }
@@ -338,7 +516,9 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @deprecated Use {@link #maxInboundMetadataSize} instead
    */
+  @CanIgnoreReturnValue
   @Deprecated
+  @InlineMe(replacement = "this.maxInboundMetadataSize(maxHeaderListSize)")
   public NettyServerBuilder maxHeaderListSize(int maxHeaderListSize) {
     return maxInboundMetadataSize(maxHeaderListSize);
   }
@@ -354,10 +534,44 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @throws IllegalArgumentException if bytes is non-positive
    * @since 1.17.0
    */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder maxInboundMetadataSize(int bytes) {
-    checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
+    checkArgument(bytes > 0, "maxInboundMetadataSize must be positive: %s", bytes);
     this.maxHeaderListSize = bytes;
+    // Clear the soft limit setting, by setting soft limit to maxInboundMetadataSize. The
+    // maxInboundMetadataSize will take precedence over soft limit check.
+    this.softLimitHeaderListSize = bytes;
+    return this;
+  }
+
+  /**
+   * Sets the size of metadata that clients are advised to not exceed. When a metadata with size
+   * larger than the soft limit is encountered there will be a probability the RPC will fail. The
+   * chance of failing increases as the metadata size approaches the hard limit.
+   * {@code Integer.MAX_VALUE} disables the enforcement. The default is implementation-dependent,
+   * but is not generally less than 8 KiB and may be unlimited.
+   *
+   * <p>This is cumulative size of the metadata. The precise calculation is
+   * implementation-dependent, but implementations are encouraged to follow the calculation used
+   * for
+   * <a href="http://httpwg.org/specs/rfc7540.html#rfc.section.6.5.2">HTTP/2's
+   * SETTINGS_MAX_HEADER_LIST_SIZE</a>. It sums the bytes from each entry's key and value, plus 32
+   * bytes of overhead per entry.
+   *
+   * @param soft the soft size limit of received metadata
+   * @param max the hard size limit of received metadata
+   * @return this
+   * @throws IllegalArgumentException if soft and/or max is non-positive, or max smaller than soft
+   * @since 1.68.0
+   */
+  @CanIgnoreReturnValue
+  public NettyServerBuilder maxInboundMetadataSize(int soft, int max) {
+    checkArgument(soft > 0, "softLimitHeaderListSize must be positive: %s", soft);
+    checkArgument(max > soft,
+        "maxInboundMetadataSize: %s must be greater than softLimitHeaderListSize: %s", max, soft);
+    this.softLimitHeaderListSize = soft;
+    this.maxHeaderListSize = max;
     return this;
   }
 
@@ -368,17 +582,15 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
+  @Override
   public NettyServerBuilder keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
-    checkArgument(keepAliveTime > 0L, "keepalive time must be positive");
+    checkArgument(keepAliveTime > 0L, "keepalive time must be positive：%s", keepAliveTime);
     keepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
     keepAliveTimeInNanos = KeepAliveManager.clampKeepAliveTimeInNanos(keepAliveTimeInNanos);
     if (keepAliveTimeInNanos >= AS_LARGE_AS_INFINITE) {
       // Bump keepalive time to infinite. This disables keep alive.
       keepAliveTimeInNanos = SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
-    }
-    if (keepAliveTimeInNanos < MIN_KEEPALIVE_TIME_NANO) {
-      // Bump keepalive time.
-      keepAliveTimeInNanos = MIN_KEEPALIVE_TIME_NANO;
     }
     return this;
   }
@@ -389,15 +601,14 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
+  @Override
   public NettyServerBuilder keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
-    checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
+    checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive: %s",
+        keepAliveTimeout);
     keepAliveTimeoutInNanos = timeUnit.toNanos(keepAliveTimeout);
     keepAliveTimeoutInNanos =
         KeepAliveManager.clampKeepAliveTimeoutInNanos(keepAliveTimeoutInNanos);
-    if (keepAliveTimeoutInNanos < MIN_KEEPALIVE_TIMEOUT_NANO) {
-      // Bump keepalive timeout.
-      keepAliveTimeoutInNanos = MIN_KEEPALIVE_TIMEOUT_NANO;
-    }
     return this;
   }
 
@@ -410,8 +621,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.4.0
    */
+  @CanIgnoreReturnValue
+  @Override
   public NettyServerBuilder maxConnectionIdle(long maxConnectionIdle, TimeUnit timeUnit) {
-    checkArgument(maxConnectionIdle > 0L, "max connection idle must be positive");
+    checkArgument(maxConnectionIdle > 0L, "max connection idle must be positive: %s",
+        maxConnectionIdle);
     maxConnectionIdleInNanos = timeUnit.toNanos(maxConnectionIdle);
     if (maxConnectionIdleInNanos >= AS_LARGE_AS_INFINITE) {
       maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -430,8 +644,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
+  @Override
   public NettyServerBuilder maxConnectionAge(long maxConnectionAge, TimeUnit timeUnit) {
-    checkArgument(maxConnectionAge > 0L, "max connection age must be positive");
+    checkArgument(maxConnectionAge > 0L, "max connection age must be positive: %s",
+        maxConnectionAge);
     maxConnectionAgeInNanos = timeUnit.toNanos(maxConnectionAge);
     if (maxConnectionAgeInNanos >= AS_LARGE_AS_INFINITE) {
       maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
@@ -451,8 +668,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @see #maxConnectionAge(long, TimeUnit)
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
+  @Override
   public NettyServerBuilder maxConnectionAgeGrace(long maxConnectionAgeGrace, TimeUnit timeUnit) {
-    checkArgument(maxConnectionAgeGrace >= 0L, "max connection age grace must be non-negative");
+    checkArgument(maxConnectionAgeGrace >= 0L, "max connection age grace must be non-negative: %s",
+        maxConnectionAgeGrace);
     maxConnectionAgeGraceInNanos = timeUnit.toNanos(maxConnectionAgeGrace);
     if (maxConnectionAgeGraceInNanos >= AS_LARGE_AS_INFINITE) {
       maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
@@ -474,8 +694,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @see #permitKeepAliveWithoutCalls(boolean)
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
+  @Override
   public NettyServerBuilder permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
-    checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative");
+    checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative: %s",
+        keepAliveTime);
     permitKeepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
     return this;
   }
@@ -487,98 +710,135 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @see #permitKeepAliveTime(long, TimeUnit)
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
+  @Override
   public NettyServerBuilder permitKeepAliveWithoutCalls(boolean permit) {
     permitKeepAliveWithoutCalls = permit;
     return this;
   }
 
-  @Override
-  @CheckReturnValue
-  protected List<NettyServer> buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-    ProtocolNegotiator negotiator = protocolNegotiator;
-    if (negotiator == null) {
-      negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
-              ProtocolNegotiators.serverPlaintext();
+  /**
+   * Limits the rate of incoming RST_STREAM frames per connection to maxRstStream per
+   * secondsPerWindow. When exceeded on a connection, the connection is closed. This can reduce the
+   * impact of an attacker continually resetting RPCs before they complete, when combined with TLS
+   * and {@link #maxConcurrentCallsPerConnection(int)}.
+   *
+   * <p>gRPC clients send RST_STREAM when they cancel RPCs, so some RST_STREAMs are normal and
+   * setting this too low can cause errors for legimitate clients.
+   *
+   * <p>By default there is no limit.
+   *
+   * @param maxRstStream the positive limit of RST_STREAM frames per connection per period, or
+   *     {@code Integer.MAX_VALUE} for unlimited
+   * @param secondsPerWindow the positive number of seconds per period
+   */
+  @CanIgnoreReturnValue
+  public NettyServerBuilder maxRstFramesPerWindow(int maxRstStream, int secondsPerWindow) {
+    checkArgument(maxRstStream > 0, "maxRstStream must be positive");
+    checkArgument(secondsPerWindow > 0, "secondsPerWindow must be positive");
+    if (maxRstStream == Integer.MAX_VALUE) {
+      maxRstStream = MAX_RST_COUNT_DISABLED;
     }
-
-    Class<? extends ServerChannel> resolvedChannelType = channelType;
-    ObjectPool<? extends EventLoopGroup> resolvedBossGroupPool = bossEventLoopGroupPool;
-    ObjectPool<? extends EventLoopGroup> resolvedWorkerGroupPool = workerEventLoopGroupPool;
-
-    if (shouldFallBackToNio()) {
-      // TODO(jihuncho) throw exception if not groupOrChannelProvided after 1.22.0
-      // Use NIO based channel type and eventloop group for backward compatibility reason
-      logger.log(
-          Level.WARNING,
-          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or "
-              + "neither should be, otherwise server may not start. Missing values will use Nio "
-              + "(NioServerSocketChannel, NioEventLoopGroup) for backward compatibility. "
-              + "This will cause an Exception in the future.");
-      if (channelType == null) {
-        resolvedChannelType = NioServerSocketChannel.class;
-        logger.log(Level.FINE, "One or more EventLoopGroup is provided, but Channel type is "
-            + "missing. Fall back to NioServerSocketChannel.");
-      }
-      if (bossEventLoopGroupPool == DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL) {
-        resolvedBossGroupPool = SharedResourcePool.forResource(Utils.NIO_BOSS_EVENT_LOOP_GROUP);
-        logger.log(Level.FINE, "Channel type and/or WorkerEventLoopGroup is provided, but "
-            + "BossEventLoopGroup is missing. Fall back to NioEventLoopGroup.");
-      }
-      if (workerEventLoopGroupPool == DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL) {
-        resolvedWorkerGroupPool = SharedResourcePool.forResource(Utils.NIO_WORKER_EVENT_LOOP_GROUP);
-        logger.log(Level.FINE, "Channel type and/or BossEventLoopGroup is provided, but "
-            + "BossEventLoopGroup is missing. Fall back to NioEventLoopGroup.");
-      }
-    }
-    if (resolvedChannelType == null) {
-      resolvedChannelType = Utils.DEFAULT_SERVER_CHANNEL_TYPE;
-    }
-
-    List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
-    for (SocketAddress listenAddress : listenAddresses) {
-      NettyServer transportServer = new NettyServer(
-          listenAddress, resolvedChannelType, channelOptions, resolvedBossGroupPool,
-          resolvedWorkerGroupPool, negotiator, streamTracerFactories,
-          getTransportTracerFactory(), maxConcurrentCallsPerConnection, flowControlWindow,
-          maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-          maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
-          permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, getChannelz());
-      transportServers.add(transportServer);
-    }
-    return Collections.unmodifiableList(transportServers);
-  }
-
-  @VisibleForTesting
-  boolean shouldFallBackToNio() {
-    boolean hasNonDefault = channelType != null
-        || bossEventLoopGroupPool != DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL
-        || workerEventLoopGroupPool != DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
-    boolean hasDefault = channelType == null
-        || bossEventLoopGroupPool == DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL
-        || workerEventLoopGroupPool == DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
-    return hasNonDefault && hasDefault;
-  }
-
-  @Override
-  public NettyServerBuilder useTransportSecurity(File certChain, File privateKey) {
-    try {
-      sslContext = GrpcSslContexts.forServer(certChain, privateKey).build();
-    } catch (SSLException e) {
-      // This should likely be some other, easier to catch exception.
-      throw new RuntimeException(e);
-    }
+    this.maxRstCount = maxRstStream;
+    this.maxRstPeriodNanos = TimeUnit.SECONDS.toNanos(secondsPerWindow);
     return this;
   }
 
+  /** Sets the EAG attributes available to protocol negotiators. Not for general use. */
+  void eagAttributes(Attributes eagAttributes) {
+    this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
+  }
+
+  @VisibleForTesting
+  NettyServer buildTransportServers(
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      MetricRecorder metricRecorder) {
+    assertEventLoopsAndChannelType();
+
+    ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator(
+        this.serverImplBuilder.getExecutorPool());
+
+    return new NettyServer(
+        listenAddresses,
+        channelFactory,
+        channelOptions,
+        childChannelOptions,
+        bossEventLoopGroupPool,
+        workerEventLoopGroupPool,
+        forceHeapBuffer,
+        negotiator,
+        streamTracerFactories,
+        transportTracerFactory,
+        maxConcurrentCallsPerConnection,
+        autoFlowControl,
+        flowControlWindow,
+        neverIndexedMetadataKeys,
+        maxMessageSize,
+        maxHeaderListSize,
+        softLimitHeaderListSize,
+        keepAliveTimeInNanos,
+        keepAliveTimeoutInNanos,
+        maxConnectionIdleInNanos,
+        maxConnectionAgeInNanos,
+        maxConnectionAgeGraceInNanos,
+        permitKeepAliveWithoutCalls,
+        permitKeepAliveTimeInNanos,
+        maxRstCount,
+        maxRstPeriodNanos,
+        eagAttributes,
+        this.serverImplBuilder.getChannelz(),
+        metricRecorder);
+  }
+
+  @VisibleForTesting
+  void assertEventLoopsAndChannelType() {
+    boolean allProvided = channelFactory != Utils.DEFAULT_SERVER_CHANNEL_FACTORY
+        && bossEventLoopGroupPool != DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL
+        && workerEventLoopGroupPool != DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
+    boolean nonProvided = channelFactory == Utils.DEFAULT_SERVER_CHANNEL_FACTORY
+        && bossEventLoopGroupPool == DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL
+        && workerEventLoopGroupPool == DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
+    checkState(
+        allProvided || nonProvided,
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or "
+            + "neither should be");
+  }
+
+  @CanIgnoreReturnValue
+  NettyServerBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
+    this.transportTracerFactory = transportTracerFactory;
+    return this;
+  }
+
+  @CanIgnoreReturnValue
   @Override
-  public NettyServerBuilder useTransportSecurity(InputStream certChain, InputStream privateKey) {
+  public NettyServerBuilder useTransportSecurity(File certChain, File privateKey) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ServerCredentials");
+    SslContext sslContext;
     try {
       sslContext = GrpcSslContexts.forServer(certChain, privateKey).build();
     } catch (SSLException e) {
       // This should likely be some other, easier to catch exception.
       throw new RuntimeException(e);
     }
+    protocolNegotiatorFactory = ProtocolNegotiators.serverTlsFactory(sslContext);
+    return this;
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public NettyServerBuilder useTransportSecurity(InputStream certChain, InputStream privateKey) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ServerCredentials");
+    SslContext sslContext;
+    try {
+      sslContext = GrpcSslContexts.forServer(certChain, privateKey).build();
+    } catch (SSLException e) {
+      // This should likely be some other, easier to catch exception.
+      throw new RuntimeException(e);
+    }
+    protocolNegotiatorFactory = ProtocolNegotiators.serverTlsFactory(sslContext);
     return this;
   }
 }

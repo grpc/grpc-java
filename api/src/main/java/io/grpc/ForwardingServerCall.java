@@ -17,7 +17,7 @@
 package io.grpc;
 
 /**
- * A {@link ServerCall} which forwards all of it's methods to another {@link ServerCall}.
+ * A {@link ServerCall} which forwards all of its methods to another {@link ServerCall}.
  */
 public abstract class ForwardingServerCall<ReqT, RespT>
     extends PartialForwardingServerCall<ReqT, RespT> {
@@ -30,6 +30,11 @@ public abstract class ForwardingServerCall<ReqT, RespT>
   @Override
   public void sendMessage(RespT message) {
     delegate().sendMessage(message);
+  }
+
+  @Override
+  public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+    return delegate().getMethodDescriptor();
   }
 
   /**
@@ -48,11 +53,6 @@ public abstract class ForwardingServerCall<ReqT, RespT>
     @Override
     protected ServerCall<ReqT, RespT> delegate() {
       return delegate;
-    }
-
-    @Override
-    public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
-      return delegate.getMethodDescriptor();
     }
   }
 }

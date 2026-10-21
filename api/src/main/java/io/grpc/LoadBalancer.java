@@ -32,7 +32,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A pluggable component that receives resolved addresses from {@link NameResolver} and provides the
@@ -64,7 +63,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * allows implementations to schedule tasks to be run in the same Synchronization Context, with or
  * without a delay, thus those tasks don't need to worry about synchronizing with the balancer
  * methods.
- * 
+ *
  * <p>However, the actual running thread may be the network thread, thus the following rules must be
  * followed to prevent blocking or even dead-locking in a network:
  *
@@ -75,18 +74,19 @@ import javax.annotation.concurrent.ThreadSafe;
  *   synchronization primitives, blocking I/O, blocking RPCs, etc.</li>
  *
  *   <li><strong>Avoid calling into other components with lock held</strong>.  The Synchronization
- *   Context may be under a lock, e.g., the transport lock of OkHttp.  If your LoadBalancer has a
- *   lock, holds the lock in a callback method (e.g., {@link #handleSubchannelState
- *   handleSubchannelState()}) while calling into another class that may involve locks, be cautious
- *   of deadlock.  Generally you wouldn't need any locking in the LoadBalancer.</li>
+ *   Context may be under a lock, e.g., the transport lock of OkHttp.  If your LoadBalancer holds a
+ *   lock in a callback method (e.g., {@link #handleResolvedAddresses handleResolvedAddresses()})
+ *   while calling into another method that also involves locks, be cautious of deadlock.  Generally
+ *   you wouldn't need any locking in the LoadBalancer if you follow the canonical implementation
+ *   pattern below.</li>
  *
  * </ol>
  *
  * <h3>The canonical implementation pattern</h3>
  *
  * <p>A {@link LoadBalancer} keeps states like the latest addresses from NameResolver, the
- * Subchannel(s) and their latest connectivity states.  These states are mutated within the Channel
- * Executor.
+ * Subchannel(s) and their latest connectivity states.  These states are mutated within the
+ * Synchronization Context,
  *
  * <p>A typical {@link SubchannelPicker SubchannelPicker} holds a snapshot of these states.  It may
  * have its own states, e.g., a picker from a round-robin load-balancer may keep a pointer to the
@@ -95,9 +95,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * picker only needs to synchronize its own states, which is typically trivial to implement.
  *
  * <p>When the LoadBalancer states changes, e.g., Subchannels has become or stopped being READY, and
- * we want subsequent RPCs to use the latest list of READY Subchannels, LoadBalancer would create
- * a new picker, which holds a snapshot of the latest Subchannel list.  Refer to the javadoc of
- * {@link #handleSubchannelState handleSubchannelState()} how to do this properly.
+ * we want subsequent RPCs to use the latest list of READY Subchannels, LoadBalancer would create a
+ * new picker, which holds a snapshot of the latest Subchannel list.  Refer to the javadoc of {@link
+ * io.grpc.LoadBalancer.SubchannelStateListener#onSubchannelState onSubchannelState()} how to do
+ * this properly.
  *
  * <p>No synchronization should be necessary between LoadBalancer and its pickers if you follow
  * the pattern above.  It may be possible to implement in a different way, but that would usually
@@ -108,49 +109,98 @@ import javax.annotation.concurrent.ThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 @NotThreadSafe
 public abstract class LoadBalancer {
-  /**
-   * The load-balancing config converted from an JSON object injected by the GRPC library.
-   *
-   * <p>{@link NameResolver}s should not produce this attribute.
-   */
+
+  @Internal
   @NameResolver.ResolutionResultAttr
-  public static final Attributes.Key<Map<String, ?>> ATTR_LOAD_BALANCING_CONFIG =
-      Attributes.Key.create("io.grpc.LoadBalancer.loadBalancingConfig");
+  public static final Attributes.Key<Map<String, ?>> ATTR_HEALTH_CHECKING_CONFIG =
+      Attributes.Key.create("internal:health-checking-config");
+
+  @Internal
+  public static final LoadBalancer.CreateSubchannelArgs.Key<LoadBalancer.SubchannelStateListener>
+      HEALTH_CONSUMER_LISTENER_ARG_KEY =
+      LoadBalancer.CreateSubchannelArgs.Key.create("internal:health-check-consumer-listener");
+
+  @Internal
+  public static final LoadBalancer.CreateSubchannelArgs.Key<Boolean>
+      DISABLE_SUBCHANNEL_RECONNECT_KEY =
+      LoadBalancer.CreateSubchannelArgs.Key.createWithDefault(
+          "internal:disable-subchannel-reconnect", Boolean.FALSE);
+
+  @Internal
+  public static final Attributes.Key<Boolean>
+      HAS_HEALTH_PRODUCER_LISTENER_KEY =
+      Attributes.Key.create("internal:has-health-check-producer-listener");
+
+  public static final Attributes.Key<Boolean> IS_PETIOLE_POLICY =
+      Attributes.Key.create("io.grpc.IS_PETIOLE_POLICY");
 
   /**
-   * Handles newly resolved server groups and metadata attributes from name resolution system.
-   * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
-   * but may be flattened into a single list if needed.
+   * A picker that always returns an erring pick.
    *
-   * <p>Implementations should not modify the given {@code servers}.
-   *
-   * @param servers the resolved server addresses, never empty.
-   * @param attributes extra information from naming system.
-   * @deprecated override {@link #handleResolvedAddresses(ResolvedAddresses) instead}
-   * @since 1.2.0
+   * @deprecated Use {@code new FixedResultPicker(PickResult.withNoResult())} instead.
    */
   @Deprecated
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers,
-      @NameResolver.ResolutionResultAttr Attributes attributes) {
-    handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
-  }
+  public static final SubchannelPicker EMPTY_PICKER = new SubchannelPicker() {
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return PickResult.withNoResult();
+    }
+
+    @Override
+    public String toString() {
+      return "EMPTY_PICKER";
+    }
+  };
+
+  private int recursionCount;
 
   /**
-   * Handles newly resolved server groups and metadata attributes from name resolution system.
-   * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
-   * but may be flattened into a single list if needed.
-   *
-   * <p>Implementations should not modify the given {@code servers}.
+   * Handles newly resolved addresses and metadata attributes from name resolution system.
+   * Addresses in {@link EquivalentAddressGroup} should be considered equivalent but may be
+   * flattened into a single list if needed.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.21.0
+   *
+   * @deprecated  Use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
    */
-  @SuppressWarnings("deprecation")
+  @Deprecated
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    handleResolvedAddressGroups(
-        resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
+    if (recursionCount++ == 0) {
+      // Note that the information about the addresses actually being accepted will be lost
+      // if you rely on this method for backward compatibility.
+      acceptResolvedAddresses(resolvedAddresses);
+    }
+    recursionCount = 0;
+  }
+
+  /**
+   * Accepts newly resolved addresses from the name resolution system. The {@link
+   * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
+   * single list if needed.
+   *
+   * @param resolvedAddresses the resolved server addresses, attributes, and config
+   * @return {@code Status.OK} if the resolved addresses were accepted, otherwise an error to report
+   *     to the name resolver
+   *
+   * @since 1.49.0
+   */
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    if (resolvedAddresses.getAddresses().isEmpty()
+        && !canHandleEmptyAddressListFromNameResolution()) {
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+              "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+                      + ", attrs=" + resolvedAddresses.getAttributes());
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
+    } else {
+      if (recursionCount++ == 0) {
+        handleResolvedAddresses(resolvedAddresses);
+      }
+      recursionCount = 0;
+
+      return Status.OK;
+    }
   }
 
   /**
@@ -160,7 +210,7 @@ public abstract class LoadBalancer {
    *
    * @since 1.21.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
   public static final class ResolvedAddresses {
     private final List<EquivalentAddressGroup> addresses;
     @NameResolver.ResolutionResultAttr
@@ -287,8 +337,8 @@ public abstract class LoadBalancer {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("addresses", addresses)
-          .add("attributes", attributes)
           .add("loadBalancingPolicyConfig", loadBalancingPolicyConfig)
+          .add("attributes", attributes)
           .toString();
     }
 
@@ -344,14 +394,14 @@ public abstract class LoadBalancer {
   @Deprecated
   public void handleSubchannelState(
       Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-    // Do nothing.  If the implemetation doesn't implement this, it will get subchannel states from
+    // Do nothing.  If the implementation doesn't implement this, it will get subchannel states from
     // the new API.  We don't throw because there may be forwarding LoadBalancers still plumb this.
   }
 
   /**
-   * The channel asks the load-balancer to shutdown.  No more callbacks will be called after this
-   * method.  The implementation should shutdown all Subchannels and OOB channels, and do any other
-   * cleanup as necessary.
+   * The channel asks the load-balancer to shutdown.  No more methods on this class will be called
+   * after this method.  The implementation should shutdown all Subchannels and OOB channels, and do
+   * any other cleanup as necessary.
    *
    * @since 1.2.0
    */
@@ -366,7 +416,16 @@ public abstract class LoadBalancer {
    *
    * <p>This method should always return a constant value.  It's not specified when this will be
    * called.
+   *
+   * <p>Note that this method is only called when implementing {@code handleResolvedAddresses()}
+   * instead of {@code acceptResolvedAddresses()}.
+   *
+   * @deprecated Instead of overwriting this and {@code handleResolvedAddresses()}, only
+   *     overwrite {@code acceptResolvedAddresses()} which indicates if the addresses provided
+   *     by the name resolver are acceptable with the {@code boolean} return value.
    */
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return false;
   }
@@ -390,7 +449,6 @@ public abstract class LoadBalancer {
    *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class SubchannelPicker {
     /**
@@ -400,18 +458,6 @@ public abstract class LoadBalancer {
      * @since 1.3.0
      */
     public abstract PickResult pickSubchannel(PickSubchannelArgs args);
-
-    /**
-     * Tries to establish connections now so that the upcoming RPC may then just pick a ready
-     * connection without having to connect first.
-     *
-     * <p>No-op if unsupported.
-     *
-     * @deprecated override {@link LoadBalancer#requestConnection} instead.
-     * @since 1.11.0
-     */
-    @Deprecated
-    public void requestConnection() {}
   }
 
   /**
@@ -444,6 +490,29 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract MethodDescriptor<?, ?> getMethodDescriptor();
+
+    /**
+     * Gets an object that can be informed about what sort of pick was made.
+     */
+    @Internal
+    public PickDetailsConsumer getPickDetailsConsumer() {
+      return new PickDetailsConsumer() {};
+    }
+  }
+
+  /** Receives information about the pick being chosen. */
+  @Internal
+  public interface PickDetailsConsumer {
+    /**
+     * Optional labels that provide context of how the pick was routed. Particularly helpful for
+     * per-RPC metrics.
+     *
+     * @throws NullPointerException if key or value is {@code null}
+     */
+    default void addOptionalLabel(String key, String value) {
+      checkNotNull(key, "key");
+      checkNotNull(value, "value");
+    }
   }
 
   /**
@@ -477,21 +546,40 @@ public abstract class LoadBalancer {
     private final Status status;
     // True if the result is created by withDrop()
     private final boolean drop;
+    @Nullable private final String authorityOverride;
+    @Nullable private final String delayType;
+    @Nullable private final String delayReason;
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
         Status status, boolean drop) {
+      this(subchannel, streamTracerFactory, status, drop, null, null, null);
+    }
+
+    private PickResult(
+        @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
+        Status status, boolean drop, @Nullable String authorityOverride) {
+      this(subchannel, streamTracerFactory, status, drop, authorityOverride, null, null);
+    }
+
+    private PickResult(
+        @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
+        Status status, boolean drop, @Nullable String authorityOverride,
+        @Nullable String delayType, @Nullable String delayReason) {
       this.subchannel = subchannel;
       this.streamTracerFactory = streamTracerFactory;
       this.status = checkNotNull(status, "status");
       this.drop = drop;
+      this.authorityOverride = authorityOverride;
+      this.delayType = delayType;
+      this.delayReason = delayReason;
     }
 
     /**
      * A decision to proceed the RPC on a Subchannel.
      *
      * <p>The Subchannel should either be an original Subchannel returned by {@link
-     * Helper#createSubchannel Helper.createSubchannel()}, or a wrapper of it preferrably based on
+     * Helper#createSubchannel Helper.createSubchannel()}, or a wrapper of it preferably based on
      * {@code ForwardingSubchannel}.  At the very least its {@link Subchannel#getInternalSubchannel
      * getInternalSubchannel()} must return the same object as the one returned by the original.
      * Otherwise the Channel cannot use it for the RPC.
@@ -557,11 +645,26 @@ public abstract class LoadBalancer {
      *                            stream is created at all in some cases.
      * @since 1.3.0
      */
+    // TODO(shivaspeaks): Need to deprecate old APIs and create new ones,
+    // per https://github.com/grpc/grpc-java/issues/12662.
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory) {
       return new PickResult(
           checkNotNull(subchannel, "subchannel"), streamTracerFactory, Status.OK,
           false);
+    }
+
+    /**
+     * Same as {@code withSubchannel(subchannel, streamTracerFactory)} but with an authority name
+     * to override in the host header.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11656")
+    public static PickResult withSubchannel(
+        Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
+        @Nullable String authorityOverride) {
+      return new PickResult(
+          checkNotNull(subchannel, "subchannel"), streamTracerFactory, Status.OK,
+          false, authorityOverride);
     }
 
     /**
@@ -571,6 +674,30 @@ public abstract class LoadBalancer {
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return withSubchannel(subchannel, null);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code subchannel},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithSubchannel(Subchannel subchannel) {
+      return new PickResult(checkNotNull(subchannel, "subchannel"), streamTracerFactory,
+          status, drop, authorityOverride, delayType, delayReason);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code streamTracerFactory},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithStreamTracerFactory(
+        @Nullable ClientStreamTracer.Factory streamTracerFactory) {
+      return new PickResult(
+          subchannel, streamTracerFactory, status, drop, authorityOverride, delayType,
+          delayReason);
     }
 
     /**
@@ -605,6 +732,46 @@ public abstract class LoadBalancer {
      */
     public static PickResult withNoResult() {
       return NO_RESULT;
+    }
+
+    /**
+     * No decision could be made.  The RPC will stay buffered with a specific delay type and reason.
+     *
+     * @param delayType low-cardinality root cause label (e.g., "connecting")
+     * @param delayReason high-cardinality diagnostic string for trace events
+     * @since 1.86.0
+     */
+    public static PickResult withNoResult(String delayType, String delayReason) {
+      Preconditions.checkNotNull(delayType, "delayType");
+      Preconditions.checkNotNull(delayReason, "delayReason");
+      return new PickResult(null, null, Status.OK, false, null, delayType, delayReason);
+    }
+
+    /**
+     * Returns the delay type label if any.
+     *
+     * @since 1.86.0
+     */
+    @Nullable
+    public String getDelayType() {
+      return delayType;
+    }
+
+    /**
+     * Returns the diagnostic delay reason if any.
+     *
+     * @since 1.86.0
+     */
+    @Nullable
+    public String getDelayReason() {
+      return delayReason;
+    }
+
+    /** Returns the authority override if any. */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11656")
+    @Nullable
+    public String getAuthorityOverride() {
+      return authorityOverride;
     }
 
     /**
@@ -647,6 +814,13 @@ public abstract class LoadBalancer {
       return drop;
     }
 
+    /**
+     * Returns {@code true} if the pick was not created with {@link #withNoResult()}.
+     */
+    public boolean hasResult() {
+      return !(subchannel == null && status.isOk());
+    }
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
@@ -654,6 +828,7 @@ public abstract class LoadBalancer {
           .add("streamTracerFactory", streamTracerFactory)
           .add("status", status)
           .add("drop", drop)
+          .add("authority-override", authorityOverride)
           .toString();
     }
 
@@ -752,14 +927,16 @@ public abstract class LoadBalancer {
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
 
+      private static final Object[][] EMPTY_CUSTOM_OPTIONS = new Object[0][2];
+
       private List<EquivalentAddressGroup> addrs;
       private Attributes attrs = Attributes.EMPTY;
-      private Object[][] customOptions = new Object[0][2];
+      private Object[][] customOptions = EMPTY_CUSTOM_OPTIONS;
 
       Builder() {
       }
 
-      private <T> Builder copyCustomOptions(Object[][] options) {
+      private Builder copyCustomOptions(Object[][] options) {
         customOptions = new Object[options.length][2];
         System.arraycopy(options, 0, customOptions, 0, options.length);
         return this;
@@ -893,50 +1070,12 @@ public abstract class LoadBalancer {
   /**
    * Provides essentials for LoadBalancer implementations.
    *
+   * <p>This class is thread-safe.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Helper {
-    /**
-     * Equivalent to {@link #createSubchannel(List, Attributes)} with the given single {@code
-     * EquivalentAddressGroup}.
-     *
-     * @since 1.2.0
-     * @deprecated Use {@link #createSubchannel(io.grpc.LoadBalancer.CreateSubchannelArgs)}
-     *             instead. Note the new API must be called from {@link #getSynchronizationContext
-     *             the Synchronization Context}.
-     */
-    @Deprecated
-    public final Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
-      checkNotNull(addrs, "addrs");
-      return createSubchannel(Collections.singletonList(addrs), attrs);
-    }
-
-    /**
-     * Creates a Subchannel, which is a logical connection to the given group of addresses which are
-     * considered equivalent.  The {@code attrs} are custom attributes associated with this
-     * Subchannel, and can be accessed later through {@link Subchannel#getAttributes
-     * Subchannel.getAttributes()}.
-     *
-     * <p>It is recommended you call this method from the Synchronization Context, otherwise your
-     * logic around the creation may race with {@link #handleSubchannelState}.  See
-     * <a href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
-     *
-     * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
-     * Subchannels within {@link #shutdown}.
-     *
-     * @throws IllegalArgumentException if {@code addrs} is empty
-     * @since 1.14.0
-     * @deprecated Use {@link #createSubchannel(io.grpc.LoadBalancer.CreateSubchannelArgs)}
-     *             instead. Note the new API must be called from {@link #getSynchronizationContext
-     *             the Synchronization Context}.
-     */
-    @Deprecated
-    public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-      throw new UnsupportedOperationException();
-    }
-
     /**
      * Creates a Subchannel, which is a logical connection to the given group of addresses which are
      * considered equivalent.  The {@code attrs} are custom attributes associated with this
@@ -948,6 +1087,8 @@ public abstract class LoadBalancer {
      *
      * <p>It must be called from {@link #getSynchronizationContext the Synchronization Context}
      *
+     * @return Must return a valid Subchannel object, may not return null.
+     *
      * @since 1.22.0
      */
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
@@ -955,60 +1096,32 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Equivalent to {@link #updateSubchannelAddresses(io.grpc.LoadBalancer.Subchannel, List)} with
-     * the given single {@code EquivalentAddressGroup}.
-     *
-     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
-     * violated.  It will become an exception eventually.  See <a
-     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
-     *
-     * @since 1.4.0
-     * @deprecated use {@link Subchannel#updateAddresses} instead
-     */
-    @Deprecated
-    public final void updateSubchannelAddresses(
-        Subchannel subchannel, EquivalentAddressGroup addrs) {
-      checkNotNull(addrs, "addrs");
-      updateSubchannelAddresses(subchannel, Collections.singletonList(addrs));
-    }
-
-    /**
-     * Replaces the existing addresses used with {@code subchannel}. This method is superior to
-     * {@link #createSubchannel} when the new and old addresses overlap, since the subchannel can
-     * continue using an existing connection.
-     *
-     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
-     * violated.  It will become an exception eventually.  See <a
-     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
-     *
-     * @throws IllegalArgumentException if {@code subchannel} was not returned from {@link
-     *     #createSubchannel} or {@code addrs} is empty
-     * @since 1.14.0
-     * @deprecated use {@link Subchannel#updateAddresses} instead
-     */
-    @Deprecated
-    public void updateSubchannelAddresses(
-        Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * Out-of-band channel for LoadBalancer’s own RPC needs, e.g., talking to an external
-     * load-balancer service.
+     * Create an out-of-band channel for the LoadBalancer’s own RPC needs, e.g., talking to an
+     * external load-balancer service.
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
      *
      * @since 1.4.0
      */
-    // TODO(ejona): Allow passing a List<EAG> here and to updateOobChannelAddresses, but want to
-    // wait until https://github.com/grpc/grpc-java/issues/4469 is done.
-    // https://github.com/grpc/grpc-java/issues/4618
     public abstract ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority);
 
     /**
+     * Create an out-of-band channel for the LoadBalancer's own RPC needs, e.g., talking to an
+     * external load-balancer service. This version of the method allows multiple EAGs, so different
+     * addresses can have different authorities.
+     *
+     * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
+     * channels within {@link #shutdown}.
+     * */
+    public ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag,
+        String authority) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
      * Updates the addresses used for connections in the {@code Channel} that was created by {@link
-     * #createOobChannel(EquivalentAddressGroup, String)}. This is supperior to {@link
+     * #createOobChannel(EquivalentAddressGroup, String)}. This is superior to {@link
      * #createOobChannel(EquivalentAddressGroup, String)} when the old and new addresses overlap,
      * since the channel can continue using an existing connection.
      *
@@ -1021,23 +1134,71 @@ public abstract class LoadBalancer {
     }
 
     /**
+     * Updates the addresses with a new EAG list. Connection is continued when old and new addresses
+     * overlap.
+     * */
+    public void updateOobChannelAddresses(ManagedChannel channel,
+        List<EquivalentAddressGroup> eag) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
      * Creates an out-of-band channel for LoadBalancer's own RPC needs, e.g., talking to an external
      * load-balancer service, that is specified by a target string.  See the documentation on
      * {@link ManagedChannelBuilder#forTarget} for the format of a target string.
      *
      * <p>The target string will be resolved by a {@link NameResolver} created according to the
-     * target string.  The out-of-band channel doesn't have load-balancing.  If multiple addresses
-     * are resolved for the target, the first working address will be used.
+     * target string.
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
      *
-     * <P>NOT IMPLEMENTED: this method is currently a stub and not yet implemented by gRPC.
-     *
      * @since 1.20.0
      */
     public ManagedChannel createResolvingOobChannel(String target) {
+      return createResolvingOobChannelBuilder(target).build();
+    }
+
+    /**
+     * Creates an out-of-band channel builder for LoadBalancer's own RPC needs, e.g., talking to an
+     * external load-balancer service, that is specified by a target string.  See the documentation
+     * on {@link ManagedChannelBuilder#forTarget} for the format of a target string.
+     *
+     * <p>The target string will be resolved by a {@link NameResolver} created according to the
+     * target string.
+     *
+     * <p>The returned oob-channel builder defaults to use the same authority and ChannelCredentials
+     * (without bearer tokens) as the parent channel's for authentication. This is different from
+     * {@link #createResolvingOobChannelBuilder(String, ChannelCredentials)}.
+     *
+     * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
+     * channels within {@link #shutdown}.
+     *
+     * @deprecated Use {@link #createResolvingOobChannelBuilder(String, ChannelCredentials)}
+     *     instead.
+     * @since 1.31.0
+     */
+    @Deprecated
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       throw new UnsupportedOperationException("Not implemented");
+    }
+
+    /**
+     * Creates an out-of-band channel builder for LoadBalancer's own RPC needs, e.g., talking to an
+     * external load-balancer service, that is specified by a target string and credentials.  See
+     * the documentation on {@link Grpc#newChannelBuilder} for the format of a target string.
+     *
+     * <p>The target string will be resolved by a {@link NameResolver} created according to the
+     * target string.
+     *
+     * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
+     * channels within {@link #shutdown}.
+     *
+     * @since 1.35.0
+     */
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        String target, ChannelCredentials creds) {
+      throw new UnsupportedOperationException();
     }
 
     /**
@@ -1078,20 +1239,34 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Schedule a task to be run in the Synchronization Context, which serializes the task with the
-     * callback methods on the {@link LoadBalancer} interface.
+     * Historically the channel automatically refreshes name resolution if any subchannel
+     * connection is broken. It's transitioning to let load balancers make the decision. To
+     * avoid silent breakages, the channel checks if {@link #refreshNameResolution} is called
+     * by the load balancer. If not, it will do it and log a warning. This will be removed in
+     * the future and load balancers are completely responsible for triggering the refresh.
+     * See <a href="https://github.com/grpc/grpc-java/issues/8088">#8088</a> for the background.
      *
-     * @since 1.2.0
-     * @deprecated use/implement {@code getSynchronizationContext()} instead
+     * <p>This should rarely be used, but sometimes the address for the subchannel wasn't
+     * provided by the name resolver and a refresh needs to be directed somewhere else instead.
+     * Then you can call this method to disable the short-tem check for detecting LoadBalancers
+     * that need to be updated for the new expected behavior.
+     *
+     * @since 1.38.0
+     * @deprecated Warning has been removed
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8088")
     @Deprecated
-    public void runSerialized(Runnable task) {
-      getSynchronizationContext().execute(task);
+    public void ignoreRefreshNameResolutionCheck() {
+      // no-op
     }
 
     /**
      * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
      * as that the callback methods on the {@link LoadBalancer} interface are run in.
+     *
+     * <p>Work added to the synchronization context might not run immediately, so LB implementations
+     * must be careful to ensure that any assumptions still hold when it is executed. In particular,
+     * the LB might have been shut down or subchannels might have changed state.
      *
      * <p>Pro-tip: in order to call {@link SynchronizationContext#schedule}, you need to provide a
      * {@link ScheduledExecutorService}.  {@link #getScheduledExecutorService} is provided for your
@@ -1120,22 +1295,43 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Returns the NameResolver of the channel.
-     *
-     * @since 1.2.0
-     *
-     * @deprecated this method will be deleted in a future release.  If you think it shouldn't be
-     *     deleted, please file an issue on <a href="https://github.com/grpc/grpc-java">github</a>.
-     */
-    @Deprecated
-    public abstract NameResolver.Factory getNameResolverFactory();
-
-    /**
      * Returns the authority string of the channel, which is derived from the DNS-style target name.
+     * If overridden by a load balancer, {@link #getUnsafeChannelCredentials} must also be
+     * overridden to call {@link #getChannelCredentials} or provide appropriate credentials.
      *
      * @since 1.2.0
      */
     public abstract String getAuthority();
+
+    /**
+     * Returns the target string of the channel, guaranteed to include its scheme.
+     */
+    public String getChannelTarget() {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns the ChannelCredentials used to construct the channel, without bearer tokens.
+     *
+     * @since 1.35.0
+     */
+    public ChannelCredentials getChannelCredentials() {
+      return getUnsafeChannelCredentials().withoutBearerTokens();
+    }
+
+    /**
+     * Returns the UNSAFE ChannelCredentials used to construct the channel,
+     * including bearer tokens. Load balancers should generally have no use for
+     * these credentials and use of them is heavily discouraged. These must be used
+     * <em>very</em> carefully to avoid sending bearer tokens to untrusted servers
+     * as the server could then impersonate the client. Generally it is only safe
+     * to use these credentials when communicating with the backend.
+     *
+     * @since 1.35.0
+     */
+    public ChannelCredentials getUnsafeChannelCredentials() {
+      throw new UnsupportedOperationException();
+    }
 
     /**
      * Returns the {@link ChannelLogger} for the Channel served by this LoadBalancer.
@@ -1164,10 +1360,20 @@ public abstract class LoadBalancer {
     public NameResolverRegistry getNameResolverRegistry() {
       throw new UnsupportedOperationException();
     }
+
+    /**
+     * Returns the {@link MetricRecorder} that the channel uses to record metrics.
+     *
+     * @since 1.64.0
+     */
+    @Internal
+    public MetricRecorder getMetricRecorder() {
+      return new MetricRecorder() {};
+    }
   }
 
   /**
-   * A logical connection to a server, or a group of equivalent servers represented by an {@link 
+   * A logical connection to a server, or a group of equivalent servers represented by an {@link
    * EquivalentAddressGroup}.
    *
    * <p>It maintains at most one physical connection (aka transport) for sending new RPCs, while
@@ -1241,7 +1447,8 @@ public abstract class LoadBalancer {
      */
     public final EquivalentAddressGroup getAddresses() {
       List<EquivalentAddressGroup> groups = getAllAddresses();
-      Preconditions.checkState(groups.size() == 1, "%s does not have exactly one group", groups);
+      Preconditions.checkState(groups != null && groups.size() == 1,
+          "%s does not have exactly one group", groups);
       return groups.get(0);
     }
 
@@ -1332,6 +1539,18 @@ public abstract class LoadBalancer {
     public Object getInternalSubchannel() {
       throw new UnsupportedOperationException();
     }
+
+    /**
+     * (Internal use only) returns attributes of the address subchannel is connected to.
+     *
+     * <p>Warning: this is INTERNAL API, is not supposed to be used by external users, and may
+     * change without notice. If you think you must use it, please file an issue and we can consider
+     * removing its "internal" status.
+     */
+    @Internal
+    public Attributes getConnectedAddressAttributes() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
@@ -1352,13 +1571,19 @@ public abstract class LoadBalancer {
      * unnecessary delays of RPCs. Please refer to {@link PickResult#withSubchannel
      * PickResult.withSubchannel()}'s javadoc for more information.
      *
+     * <p>When a subchannel's state is IDLE or TRANSIENT_FAILURE and the address for the subchannel
+     * was received in {@link LoadBalancer#handleResolvedAddresses}, load balancers should call
+     * {@link Helper#refreshNameResolution} to inform polling name resolvers that it is an
+     * appropriate time to refresh the addresses. Without the refresh, changes to the addresses may
+     * never be detected.
+     *
      * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
      * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The
      * other is that Channel is doing a {@link ManagedChannel#shutdownNow forced shutdown} or has
      * already terminated, thus there won't be further requests to LoadBalancer.  Therefore, the
      * LoadBalancer usually don't need to react to a SHUTDOWN state.
-     * @param newState the new state
      *
+     * @param newState the new state
      * @since 1.22.0
      */
     void onSubchannelState(ConnectivityStateInfo newState);
@@ -1367,9 +1592,10 @@ public abstract class LoadBalancer {
   /**
    * Factory to create {@link LoadBalancer} instance.
    *
+   * <p>This class is thread-safe.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Factory {
     /**
@@ -1378,5 +1604,65 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract LoadBalancer newLoadBalancer(Helper helper);
+  }
+
+  /**
+   * A picker that always returns an erring pick.
+   *
+   * @deprecated Use {@code new FixedResultPicker(PickResult.withError(error))} instead.
+   */
+  @Deprecated
+  public static final class ErrorPicker extends SubchannelPicker {
+
+    private final Status error;
+
+    public ErrorPicker(Status error) {
+      this.error = checkNotNull(error, "error");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return PickResult.withError(error);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("error", error)
+          .toString();
+    }
+  }
+
+  /** A picker that always returns the same result. */
+  public static final class FixedResultPicker extends SubchannelPicker {
+    private final PickResult result;
+
+    public FixedResultPicker(PickResult result) {
+      this.result = Preconditions.checkNotNull(result, "result");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return result;
+    }
+
+    @Override
+    public String toString() {
+      return "FixedResultPicker(" + result + ")";
+    }
+
+    @Override
+    public int hashCode() {
+      return result.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof FixedResultPicker)) {
+        return false;
+      }
+      FixedResultPicker that = (FixedResultPicker) o;
+      return this.result.equals(that.result);
+    }
   }
 }

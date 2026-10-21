@@ -21,7 +21,6 @@ import io.grpc.internal.ReadableBuffer;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.ByteBuffer;
 
 /**
  * A {@link ReadableBuffer} implementation that is backed by an {@link okio.Buffer}.
@@ -40,8 +39,15 @@ class OkHttpReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public int readUnsignedByte() {
-    return buffer.readByte() & 0x000000FF;
+    try {
+      fakeEofExceptionMethod(); // Okio 2.x can throw EOFException from readByte()
+      return buffer.readByte() & 0x000000FF;
+    } catch (EOFException e) {
+      throw new IndexOutOfBoundsException(e.getMessage());
+    }
   }
+
+  private void fakeEofExceptionMethod() throws EOFException {}
 
   @Override
   public void skipBytes(int length) {
@@ -62,12 +68,6 @@ class OkHttpReadableBuffer extends AbstractReadableBuffer {
       length -= bytesRead;
       destOffset += bytesRead;
     }
-  }
-
-  @Override
-  public void readBytes(ByteBuffer dest) {
-    // We are not using it.
-    throw new UnsupportedOperationException();
   }
 
   @Override

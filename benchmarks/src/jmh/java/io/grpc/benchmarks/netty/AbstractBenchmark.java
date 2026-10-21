@@ -18,6 +18,7 @@ package io.grpc.benchmarks.netty;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -25,6 +26,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
@@ -39,7 +41,8 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -74,6 +77,7 @@ public abstract class AbstractBenchmark {
     SMALL(10), MEDIUM(1024), LARGE(65536), JUMBO(1048576);
 
     private final int bytes;
+
     MessageSize(int bytes) {
       this.bytes = bytes;
     }
@@ -90,6 +94,7 @@ public abstract class AbstractBenchmark {
     SMALL(16383), MEDIUM(65535), LARGE(1048575), JUMBO(8388607);
 
     private final int bytes;
+
     FlowWindowSize(int bytes) {
       this.bytes = bytes;
     }
@@ -135,6 +140,7 @@ public abstract class AbstractBenchmark {
    * sudo ip addr add dev lo 127.127.127.127/32 label lo:benchmark
    * </pre>
    */
+  @SuppressWarnings("JdkObsolete") // No choice but to use Enumeration
   private static InetAddress buildBenchmarkAddr() {
     InetAddress tmp = null;
     try {
@@ -178,7 +184,7 @@ public abstract class AbstractBenchmark {
   private MethodDescriptor<ByteBuf, ByteBuf> flowControlledStreaming;
   protected ManagedChannel[] channels;
 
-  public AbstractBenchmark() {
+  protected AbstractBenchmark() {
   }
 
   /**
@@ -192,22 +198,25 @@ public abstract class AbstractBenchmark {
                     ChannelType channelType,
                     int maxConcurrentStreams,
                     int channelCount) throws Exception {
+    ServerCredentials serverCreds = InsecureServerCredentials.create();
     NettyServerBuilder serverBuilder;
     NettyChannelBuilder channelBuilder;
     if (channelType == ChannelType.LOCAL) {
       LocalAddress address = new LocalAddress("netty-e2e-benchmark");
-      serverBuilder = NettyServerBuilder.forAddress(address);
+      serverBuilder = NettyServerBuilder.forAddress(address, serverCreds);
       serverBuilder.channelType(LocalServerChannel.class);
       channelBuilder = NettyChannelBuilder.forAddress(address);
-      channelBuilder.channelType(LocalChannel.class);
+      channelBuilder.channelType(LocalChannel.class, LocalAddress.class);
     } else {
       ServerSocket sock = new ServerSocket();
       // Pick a port using an ephemeral socket.
       sock.bind(new InetSocketAddress(BENCHMARK_ADDR, 0));
       SocketAddress address = sock.getLocalSocketAddress();
       sock.close();
-      serverBuilder = NettyServerBuilder.forAddress(address);
-      channelBuilder = NettyChannelBuilder.forAddress(address);
+      serverBuilder = NettyServerBuilder.forAddress(address, serverCreds)
+          .channelType(NioServerSocketChannel.class);
+      channelBuilder = NettyChannelBuilder.forAddress(address).channelType(NioSocketChannel.class,
+          InetSocketAddress.class);
     }
 
     if (serverExecutor == ExecutorType.DIRECT) {
@@ -219,7 +228,14 @@ public abstract class AbstractBenchmark {
 
     // Always use a different worker group from the client.
     ThreadFactory serverThreadFactory = new DefaultThreadFactory("STF pool", true /* daemon */);
-    serverBuilder.workerEventLoopGroup(new NioEventLoopGroup(0, serverThreadFactory));
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    io.netty.channel.EventLoopGroup workerGroup =
+        new io.netty.channel.nio.NioEventLoopGroup(0, serverThreadFactory);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    io.netty.channel.EventLoopGroup bossGroup =
+        new io.netty.channel.nio.NioEventLoopGroup(1, serverThreadFactory);
+    serverBuilder.workerEventLoopGroup(workerGroup);
+    serverBuilder.bossEventLoopGroup(bossGroup);
 
     // Always set connection and stream window size to same value
     serverBuilder.flowControlWindow(windowSize.bytes());
@@ -377,8 +393,11 @@ public abstract class AbstractBenchmark {
     ThreadFactory clientThreadFactory = new DefaultThreadFactory("CTF pool", true /* daemon */);
     for (int i = 0; i < channelCount; i++) {
       // Use a dedicated event-loop for each channel
+      @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+      io.netty.channel.EventLoopGroup elg =
+          new io.netty.channel.nio.NioEventLoopGroup(1, clientThreadFactory);
       channels[i] = channelBuilder
-          .eventLoopGroup(new NioEventLoopGroup(1, clientThreadFactory))
+          .eventLoopGroup(elg)
           .build();
     }
   }

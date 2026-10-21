@@ -16,15 +16,15 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A Channel-specific logger provided by GRPC library to {@link LoadBalancer} implementations.
  * Information logged here goes to <strong>Channelz</strong>, and to the Java logger of this class
  * as well.
+ *
+ * <p>This class is thread-safe.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5029")
-@ThreadSafe
 public abstract class ChannelLogger {
   /**
    * Log levels.  See the table below for the mapping from the ChannelLogger levels to Channelz
@@ -36,8 +36,8 @@ public abstract class ChannelLogger {
    * | ChannelLogger Level | Channelz Severity | Java Logger Level |
    * +---------------------+-------------------+-------------------+
    * | DEBUG               | N/A               | FINEST            |
-   * | INFO                | CT_INFO           | FINEST            |
-   * | WARNING             | CT_WARNING        | FINER             |
+   * | INFO                | CT_INFO           | FINER             |
+   * | WARNING             | CT_WARNING        | FINE             |
    * | ERROR               | CT_ERROR          | FINE              |
    * +---------------------+-------------------+-------------------+
    * </pre>

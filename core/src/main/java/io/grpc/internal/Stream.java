@@ -68,6 +68,13 @@ public interface Stream {
   boolean isReady();
 
   /**
+   * Provides a hint that directExecutor is being used by the listener for callbacks to the
+   * application. No action is required. There is no requirement that this method actually matches
+   * the executor used.
+   */
+  void optimizeForDirectExecutor();
+
+  /**
    * Sets the compressor on the framer.
    *
    * @param compressor the compressor to use

@@ -117,7 +117,7 @@ public final class AesGcmHkdfAeadCrypterTest {
           ByteBuffer.wrap(testVector.plaintext),
           ByteBuffer.wrap(testVector.aad),
           testVector.nonce);
-      String msg = "Failure for test vector " + i;
+      String msg = "Failure for test vector " + i + " " + testVector.comment;
       assertWithMessage(msg)
           .that(ciphertextBuffer.remaining())
           .isEqualTo(bufferSize - testVector.ciphertext.length);
@@ -142,7 +142,7 @@ public final class AesGcmHkdfAeadCrypterTest {
           ByteBuffer.wrap(testVector.ciphertext),
           ByteBuffer.wrap(testVector.aad),
           testVector.nonce);
-      String msg = "Failure for test vector " + i;
+      String msg = "Failure for test vector " + i + " " + testVector.comment;
       assertWithMessage(msg)
           .that(plaintextBuffer.remaining())
           .isEqualTo(bufferSize - testVector.plaintext.length);

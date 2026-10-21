@@ -1,39 +1,67 @@
+buildscript {
+    dependencies {
+        classpath 'com.google.guava:guava:33.4.8-android'
+    }
+}
+
+plugins {
+    id "java-library"
+    id "java-test-fixtures"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "me.champeau.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
 description = 'gRPC: Core'
 
 dependencies {
-    compile project(':grpc-api'),
-            libraries.gson,
-            libraries.android_annotations,
-    compile (libraries.opencensus_api) {
-        // prefer 3.0.2 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // prefer 20.0 from libraries instead of 19.0
-        exclude group: 'com.google.guava', module: 'guava'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-    }
-    compile (libraries.opencensus_contrib_grpc_metrics) {
-        // prefer 3.0.2 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-        // prefer 20.0 from libraries instead of 19.0
-        exclude group: 'com.google.guava', module: 'guava'
-    }
+    api project(':grpc-api')
+    // force dependent jars to depend on latest grpc-context
+    runtimeOnly project(":grpc-context")
+    implementation libraries.gson,
+            libraries.android.annotations,
+            libraries.animalsniffer.annotations,
+            libraries.errorprone.annotations,
+            libraries.guava,
+            libraries.perfmark.api
+    testFixturesApi libraries.junit
+    testFixturesImplementation libraries.guava,
+            libraries.mockito.core,
+            libraries.truth,
+            project(':grpc-testing')
+    testImplementation testFixtures(project(':grpc-api')),
+            project(':grpc-testing')
+    testImplementation libraries.guava.testlib
 
-    testCompile project(':grpc-context').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
-            project(':grpc-testing'),
-            project(':grpc-grpclb'),
-            libraries.guava_testlib
+    testRuntimeOnly project(':grpc-census')
 
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
+    jmh project(':grpc-testing')
+
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
-javadoc {
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/internal/**'
+    exclude 'io/grpc/inprocess/Internal*'
     // Disabled until kinda stable.
     exclude 'io/grpc/perfmark/**'
+}
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.internal')
+    }
 }
 
 animalsniffer {
@@ -42,4 +70,13 @@ animalsniffer {
         sourceSets.main,
         sourceSets.test
     ]
+}
+
+components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
+components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }
+
+tasks.register("versionFile") {
+    doLast {
+        new File(buildDir, "version").write("${project.version}\n")
+    }
 }

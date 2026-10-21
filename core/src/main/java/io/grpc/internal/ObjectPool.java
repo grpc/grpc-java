@@ -16,12 +16,11 @@
 
 package io.grpc.internal;
 
-import javax.annotation.concurrent.ThreadSafe;
-
 /**
  * An object pool.
+ *
+ * <p>This interface is thread-safe.
  */
-@ThreadSafe
 public interface ObjectPool<T> {
   /**
    * Get an object from the pool.

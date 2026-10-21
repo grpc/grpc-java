@@ -1,32 +1,38 @@
+plugins {
+  id 'java-platform'
+  id "maven-publish"
+}
+
 description = 'gRPC: BOM'
 
-publishing {
-    publications {
-        maven(MavenPublication) {
-            // remove all other artifacts since BOM doesn't generates any Jar
-            artifacts = []
-
-            pom.withXml {
-                // Generate bom using subprojects
-                def internalProjects = [project.name, 'grpc-xds', 'grpc-gae-interop-testing-jdk8', 'grpc-compiler']
-
-                def dependencyManagement = asNode().appendNode('dependencyManagement')
-                def dependencies = dependencyManagement.appendNode('dependencies')
-                rootProject.subprojects.each { subproject ->
-                    if (internalProjects.contains(subproject.name)) {
-		        return
-		    }
-                    def dependencyNode = dependencies.appendNode('dependency')
-                    dependencyNode.appendNode('groupId', subproject.group)
-                    dependencyNode.appendNode('artifactId', subproject.name)
-                    dependencyNode.appendNode('version', subproject.version)
-                }
-		// add protoc gen (produced by grpc-compiler with different artifact name)
-		def dependencyNode = dependencies.appendNode('dependency')
-	        dependencyNode.appendNode('groupId', project.group)
-	        dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')
-	        dependencyNode.appendNode('version', project.version)
-	    }
-        }
+gradle.projectsEvaluated {
+  def projectsToInclude = rootProject.subprojects.findAll {
+    return it.name != 'grpc-compiler'
+        && it.plugins.hasPlugin('java')
+        && it.plugins.hasPlugin('maven-publish')
+        && it.tasks.findByName('publishMavenPublicationToMavenRepository')?.enabled
+  }
+  dependencies {
+    constraints {
+      projectsToInclude.each { api it }
     }
+  }
+}
+
+publishing {
+  publications {
+    maven(MavenPublication) {
+      from components.javaPlatform
+      pom.withXml {
+        def dependencies = asNode().dependencyManagement.dependencies.last()
+        // add protoc gen (produced by grpc-compiler with different artifact name)
+        // not sure how to express "<type>pom</type>" in gradle, kept in XML
+        def dependencyNode = dependencies.appendNode('dependency')
+        dependencyNode.appendNode('groupId', project.group)
+        dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')
+        dependencyNode.appendNode('version', project.version)
+        dependencyNode.appendNode('type', 'pom')
+      }
+    }
+  }
 }

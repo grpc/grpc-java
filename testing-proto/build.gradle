@@ -1,20 +1,28 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
+}
+
 description = "gRPC: Testing Protos"
 
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.testing.protobuf')
     }
-    dependencies { classpath libraries.protobuf_plugin }
 }
 
 dependencies {
-    compile project(':grpc-protobuf'),
+    api project(':grpc-protobuf'),
             project(':grpc-stub')
-    compileOnly libraries.javax_annotation
-    testCompile libraries.truth
-    testRuntime libraries.javax_annotation
+    testImplementation libraries.truth
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()

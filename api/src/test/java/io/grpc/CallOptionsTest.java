@@ -30,9 +30,10 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.base.Objects;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.internal.SerializingExecutor;
+import java.time.Duration;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -79,6 +80,16 @@ public class CallOptionsTest {
     assertThat(CallOptions.DEFAULT.withWaitForReady().isWaitForReady()).isTrue();
     assertThat(CallOptions.DEFAULT.withWaitForReady().withoutWaitForReady().isWaitForReady())
         .isFalse();
+  }
+
+  @Test
+  public void withOnReadyThreshold() {
+    int onReadyThreshold = 1024;
+    CallOptions callOptions = CallOptions.DEFAULT.withOnReadyThreshold(onReadyThreshold);
+    callOptions = callOptions.withWaitForReady();
+    assertThat(callOptions.getOnReadyThreshold()).isEqualTo(onReadyThreshold);
+    callOptions = callOptions.clearOnReadyThreshold();
+    assertThat(callOptions.getOnReadyThreshold()).isNull();
   }
 
   @Test
@@ -141,6 +152,15 @@ public class CallOptionsTest {
   }
 
   @Test
+  @IgnoreJRERequirement
+  public void withDeadlineAfterDuration() {
+    Deadline actual = CallOptions.DEFAULT.withDeadlineAfter(Duration.ofMinutes(1L)).getDeadline();
+    Deadline expected = Deadline.after(1, MINUTES);
+
+    assertAbout(deadline()).that(actual).isWithin(10, MILLISECONDS).of(expected);
+  }
+
+  @Test
   public void toStringMatches_noDeadline_default() {
     String actual = allSet
         .withDeadline(null)
@@ -148,6 +168,7 @@ public class CallOptionsTest {
         .withCallCredentials(null)
         .withMaxInboundMessageSize(44)
         .withMaxOutboundMessageSize(55)
+        .withOnReadyThreshold(1024)
         .toString();
 
     assertThat(actual).contains("deadline=null");
@@ -159,6 +180,7 @@ public class CallOptionsTest {
     assertThat(actual).contains("waitForReady=true");
     assertThat(actual).contains("maxInboundMessageSize=44");
     assertThat(actual).contains("maxOutboundMessageSize=55");
+    assertThat(actual).contains("onReadyThreshold=1024");
     assertThat(actual).contains("streamTracerFactories=[tracerFactory1, tracerFactory2]");
   }
 
@@ -255,19 +277,8 @@ public class CallOptionsTest {
     private long time;
 
     @Override
-    public long read() {
+    public long nanoTime() {
       return time;
-    }
-
-    public void reset(long time) {
-      this.time = time;
-    }
-
-    public void increment(long period, TimeUnit unit) {
-      if (period < 0) {
-        throw new IllegalArgumentException();
-      }
-      this.time += unit.toNanos(period);
     }
   }
 
@@ -279,8 +290,7 @@ public class CallOptionsTest {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(
-        ClientStreamTracer.StreamInfo info, Metadata headers) {
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
       return new ClientStreamTracer() {};
     }
 

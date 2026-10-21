@@ -28,6 +28,7 @@ import java.io.Closeable;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Locale;
 import java.util.zip.DataFormatException;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -111,7 +112,7 @@ public class MessageDeframer implements Closeable, Deframer {
    *
    * @param listener listener for deframer events.
    * @param decompressor the compression used if a compressed frame is encountered, with
-   *  {@code NONE} meaning unsupported
+   *                     {@code NONE} meaning unsupported
    * @param maxMessageSize the maximum allowed size for received messages.
    */
   public MessageDeframer(
@@ -202,6 +203,10 @@ public class MessageDeframer implements Closeable, Deframer {
    */
   void stopDelivery() {
     stopDelivery = true;
+  }
+
+  boolean hasPendingDeliveries() {
+    return pendingDeliveries != 0;
   }
 
   @Override
@@ -309,6 +314,12 @@ public class MessageDeframer implements Closeable, Deframer {
     int totalBytesRead = 0;
     int deflatedBytesRead = 0;
     try {
+      // Avoid allocating nextFrame when idle
+      if (requiredLength > 0 && fullStreamDecompressor == null
+          && unprocessed.readableBytes() == 0) {
+        return false;
+      }
+
       if (nextFrame == null) {
         nextFrame = new CompositeReadableBuffer();
       }
@@ -382,7 +393,7 @@ public class MessageDeframer implements Closeable, Deframer {
     requiredLength = nextFrame.readInt();
     if (requiredLength < 0 || requiredLength > maxInboundMessageSize) {
       throw Status.RESOURCE_EXHAUSTED.withDescription(
-          String.format("gRPC message exceeds maximum size %d: %d",
+          String.format(Locale.US, "gRPC message exceeds maximum size %d: %d",
               maxInboundMessageSize, requiredLength))
           .asRuntimeException();
     }
@@ -401,9 +412,11 @@ public class MessageDeframer implements Closeable, Deframer {
     // There is no reliable way to get the uncompressed size per message when it's compressed,
     // because the uncompressed bytes are provided through an InputStream whose total size is
     // unknown until all bytes are read, and we don't know when it happens.
-    statsTraceCtx.inboundMessageRead(currentMessageSeqNo, inboundBodyWireSize, -1);
+    statsTraceCtx.inboundMessageRead(currentMessageSeqNo, inboundBodyWireSize,
+        (compressedFlag || fullStreamDecompressor != null) ? -1 : inboundBodyWireSize);
     inboundBodyWireSize = 0;
     InputStream stream = compressedFlag ? getCompressedBody() : getUncompressedBody();
+    nextFrame.touch();
     nextFrame = null;
     listener.messagesAvailable(new SingleMessageProducer(stream));
 
@@ -424,14 +437,91 @@ public class MessageDeframer implements Closeable, Deframer {
           .asRuntimeException();
     }
 
-    try {
-      // Enforce the maxMessageSize limit on the returned stream.
-      InputStream unlimitedStream =
-          decompressor.decompress(ReadableBuffers.openStream(nextFrame, true));
-      return new SizeEnforcingInputStream(
-          unlimitedStream, maxInboundMessageSize, statsTraceCtx);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+    return new LazyDecompressingInputStream(
+        ReadableBuffers.openStream(nextFrame, true),
+        maxInboundMessageSize,
+        statsTraceCtx,
+        decompressor);
+  }
+
+  /**
+   * An {@link InputStream} that delays decompressing a compressed frame until data is first read.
+   */
+  @VisibleForTesting
+  static final class LazyDecompressingInputStream extends FilterInputStream {
+    private final Decompressor decompressor;
+    private final int maxMessageSize;
+    private final StatsTraceContext statsTraceCtx;
+    private boolean initialized;
+    private boolean closed;
+
+    LazyDecompressingInputStream(
+        InputStream rawStream,
+        int maxMessageSize,
+        StatsTraceContext statsTraceCtx,
+        Decompressor decompressor) {
+      super(rawStream);
+      this.decompressor = decompressor;
+      this.maxMessageSize = maxMessageSize;
+      this.statsTraceCtx = statsTraceCtx;
+    }
+
+    private synchronized void ensureInitialized() throws IOException {
+      if (closed) {
+        throw new IOException("Stream closed");
+      }
+      if (!initialized) {
+        InputStream decompressed = decompressor.decompress(in);
+        in = new SizeEnforcingInputStream(decompressed, maxMessageSize, statsTraceCtx);
+        initialized = true;
+      }
+    }
+
+    @Override
+    public int read() throws IOException {
+      ensureInitialized();
+      return super.read();
+    }
+
+    @Override
+    public int read(byte[] b, int off, int len) throws IOException {
+      ensureInitialized();
+      return super.read(b, off, len);
+    }
+
+    @Override
+    public long skip(long n) throws IOException {
+      ensureInitialized();
+      return super.skip(n);
+    }
+
+    @Override
+    public int available() throws IOException {
+      ensureInitialized();
+      return super.available();
+    }
+
+    @Override
+    public synchronized void close() throws IOException {
+      if (!closed) {
+        closed = true;
+        super.close();
+      }
+    }
+
+    @Override
+    public synchronized void mark(int readlimit) {
+      // Mark is not supported
+    }
+
+    @Override
+    public synchronized void reset() throws IOException {
+      throw new IOException("Mark not supported");
+    }
+
+    @Override
+    public boolean markSupported() {
+      return false;
     }
   }
 
@@ -512,9 +602,9 @@ public class MessageDeframer implements Closeable, Deframer {
 
     private void verifySize() {
       if (count > maxMessageSize) {
-        throw Status.RESOURCE_EXHAUSTED.withDescription(String.format(
-                "Compressed gRPC message exceeds maximum size %d: %d bytes read",
-                maxMessageSize, count)).asRuntimeException();
+        throw Status.RESOURCE_EXHAUSTED
+            .withDescription("Decompressed gRPC message exceeds maximum size " + maxMessageSize)
+            .asRuntimeException();
       }
     }
   }

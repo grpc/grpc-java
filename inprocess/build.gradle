@@ -1,0 +1,39 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC: Inprocess'
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.inprocess')
+    }
+}
+
+dependencies {
+    api project(':grpc-api')
+
+    implementation project(':grpc-core')
+    implementation libraries.guava
+    testImplementation project(':grpc-testing'),
+            testFixtures(project(':grpc-core'))
+    testImplementation libraries.guava.testlib
+
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}
+
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/inprocess/Internal*'
+}

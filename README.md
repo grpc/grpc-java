@@ -1,13 +1,6 @@
 gRPC-Java - An RPC library and framework
 ========================================
 
-gRPC-Java works with JDK 7. gRPC-Java clients are supported on Android API
-levels 14 and up (Ice Cream Sandwich and later). Deploying gRPC servers on an
-Android device is not supported.
-
-TLS usage typically requires using Java 8, or Play Services Dynamic Security
-Provider on Android. Please see the [Security Readme](SECURITY.md).
-
 <table>
   <tr>
     <td><b>Homepage:</b></td>
@@ -20,18 +13,46 @@ Provider on Android. Please see the [Security Readme](SECURITY.md).
 </table>
 
 [![Join the chat at https://gitter.im/grpc/grpc](https://badges.gitter.im/grpc/grpc.svg)](https://gitter.im/grpc/grpc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![Build Status](https://travis-ci.org/grpc/grpc-java.svg?branch=master)](https://travis-ci.org/grpc/grpc-java)
-[![Coverage Status](https://coveralls.io/repos/grpc/grpc-java/badge.svg?branch=master&service=github)](https://coveralls.io/github/grpc/grpc-java?branch=master)
+[![GitHub Actions Linux Testing](https://github.com/grpc/grpc-java/actions/workflows/testing.yml/badge.svg?branch=master)](https://github.com/grpc/grpc-java/actions/workflows/testing.yml?branch=master)
+[![Line Coverage Status](https://coveralls.io/repos/grpc/grpc-java/badge.svg?branch=master&service=github)](https://coveralls.io/github/grpc/grpc-java?branch=master)
+[![Branch-adjusted Line Coverage Status](https://codecov.io/gh/grpc/grpc-java/branch/master/graph/badge.svg)](https://codecov.io/gh/grpc/grpc-java)
+
+Statistics
+---------------
+![Issues](https://img.shields.io/github/issues/grpc/grpc-java)
+![Pull Requests](https://img.shields.io/github/issues-pr/grpc/grpc-java)
+![Forks](https://img.shields.io/github/forks/grpc/grpc-java)
+![Stars](https://img.shields.io/github/stars/grpc/grpc-java)
+
+Supported Platforms
+-------------------
+
+gRPC-Java supports Java 8 and later. Android minSdkVersion 24 (Nougat) and
+later are supported with [Java 8 language desugaring][android-java-8].
+
+TLS usage on Android typically requires Play Services Dynamic Security Provider.
+Please see the [Security Readme](SECURITY.md).
+
+Older Java versions are not directly supported, but a branch remains available
+for fixes and releases. See [gRFC P5 JDK Version Support
+Policy][P5-jdk-version-support].
+
+Java version | gRPC Branch
+------------ | -----------
+7            | 1.41.x
+
+[android-java-8]: https://developer.android.com/studio/write/java8-support#supported_features
+[P5-jdk-version-support]: https://github.com/grpc/proposal/blob/master/P5-jdk-version-support.md#proposal
 
 Getting Started
 ---------------
 
 For a guided tour, take a look at the [quick start
-guide](https://grpc.io/docs/quickstart/java.html) or the more explanatory [gRPC
-basics](https://grpc.io/docs/tutorials/basic/java.html).
+guide](https://grpc.io/docs/languages/java/quickstart) or the more explanatory [gRPC
+basics](https://grpc.io/docs/languages/java/basics).
 
-The [examples](https://github.com/grpc/grpc-java/tree/v1.21.0/examples) and the
-[Android example](https://github.com/grpc/grpc-java/tree/v1.21.0/examples/android)
+The [examples](https://github.com/grpc/grpc-java/tree/v1.85.0/examples) and the
+[Android example](https://github.com/grpc/grpc-java/tree/v1.85.0/examples/android)
 are standalone projects that showcase the usage of gRPC.
 
 Download
@@ -42,40 +63,45 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty-shaded</artifactId>
-  <version>1.21.0</version>
+  <version>1.85.0</version>
+  <scope>runtime</scope>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.21.0</version>
+  <version>1.85.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.21.0</version>
+  <version>1.85.0</version>
 </dependency>
 ```
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-compile 'io.grpc:grpc-netty-shaded:1.21.0'
-compile 'io.grpc:grpc-protobuf:1.21.0'
-compile 'io.grpc:grpc-stub:1.21.0'
+runtimeOnly 'io.grpc:grpc-netty-shaded:1.85.0'
+implementation 'io.grpc:grpc-protobuf:1.85.0'
+implementation 'io.grpc:grpc-stub:1.85.0'
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
 ```gradle
-compile 'io.grpc:grpc-okhttp:1.21.0'
-compile 'io.grpc:grpc-protobuf-lite:1.21.0'
-compile 'io.grpc:grpc-stub:1.21.0'
+implementation 'io.grpc:grpc-okhttp:1.85.0'
+implementation 'io.grpc:grpc-protobuf-lite:1.85.0'
+implementation 'io.grpc:grpc-stub:1.85.0'
 ```
 
+For [Bazel](https://bazel.build), you can either
+[use Maven](https://github.com/bazelbuild/rules_jvm_external)
+(with the GAVs from above), or use `@io_grpc_grpc_java//api` et al (see below).
+
 [the JARs]:
-https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.21.0
+https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.85.0
 
 Development snapshots are available in [Sonatypes's snapshot
-repository](https://oss.sonatype.org/content/repositories/snapshots/).
+repository](https://central.sonatype.com/repository/maven-snapshots/).
 
 Generated Code
 --------------
@@ -93,18 +119,18 @@ For protobuf-based codegen integrated with the Maven build system, you can use
     <extension>
       <groupId>kr.motd.maven</groupId>
       <artifactId>os-maven-plugin</artifactId>
-      <version>1.5.0.Final</version>
+      <version>1.7.1</version>
     </extension>
   </extensions>
   <plugins>
     <plugin>
       <groupId>org.xolstice.maven.plugins</groupId>
       <artifactId>protobuf-maven-plugin</artifactId>
-      <version>0.5.1</version>
+      <version>0.6.1</version>
       <configuration>
-        <protocArtifact>com.google.protobuf:protoc:3.7.1:exe:${os.detected.classifier}</protocArtifact>
+        <protocArtifact>com.google.protobuf:protoc:3.25.9:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.21.0:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.85.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -121,27 +147,20 @@ For protobuf-based codegen integrated with the Maven build system, you can use
 
 [protobuf-maven-plugin]: https://www.xolstice.org/protobuf-maven-plugin/
 
-For protobuf-based codegen integrated with the Gradle build system, you can use
-[protobuf-gradle-plugin][]:
+For non-Android protobuf-based codegen integrated with the Gradle build system,
+you can use [protobuf-gradle-plugin][]:
 ```gradle
-apply plugin: 'com.google.protobuf'
-
-buildscript {
-  repositories {
-    mavenCentral()
-  }
-  dependencies {
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.8'
-  }
+plugins {
+    id 'com.google.protobuf' version '0.9.5'
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.7.1"
+    artifact = "com.google.protobuf:protoc:3.25.9"
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.21.0'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.85.0'
     }
   }
   generateProtoTasks {
@@ -158,7 +177,43 @@ The prebuilt protoc-gen-grpc-java binary uses glibc on Linux. If you are
 compiling on Alpine Linux, you may want to use the [Alpine grpc-java package][]
 which uses musl instead.
 
-[Alpine grpc-java package]: https://pkgs.alpinelinux.org/package/edge/testing/x86_64/grpc-java
+[Alpine grpc-java package]: https://pkgs.alpinelinux.org/package/edge/community/x86_64/grpc-java
+
+For Android protobuf-based codegen integrated with the Gradle build system, also
+use protobuf-gradle-plugin but specify the 'lite' options:
+
+```gradle
+plugins {
+    id 'com.google.protobuf' version '0.9.5'
+}
+
+protobuf {
+  protoc {
+    artifact = "com.google.protobuf:protoc:3.25.9"
+  }
+  plugins {
+    grpc {
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.85.0'
+    }
+  }
+  generateProtoTasks {
+    all().each { task ->
+      task.builtins {
+        java { option 'lite' }
+      }
+      task.plugins {
+        grpc { option 'lite' }
+      }
+    }
+  }
+}
+
+```
+
+For [Bazel](https://bazel.build), use the [`proto_library`](https://github.com/bazelbuild/rules_proto)
+and the [`java_proto_library`](https://bazel.build/reference/be/java#java_proto_library) (no `load()` required) 
+and `load("@io_grpc_grpc_java//:java_grpc_library.bzl", "java_grpc_library")` (from this project), as in
+[this example `BUILD.bazel`](https://github.com/grpc/grpc-java/blob/master/examples/BUILD.bazel).
 
 API Stability
 -------------
@@ -172,7 +227,7 @@ We recommend using the
 [grpc-java-api-checker](https://github.com/grpc/grpc-java-api-checker)
 (an [Error Prone](https://github.com/google/error-prone) plugin)
 to check for usages of `@ExperimentalApi` and `@Internal` in any library code
-that depends on gRPC. It may also be used to check for `@Internal` usage or 
+that depends on gRPC. It may also be used to check for `@Internal` usage or
 unintended `@ExperimentalApi` consumption in non-library code.
 
 How to Build
@@ -209,12 +264,18 @@ wire. The interfaces to it are abstract just enough to allow plugging in of
 different implementations. Note the transport layer API is considered internal
 to gRPC and has weaker API guarantees than the core API under package `io.grpc`.
 
-gRPC comes with three Transport implementations:
+gRPC comes with multiple Transport implementations:
 
-1. The Netty-based transport is the main transport implementation based on
-   [Netty](https://netty.io). It is for both the client and the server.
-2. The OkHttp-based transport is a lightweight transport based on
-   [OkHttp](https://square.github.io/okhttp/). It is mainly for use on Android
-   and is for client only.
+1. The Netty-based HTTP/2 transport is the main transport implementation based
+   on [Netty](https://netty.io). It is not officially supported on Android.
+   There is a "grpc-netty-shaded" version of this transport. It is generally
+   preferred over using the Netty-based transport directly as it requires less
+   dependency management and is easier to upgrade within many applications.
+2. The OkHttp-based HTTP/2 transport is a lightweight transport based on
+   [Okio](https://square.github.io/okio/) and forked low-level parts of
+   [OkHttp](https://square.github.io/okhttp/). It is mainly for use on Android.
 3. The in-process transport is for when a server is in the same process as the
-   client. It is useful for testing, while also being safe for production use.
+   client. It is used frequently for testing, while also being safe for
+   production use.
+4. The Binder transport is for Android cross-process communication on a single
+   device.

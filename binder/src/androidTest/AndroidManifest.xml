@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" >
+
+  <instrumentation
+      android:name="androidx.test.runner.AndroidJUnitRunner"
+      android:targetPackage="io.grpc.binder" />
+
+  <application android:debuggable="true">
+    <uses-library android:name="android.test.runner" />
+
+    <service android:name="io.grpc.binder.HostServices$HostService1" android:exported="false">
+      <intent-filter>
+        <action android:name="action1"/>
+        <data android:scheme="scheme" android:host="authority" android:path="/path"/>
+      </intent-filter>
+    </service>
+    <service android:name="io.grpc.binder.HostServices$HostService2" android:exported="false">
+      <intent-filter>
+        <action android:name="action2"/>
+        <data android:scheme="scheme" android:host="authority" android:path="/path"/>
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

@@ -16,6 +16,9 @@
 
 package io.grpc.internal.testing;
 
+import com.google.common.base.Throwables;
+import io.grpc.internal.ConscryptLoader;
+import io.grpc.testing.TlsTesting;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -24,20 +27,16 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.security.KeyStore;
-import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -78,26 +77,21 @@ public class TestUtils {
   }
 
   /**
-   * Returns the ciphers preferred to use during tests. They may be chosen because they are widely
-   * available or because they are fast. There is no requirement that they provide confidentiality
-   * or integrity.
+   * Creates a new list of {@link InetSocketAddress} on localhost that overrides the host with
+   * {@link #TEST_SERVER_HOST}.
    */
-  public static List<String> preferredTestCiphers() {
-    String[] ciphers;
+  public static List<InetSocketAddress> testServerAddresses(InetSocketAddress... originalSockAddr) {
     try {
-      ciphers = SSLContext.getDefault().getDefaultSSLParameters().getCipherSuites();
-    } catch (NoSuchAlgorithmException ex) {
-      throw new RuntimeException(ex);
-    }
-    List<String> ciphersMinusGcm = new ArrayList<>();
-    for (String cipher : ciphers) {
-      // The GCM implementation in Java is _very_ slow (~1 MB/s)
-      if (cipher.contains("_GCM_")) {
-        continue;
+      InetAddress inetAddress = InetAddress.getByName("localhost");
+      inetAddress = InetAddress.getByAddress(TEST_SERVER_HOST, inetAddress.getAddress());
+      List<InetSocketAddress> addresses = new ArrayList<>();
+      for (InetSocketAddress orig: originalSockAddr) {
+        addresses.add(new InetSocketAddress(inetAddress, orig.getPort()));
       }
-      ciphersMinusGcm.add(cipher);
+      return addresses;
+    } catch (UnknownHostException e) {
+      throw new RuntimeException(e);
     }
-    return Collections.unmodifiableList(ciphersMinusGcm);
   }
 
   /**
@@ -107,8 +101,7 @@ public class TestUtils {
    * @param name  name of a file in src/main/resources/certs.
    */
   public static File loadCert(String name) throws IOException {
-    InputStream
-        in = new BufferedInputStream(TestUtils.class.getResourceAsStream("/certs/" + name));
+    InputStream in = new BufferedInputStream(TlsTesting.loadCert(name));
     File tmpFile = File.createTempFile(name, "");
     tmpFile.deleteOnExit();
 
@@ -136,7 +129,7 @@ public class TestUtils {
       throws CertificateException, IOException {
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
-    InputStream in = TestUtils.class.getResourceAsStream("/certs/" + fileName);
+    InputStream in = TlsTesting.loadCert(fileName);
     try {
       return (X509Certificate) cf.generateCertificate(in);
     } finally {
@@ -156,26 +149,35 @@ public class TestUtils {
     if (conscryptInstallAttempted) {
       return;
     }
-    Class<?> conscrypt;
-    try {
-      conscrypt = Class.forName("org.conscrypt.Conscrypt");
-    } catch (ClassNotFoundException ex) {
+    // Conscrypt-based I/O (like used in OkHttp) breaks on Windows.
+    // https://github.com/google/conscrypt/issues/444
+    if (System.mapLibraryName("test").endsWith(".dll")) {
       conscryptInstallAttempted = true;
       return;
     }
-    Method newProvider;
-    try {
-      newProvider = conscrypt.getMethod("newProvider");
-    } catch (NoSuchMethodException ex) {
-      throw new RuntimeException("Could not find newProvider method on Conscrypt", ex);
+    // Concrypt native libraries are not available for ARM architectures.
+    String osArch = System.getProperty("os.arch", "");
+    if (osArch.startsWith("aarch") || osArch.startsWith("arm")) {
+      conscryptInstallAttempted = true;
+      return;
+    }
+    if (!ConscryptLoader.isPresent()) {
+      conscryptInstallAttempted = true;
+      return;
     }
     Provider provider;
     try {
-      provider = (Provider) newProvider.invoke(null);
-    } catch (IllegalAccessException ex) {
-      throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
-    } catch (InvocationTargetException ex) {
-      throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
+      provider = ConscryptLoader.newProvider();
+    } catch (Throwable t) {
+      Throwable root = Throwables.getRootCause(t);
+      // Conscrypt uses a newer version of glibc than available on older Linux distributions
+      // (e.g. RHEL 6/8)
+      if (root instanceof UnsatisfiedLinkError && root.getMessage() != null
+          && root.getMessage().contains("GLIBC_")) {
+        conscryptInstallAttempted = true;
+        return;
+      }
+      throw new RuntimeException("Could not create Conscrypt provider", t);
     }
     Security.addProvider(provider);
     conscryptInstallAttempted = true;

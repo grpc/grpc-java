@@ -20,7 +20,7 @@ package io.grpc;
  * The connectivity states.
  *
  * @see <a href="https://github.com/grpc/grpc/blob/master/doc/connectivity-semantics-and-api.md">
- * more information</a>
+ *     more information</a>
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4359")
 public enum ConnectivityState {

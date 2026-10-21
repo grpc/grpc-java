@@ -16,10 +16,9 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Interface for intercepting incoming calls before that are dispatched by
+ * Interface for intercepting incoming calls before they are dispatched by
  * {@link ServerCallHandler}.
  *
  * <p>Implementers use this mechanism to add cross-cutting behavior to server-side calls. Common
@@ -29,8 +28,19 @@ import javax.annotation.concurrent.ThreadSafe;
  * <li>Logging and monitoring call behavior</li>
  * <li>Delegating calls to other servers</li>
  * </ul>
+ *
+ * <p>From gRPC's perspective, interceptors don't generally exist and are more of a convenience.
+ * Convenience APIs will use {@link ServerInterceptors} to convert the interceptor into a {@code
+ * ServerCallHandler}. Thus interceptors are an extension of the application and run on the same
+ * threads and receive callbacks using the same executor.
+ *
+ * <p>The interceptor may be called for multiple {@link ServerCall calls} by one or more threads
+ * without completing the previous ones first. Refer to the
+ * {@link io.grpc.ServerCall.Listener ServerCall.Listener} docs for more details regarding thread
+ * safety of the returned listener.
+ *
+ * <p>This interface is thread-safe.
  */
-@ThreadSafe
 public interface ServerInterceptor {
   /**
    * Intercept {@link ServerCall} dispatch by the {@code next} {@link ServerCallHandler}. General

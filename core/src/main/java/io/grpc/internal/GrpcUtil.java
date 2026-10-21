@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -25,11 +26,12 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalFeatureFlags;
 import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalMetadata.TrustedAsciiMarshaller;
@@ -43,17 +45,23 @@ import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -63,6 +71,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.Immutable;
 
 /**
  * Common utilities for GRPC.
@@ -71,13 +80,18 @@ public final class GrpcUtil {
 
   private static final Logger log = Logger.getLogger(GrpcUtil.class.getName());
 
-  public static final Charset US_ASCII = Charset.forName("US-ASCII");
+  private static final Set<Status.Code> INAPPROPRIATE_CONTROL_PLANE_STATUS
+      = Collections.unmodifiableSet(EnumSet.of(
+          Status.Code.OK,
+          Status.Code.INVALID_ARGUMENT,
+          Status.Code.NOT_FOUND,
+          Status.Code.ALREADY_EXISTS,
+          Status.Code.FAILED_PRECONDITION,
+          Status.Code.ABORTED,
+          Status.Code.OUT_OF_RANGE,
+          Status.Code.DATA_LOSS));
 
-  // AppEngine runtimes have constraints on threading and socket handling
-  // that need to be accommodated.
-  public static final boolean IS_RESTRICTED_APPENGINE =
-      System.getProperty("com.google.appengine.runtime.environment") != null
-          && "1.7".equals(System.getProperty("java.specification.version"));
+  public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
   /**
    * {@link io.grpc.Metadata.Key} for the timeout header.
@@ -108,6 +122,9 @@ public final class GrpcUtil {
    */
   public static final Metadata.Key<byte[]> CONTENT_ACCEPT_ENCODING_KEY =
       InternalMetadata.keyOf(GrpcUtil.CONTENT_ACCEPT_ENCODING, new AcceptEncodingMarshaller());
+
+  static final Metadata.Key<String> CONTENT_LENGTH_KEY =
+      Metadata.Key.of("content-length", Metadata.ASCII_STRING_MARSHALLER);
 
   private static final class AcceptEncodingMarshaller implements TrustedAsciiMarshaller<byte[]> {
     @Override
@@ -202,7 +219,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.22.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  public static final String IMPLEMENTATION_VERSION = "1.86.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -223,6 +240,12 @@ public final class GrpcUtil {
    * The default timeout in nanos for a server keepalive ping request.
    */
   public static final long DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(20L);
+
+  /**
+   * The default minimum time between client keepalive pings permitted by server.
+   */
+  public static final long DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS
+          = TimeUnit.MINUTES.toNanos(5L);
 
   /**
    * The magic keepalive time value that disables keepalive.
@@ -258,23 +281,14 @@ public final class GrpcUtil {
   public static final CallOptions.Key<Boolean> CALL_OPTIONS_RPC_OWNED_BY_BALANCER =
       CallOptions.Key.create("io.grpc.internal.CALL_OPTIONS_RPC_OWNED_BY_BALANCER");
 
+  private static final ClientStreamTracer NOOP_TRACER = new ClientStreamTracer() {};
+
   /**
    * Returns true if an RPC with the given properties should be counted when calculating the
    * in-use state of a transport.
    */
   public static boolean shouldBeCountedForInUse(CallOptions callOptions) {
     return !Boolean.TRUE.equals(callOptions.getOption(CALL_OPTIONS_RPC_OWNED_BY_BALANCER));
-  }
-
-  /**
-   * Returns a proxy detector appropriate for the current environment.
-   */
-  public static ProxyDetector getDefaultProxyDetector() {
-    if (IS_RESTRICTED_APPENGINE) {
-      return NOOP_PROXY_DETECTOR;
-    } else {
-      return DEFAULT_PROXY_DETECTOR;
-    }
   }
 
   /**
@@ -361,7 +375,11 @@ public final class GrpcUtil {
 
     Http2Error(int code, Status status) {
       this.code = code;
-      this.status = status.augmentDescription("HTTP/2 error code: " + this.name());
+      String description = "HTTP/2 error code: " + this.name();
+      if (status.getDescription() != null) {
+        description += " (" + status.getDescription() + ")";
+      }
+      this.status = status.withDescription(description);
     }
 
     /**
@@ -426,7 +444,7 @@ public final class GrpcUtil {
       return false;
     }
 
-    contentType = contentType.toLowerCase();
+    contentType = contentType.toLowerCase(Locale.US);
     if (!contentType.startsWith(CONTENT_TYPE_GRPC)) {
       // Not a gRPC content-type.
       return false;
@@ -461,6 +479,38 @@ public final class GrpcUtil {
     return builder.toString();
   }
 
+  @Immutable
+  public static final class GrpcBuildVersion {
+    private final String userAgent;
+    private final String implementationVersion;
+
+    private GrpcBuildVersion(String userAgent, String implementationVersion) {
+      this.userAgent = Preconditions.checkNotNull(userAgent, "userAgentName");
+      this.implementationVersion =
+          Preconditions.checkNotNull(implementationVersion, "implementationVersion");
+    }
+
+    public String getUserAgent() {
+      return userAgent;
+    }
+
+    public String getImplementationVersion() {
+      return implementationVersion;
+    }
+
+    @Override
+    public String toString() {
+      return userAgent + " " + implementationVersion;
+    }
+  }
+
+  /**
+   * Returns the build version of gRPC.
+   */
+  public static GrpcBuildVersion getGrpcBuildVersion() {
+    return new GrpcBuildVersion("gRPC Java", IMPLEMENTATION_VERSION);
+  }
+
   /**
    * Parse an authority into a URI for retrieving the host and port.
    */
@@ -483,8 +533,8 @@ public final class GrpcUtil {
    */
   public static String checkAuthority(String authority) {
     URI uri = authorityToUri(authority);
-    checkArgument(uri.getHost() != null, "No host in authority '%s'", authority);
-    checkArgument(uri.getUserInfo() == null,
+    // Verify that the user Info is not provided.
+    checkArgument(uri.getAuthority().indexOf('@') == -1,
         "Userinfo must not be present on authority: '%s'", authority);
     return authority;
   }
@@ -492,6 +542,7 @@ public final class GrpcUtil {
   /**
    * Combine a host and port into an authority string.
    */
+  // There is a copy of this method in io.grpc.Grpc
   public static String authorityFromHostAndPort(String host, int port) {
     try {
       return new URI(null, null, host, port, null, null, null).getAuthority();
@@ -569,16 +620,10 @@ public final class GrpcUtil {
    * @return a {@link ThreadFactory}.
    */
   public static ThreadFactory getThreadFactory(String nameFormat, boolean daemon) {
-    if (IS_RESTRICTED_APPENGINE) {
-      @SuppressWarnings("BetaApi")
-      ThreadFactory factory = MoreExecutors.platformThreadFactory();
-      return factory;
-    } else {
-      return new ThreadFactoryBuilder()
-          .setDaemon(daemon)
-          .setNameFormat(nameFormat)
-          .build();
-    }
+    return new ThreadFactoryBuilder()
+        .setDaemon(daemon)
+        .setNameFormat(nameFormat)
+        .build();
   }
 
   /**
@@ -592,28 +637,9 @@ public final class GrpcUtil {
     };
 
   /**
-   * Returns the host via {@link InetSocketAddress#getHostString} if it is possible,
-   * i.e. in jdk >= 7.
-   * Otherwise, return it via {@link InetSocketAddress#getHostName} which may incur a DNS lookup.
-   */
-  public static String getHost(InetSocketAddress addr) {
-    try {
-      Method getHostStringMethod = InetSocketAddress.class.getMethod("getHostString");
-      return (String) getHostStringMethod.invoke(addr);
-    } catch (NoSuchMethodException e) {
-      // noop
-    } catch (IllegalAccessException e) {
-      // noop
-    } catch (InvocationTargetException e) {
-      // noop
-    }
-    return addr.getHostName();
-  }
-
-  /**
    * Marshals a nanoseconds representation of the timeout to and from a string representation,
    * consisting of an ASCII decimal representation of a number with at most 8 digits, followed by a
-   * unit:
+   * unit. Available units:
    * n = nanoseconds
    * u = microseconds
    * m = milliseconds
@@ -631,12 +657,14 @@ public final class GrpcUtil {
   static class TimeoutMarshaller implements Metadata.AsciiMarshaller<Long> {
 
     @Override
-    public String toAsciiString(Long timeoutNanos) {
+    public String toAsciiString(Long timeoutNanosObject) {
       long cutoff = 100000000;
+      // Timeout checking is inherently racy. RPCs with timeouts in the past ideally don't even get
+      // here, but if the timeout is expired assume that happened recently and adjust it to the
+      // smallest allowed timeout
+      long timeoutNanos = Math.max(1, timeoutNanosObject);
       TimeUnit unit = TimeUnit.NANOSECONDS;
-      if (timeoutNanos < 0) {
-        throw new IllegalArgumentException("Timeout too small");
-      } else if (timeoutNanos < cutoff) {
+      if (timeoutNanos < cutoff) {
         return timeoutNanos + "n";
       } else if (timeoutNanos < cutoff * 1000L) {
         return unit.toMicros(timeoutNanos) + "u";
@@ -696,9 +724,14 @@ public final class GrpcUtil {
       return new ClientTransport() {
         @Override
         public ClientStream newStream(
-            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-          return transport.newStream(
-              method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
+            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+            ClientStreamTracer[] tracers) {
+          StreamInfo info = StreamInfo.newBuilder().setCallOptions(callOptions).build();
+          ClientStreamTracer streamTracer =
+              streamTracerFactory.newClientStreamTracer(info, headers);
+          checkState(tracers[tracers.length - 1] == NOOP_TRACER, "lb tracer already assigned");
+          tracers[tracers.length - 1] = streamTracer;
+          return transport.newStream(method, headers, callOptions, tracers);
         }
 
         @Override
@@ -719,13 +752,36 @@ public final class GrpcUtil {
     }
     if (!result.getStatus().isOk()) {
       if (result.isDrop()) {
-        return new FailingClientTransport(result.getStatus(), RpcProgress.DROPPED);
+        return new FailingClientTransport(
+            replaceInappropriateControlPlaneStatus(result.getStatus()), RpcProgress.DROPPED);
       }
       if (!isWaitForReady) {
-        return new FailingClientTransport(result.getStatus(), RpcProgress.PROCESSED);
+        return new FailingClientTransport(
+            replaceInappropriateControlPlaneStatus(result.getStatus()), RpcProgress.PROCESSED);
       }
     }
     return null;
+  }
+
+  /** Gets stream tracers based on CallOptions. */
+  public static ClientStreamTracer[] getClientStreamTracers(
+      CallOptions callOptions, Metadata headers, int previousAttempts, boolean isTransparentRetry,
+      boolean isHedging) {
+    List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
+    ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
+    StreamInfo streamInfo = StreamInfo.newBuilder()
+        .setCallOptions(callOptions)
+        .setPreviousAttempts(previousAttempts)
+        .setIsTransparentRetry(isTransparentRetry)
+        .setIsHedging(isHedging)
+        .build();
+    for (int i = 0; i < factories.size(); i++) {
+      tracers[i] = factories.get(i).newClientStreamTracer(streamInfo, headers);
+    }
+    // Reserved to be set later by the lb as per the API contract of ClientTransport.newStream().
+    // See also GrpcUtil.getTransportFromPickResult()
+    tracers[tracers.length - 1] = NOOP_TRACER;
+    return tracers;
   }
 
   /** Quietly closes all messages in MessageProducer. */
@@ -737,10 +793,10 @@ public final class GrpcUtil {
   }
 
   /**
-   * Closes an InputStream, ignoring IOExceptions.
+   * Closes a Closeable, ignoring IOExceptions.
    * This method exists because Guava's {@code Closeables.closeQuietly()} is beta.
    */
-  public static void closeQuietly(@Nullable InputStream message) {
+  public static void closeQuietly(@Nullable Closeable message) {
     if (message == null) {
       return;
     }
@@ -750,6 +806,50 @@ public final class GrpcUtil {
       // do nothing except log
       log.log(Level.WARNING, "exception caught in closeQuietly", ioException);
     }
+  }
+
+  /** Reads {@code in} until end of stream. */
+  public static void exhaust(InputStream in) throws IOException {
+    byte[] buf = new byte[256];
+    while (in.read(buf) != -1) {}
+  }
+
+  /**
+   * Some status codes from the control plane are not appropritate to use in the data plane. If one
+   * is given it will be replaced with INTERNAL, indicating a bug in the control plane
+   * implementation.
+   */
+  public static Status replaceInappropriateControlPlaneStatus(Status status) {
+    checkArgument(status != null);
+    return INAPPROPRIATE_CONTROL_PLANE_STATUS.contains(status.getCode())
+        ? Status.INTERNAL.withDescription(
+        "Inappropriate status code from control plane: " + status.getCode() + " "
+            + status.getDescription()).withCause(status.getCause()) : status;
+  }
+
+  /**
+   * Returns a "clean" representation of a status code and description (not cause) like
+   * "UNAVAILABLE: The description". Should be similar to Status.formatThrowableMessage().
+   */
+  public static String statusToPrettyString(Status status) {
+    if (status.getDescription() == null) {
+      return status.getCode().toString();
+    } else {
+      return status.getCode() + ": " + status.getDescription();
+    }
+  }
+
+  /**
+   * Create a status with contextual information, propagating details from a non-null status that
+   * contributed to the failure. For example, if UNAVAILABLE, "Couldn't load bar", and status
+   * "FAILED_PRECONDITION: Foo missing" were passed as arguments, then this method would produce the
+   * status "UNAVAILABLE: Couldn't load bar: FAILED_PRECONDITION: Foo missing" with a cause if the
+   * passed status had a cause.
+   */
+  public static Status statusWithDetails(Status.Code code, String description, Status causeStatus) {
+    return code.toStatus()
+        .withDescription(description + ": " + statusToPrettyString(causeStatus))
+        .withCause(causeStatus.getCause());
   }
 
   /**
@@ -775,6 +875,99 @@ public final class GrpcUtil {
     }
     return false;
   }
+
+  /**
+   * Percent encode the {@code authority} based on
+   * https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
+   *
+   * <p>When escaping a String, the following rules apply:
+   *
+   * <ul>
+   *   <li>The alphanumeric characters "a" through "z", "A" through "Z" and "0" through "9" remain
+   *       the same.
+   *   <li>The unreserved characters ".", "-", "~", and "_" remain the same.
+   *   <li>The general delimiters for authority, "[", "]", "@" and ":" remain the same.
+   *   <li>The subdelimiters "!", "$", "&amp;", "'", "(", ")", "*", "+", ",", ";", and "=" remain
+   *       the same.
+   *   <li>The space character " " is converted into %20.
+   *   <li>All other characters are converted into one or more bytes using UTF-8 encoding and each
+   *       byte is then represented by the 3-character string "%XY", where "XY" is the two-digit,
+   *       uppercase, hexadecimal representation of the byte value.
+   * </ul>
+   * 
+   * <p>This section does not use URLEscapers from Guava Net as its not Android-friendly thus core
+   *    can't depend on it.
+   */
+  public static class AuthorityEscaper {
+    // Escapers should output upper case hex digits.
+    private static final char[] UPPER_HEX_DIGITS = "0123456789ABCDEF".toCharArray();
+    private static final Set<Character> UNRESERVED_CHARACTERS = Collections
+        .unmodifiableSet(new HashSet<>(Arrays.asList('-', '_', '.', '~')));
+    private static final Set<Character> SUB_DELIMS = Collections
+        .unmodifiableSet(new HashSet<>(
+            Arrays.asList('!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=')));
+    private static final Set<Character> AUTHORITY_DELIMS = Collections
+        .unmodifiableSet(new HashSet<>(Arrays.asList(':', '[', ']', '@')));
+
+    private static boolean shouldEscape(char c) {
+      // Only encode ASCII.
+      if (c > 127) {
+        return false;
+      }
+      // Letters don't need an escape.
+      if (((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) {
+        return false;
+      }
+      // Numbers don't need to be escaped.
+      if ((c >= '0' && c <= '9'))  {
+        return false;
+      }
+      // Don't escape allowed characters.
+      if (UNRESERVED_CHARACTERS.contains(c)
+          || SUB_DELIMS.contains(c)
+          || AUTHORITY_DELIMS.contains(c)) {
+        return false;
+      }
+      return true;
+    }
+
+    public static String encodeAuthority(String authority) {
+      Preconditions.checkNotNull(authority, "authority");
+      int authorityLength = authority.length();
+      int hexCount = 0;
+      // Calculate how many characters actually need escaping.
+      for (int index = 0; index < authorityLength; index++) {
+        char c = authority.charAt(index);
+        if (shouldEscape(c)) {
+          hexCount++;
+        }
+      }
+      // If no char need escaping, just return the original string back.
+      if (hexCount == 0) {
+        return authority;
+      }
+
+      // Allocate enough space as encoded characters need 2 extra chars.
+      StringBuilder encoded_authority = new StringBuilder((2 * hexCount) + authorityLength);
+      for (int index = 0; index < authorityLength; index++) {
+        char c = authority.charAt(index);
+        if (shouldEscape(c)) {
+          encoded_authority.append('%');
+          encoded_authority.append(UPPER_HEX_DIGITS[c >>> 4]);
+          encoded_authority.append(UPPER_HEX_DIGITS[c & 0xF]);
+        } else {
+          encoded_authority.append(c);
+        }
+      }
+      return encoded_authority.toString();
+    }
+  }
+
+  public static boolean getFlag(String envVarName, boolean enableByDefault) {
+    return InternalFeatureFlags.getFlag(envVarName, enableByDefault);
+  }
+
+
 
   private GrpcUtil() {}
 }

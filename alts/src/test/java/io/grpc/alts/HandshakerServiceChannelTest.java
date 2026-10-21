@@ -46,7 +46,7 @@ public final class HandshakerServiceChannelTest {
             so.onCompleted();
           }
         })
-        .build());
+          .build());
   private Resource<Channel> resource;
 
   @Before
@@ -67,6 +67,24 @@ public final class HandshakerServiceChannelTest {
     }
   }
 
+  @Test
+  public void getHandshakerTarget_nullEnvVar() {
+    assertThat(HandshakerServiceChannel.getHandshakerTarget(null))
+        .isEqualTo("metadata.google.internal.:8080");
+  }
+
+  @Test
+  public void getHandshakerTarget_envVarWithPort() {
+    assertThat(HandshakerServiceChannel.getHandshakerTarget("169.254.169.254:80"))
+        .isEqualTo("169.254.169.254:8080");
+  }
+
+  @Test
+  public void getHandshakerTarget_envVarWithHostOnly() {
+    assertThat(HandshakerServiceChannel.getHandshakerTarget("169.254.169.254"))
+        .isEqualTo("169.254.169.254:8080");
+  }
+  
   @Test
   public void resource_works() {
     Channel channel = resource.create();
