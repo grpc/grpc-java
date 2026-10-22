@@ -28,11 +28,13 @@ import io.grpc.StatusException;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import java.io.InputStream;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import javax.annotation.Nullable;
 
@@ -40,7 +42,9 @@ import javax.annotation.Nullable;
  * Handles incoming binder transactions for a single stream, turning those transactions into calls
  * to the stream listener.
  *
- * <p>Out-of-order messages are reassembled into their correct order.
+ * <p>The transactions of a stream must arrive in the order they were sent. A gap in the sequence
+ * means a transaction was silently dropped, and we fail the stream rather than wait forever for
+ * data that will never arrive.
  */
 abstract class Inbound<L extends StreamListener, T extends BinderTransport>
     implements StreamListener.MessageProducer {
@@ -67,25 +71,28 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
   // ==========================
   // State of inbound data.
 
+  @GuardedBy("this")
+  private int expectedTransactionIndex = 0;
+
   @Nullable
   @GuardedBy("this")
   private InputStream firstMessage;
 
-  @GuardedBy("this")
-  private int firstQueuedTransactionIndex;
-
-  @GuardedBy("this")
-  private int nextCompleteMessageEnd;
-
+  // Fully assembled messages ready for consumption by the higher layer.
   @Nullable
   @GuardedBy("this")
-  private ArrayList<TransactionData> queuedTransactionData;
+  private ArrayDeque<InputStream> availableMessages;
+
+  // Holds the blocks received so far when the next message is fragmented across multiple txns.
+  @Nullable
+  @GuardedBy("this")
+  private ArrayList<byte[]> partialMessageBlocks;
+
+  @GuardedBy("this")
+  private int partialMessageNumBytes = 0;
 
   @GuardedBy("this")
   private boolean suffixAvailable;
-
-  @GuardedBy("this")
-  private int suffixTransactionIndex;
 
   @GuardedBy("this")
   private int inboundDataSize;
@@ -102,9 +109,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
    * delivery what we've sent.
    */
   enum State {
-    // We aren't yet connected to a BinderStream instance and listener. Due to potentially
-    // out-of-order messages, a server-side instance can remain in this state for multiple
-    // transactions.
+    // We aren't yet connected to a BinderStream instance and listener.
     UNINITIALIZED,
 
     // We're attached to a BinderStream instance and we have a listener we can report to.
@@ -186,12 +191,12 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
 
   @GuardedBy("this")
   private final boolean messageAvailable() {
-    return firstMessage != null || nextCompleteMessageEnd > 0;
+    return firstMessage != null || (availableMessages != null && !availableMessages.isEmpty());
   }
 
   @GuardedBy("this")
   private boolean receivedAllTransactions() {
-    return suffixAvailable && firstQueuedTransactionIndex >= suffixTransactionIndex;
+    return suffixAvailable;
   }
 
   // ===================
@@ -287,6 +292,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
     if (!isClosed()) {
       boolean wasInitialized = (deliveryState != State.UNINITIALIZED);
       onDeliveryState(State.CLOSED);
+      releaseUnconsumedResources();
       if (wasInitialized) {
         statsTraceContext.streamClosed(internalStatus);
       }
@@ -298,6 +304,27 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
       }
       unregister();
     }
+  }
+
+  @GuardedBy("this")
+  void releaseUnconsumedResources() {
+    if (partialMessageBlocks != null) {
+      for (byte[] block : partialMessageBlocks) {
+        if (block != null) {
+          BlockPool.releaseBlock(block);
+        }
+      }
+      partialMessageBlocks.clear();
+      partialMessageNumBytes = 0;
+    }
+    if (availableMessages != null) {
+      for (InputStream is : availableMessages) {
+        GrpcUtil.closeQuietly(is);
+      }
+      availableMessages.clear();
+    }
+    GrpcUtil.closeQuietly(firstMessage);
+    firstMessage = null;
   }
 
   @GuardedBy("this")
@@ -344,6 +371,24 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
         return;
       }
       int index = parcel.readInt();
+
+      // Transaction indices are scoped to a single call, so a gap here tells us nothing about the
+      // other calls multiplexed over this transport. Abort just this stream; tearing the transport
+      // down would amplify a single-stream fault into an outage for every in-flight RPC.
+      //
+      // Note this only catches drops that leave a gap. A drop with no successor, e.g. the last
+      // transaction of a stream, still hangs until the deadline.
+      if (index != expectedTransactionIndex) {
+        closeAbnormal(
+            Status.UNAVAILABLE.withDescription(
+                "Out-of-sequence transaction received: got "
+                    + index
+                    + ", expected "
+                    + expectedTransactionIndex));
+        return;
+      }
+      expectedTransactionIndex++;
+
       boolean hasPrefix = TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_PREFIX);
       boolean hasMessageData = TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_MESSAGE_DATA);
       boolean hasSuffix = TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_SUFFIX);
@@ -352,23 +397,16 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
         onDeliveryState(State.PREFIX_DELIVERED);
       }
       if (hasMessageData) {
-        handleMessageData(flags, index, parcel);
+        handleMessageData(flags, parcel);
       }
       if (hasSuffix) {
-        handleSuffix(flags, parcel);
-        suffixTransactionIndex = index;
-        suffixAvailable = true;
-      }
-      if (index == firstQueuedTransactionIndex) {
-        if (queuedTransactionData == null) {
-          // This message was in order, and we haven't needed to queue anything yet.
-          firstQueuedTransactionIndex += 1;
-        } else if (!hasMessageData && !hasSuffix) {
-          // The first transaction arrived, but it contained no message data.
-          queuedTransactionData.remove(0);
-          firstQueuedTransactionIndex += 1;
-          lookForCompleteMessage();
+        if (partialMessageBlocks != null && !partialMessageBlocks.isEmpty()) {
+          closeAbnormal(
+              Status.INTERNAL.withDescription("Inbound stream closed with partial message"));
+          return;
         }
+        handleSuffix(flags, parcel);
+        suffixAvailable = true;
       }
       reportInboundSize(parcel.dataSize());
       deliver();
@@ -384,12 +422,18 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
   abstract void handleSuffix(int flags, Parcel parcel) throws StatusException;
 
   @GuardedBy("this")
-  private void handleMessageData(int flags, int index, Parcel parcel) throws StatusException {
+  private void handleMessageData(int flags, Parcel parcel) throws StatusException {
     InputStream stream = null;
     byte[] block = null;
     boolean lastBlockOfMessage = true;
     int numBytes = 0;
     if ((flags & TransactionUtils.FLAG_MESSAGE_DATA_IS_PARCELABLE) != 0) {
+      if (partialMessageBlocks != null && !partialMessageBlocks.isEmpty()) {
+        throw Status.INTERNAL
+            .withDescription(
+                "Inbound stream received parcelable message during partial message reassembly")
+            .asException();
+      }
       InboundParcelablePolicy policy = attributes.get(BinderTransport.INBOUND_PARCELABLE_POLICY);
       if (policy == null || !policy.shouldAcceptParcelableMessages()) {
         throw Status.PERMISSION_DENIED
@@ -417,73 +461,60 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
         lastBlockOfMessage = false;
       }
     }
-    if (queuedTransactionData == null) {
-      if (numReceivedMessages == 0 && lastBlockOfMessage && index == firstQueuedTransactionIndex) {
-        // Shortcut for when we receive a single message in one transaction.
-        checkState(firstMessage == null);
-        firstMessage = (stream != null) ? stream : new BlockInputStream(block);
-        reportInboundMessage(numBytes);
-        return;
-      }
-      queuedTransactionData = new ArrayList<>(16);
-    }
-    enqueueTransactionData(index, new TransactionData(stream, block, numBytes, lastBlockOfMessage));
-  }
-
-  @GuardedBy("this")
-  private void enqueueTransactionData(int index, TransactionData data) {
-    int offset = index - firstQueuedTransactionIndex;
-    if (offset < queuedTransactionData.size()) {
-      queuedTransactionData.set(offset, data);
-      lookForCompleteMessage();
-    } else if (offset > queuedTransactionData.size()) {
-      do {
-        queuedTransactionData.add(null);
-      } while (offset > queuedTransactionData.size());
-      queuedTransactionData.add(data);
+    if (stream != null) {
+      enqueueMessageStream(stream, numBytes);
+    } else if (lastBlockOfMessage
+        && (partialMessageBlocks == null || partialMessageBlocks.isEmpty())) {
+      // Shortcut for when we receive a single message in one transaction.
+      enqueueMessageStream(new BlockInputStream(block), numBytes);
     } else {
-      queuedTransactionData.add(data);
-      lookForCompleteMessage();
+      if (partialMessageBlocks == null) {
+        partialMessageBlocks = new ArrayList<>();
+      }
+      partialMessageBlocks.add(block);
+      partialMessageNumBytes += numBytes;
+      if (lastBlockOfMessage) {
+        byte[][] blocks = partialMessageBlocks.toArray(new byte[0][]);
+        InputStream messageStream = new BlockInputStream(blocks, partialMessageNumBytes);
+        enqueueMessageStream(messageStream, partialMessageNumBytes);
+        partialMessageBlocks.clear();
+        partialMessageNumBytes = 0;
+      }
     }
   }
 
   @GuardedBy("this")
-  private void lookForCompleteMessage() {
-    int numBytes = 0;
-    if (nextCompleteMessageEnd == 0) {
-      for (int i = 0; i < queuedTransactionData.size(); i++) {
-        TransactionData data = queuedTransactionData.get(i);
-        if (data == null) {
-          // Missing block.
-          return;
-        } else {
-          numBytes += data.numBytes;
-          if (data.lastBlockOfMessage) {
-            // Found a complete message.
-            nextCompleteMessageEnd = i + 1;
-            reportInboundMessage(numBytes);
-            return;
-          }
-        }
+  private void enqueueMessageStream(InputStream stream, int numBytes) {
+    if (numReceivedMessages == 0 && (availableMessages == null || availableMessages.isEmpty())) {
+      firstMessage = stream;
+    } else {
+      if (availableMessages == null) {
+        availableMessages = new ArrayDeque<>();
       }
+      availableMessages.add(stream);
     }
+    reportInboundMessage(numBytes);
   }
 
   @Override
   @Nullable
   public final synchronized InputStream next() {
     InputStream stream = null;
-    if (firstMessage != null) {
-      stream = firstMessage;
-      firstMessage = null;
-    } else if (numRequestedMessages > 0 && messageAvailable()) {
-      stream = assembleNextMessage();
+    // Belt-and-braces: canDeliver() won't hand out a MessageProducer unless messages were
+    // requested, but keep that precondition local rather than relying on the invariant.
+    if (numRequestedMessages > 0) {
+      if (firstMessage != null) {
+        stream = firstMessage;
+        firstMessage = null;
+      } else if (availableMessages != null) {
+        stream = availableMessages.poll();
+      }
     }
     if (stream != null) {
       numRequestedMessages -= 1;
     } else {
       producingMessages = false;
-      if (receivedAllTransactions()) {
+      if (!messageAvailable() && receivedAllTransactions()) {
         // That's the last of the messages delivered.
         if (!isClosed()) {
           onDeliveryState(State.ALL_MESSAGES_DELIVERED);
@@ -492,35 +523,6 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
       }
     }
     return stream;
-  }
-
-  @GuardedBy("this")
-  private InputStream assembleNextMessage() {
-    InputStream message;
-    int numBlocks = nextCompleteMessageEnd;
-    nextCompleteMessageEnd = 0;
-    int numBytes = 0;
-    if (numBlocks == 1) {
-      // Single block.
-      TransactionData data = queuedTransactionData.remove(0);
-      numBytes = data.numBytes;
-      if (data.stream != null) {
-        message = data.stream;
-      } else {
-        message = new BlockInputStream(data.block);
-      }
-    } else {
-      byte[][] blocks = new byte[numBlocks][];
-      for (int i = 0; i < numBlocks; i++) {
-        TransactionData data = queuedTransactionData.remove(0);
-        blocks[i] = checkNotNull(data.block);
-        numBytes += blocks[i].length;
-      }
-      message = new BlockInputStream(blocks, numBytes);
-    }
-    firstQueuedTransactionIndex += numBlocks;
-    lookForCompleteMessage();
-    return message;
   }
 
   // ------------------------------------
@@ -684,6 +686,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
     void onCloseSent(Status status) {
       if (!isClosed()) {
         onDeliveryState(State.CLOSED);
+        releaseUnconsumedResources();
         statsTraceContext.streamClosed(status);
         listener.closed(Status.OK);
       }
@@ -715,33 +718,6 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
         break;
       default:
         throw new AssertionError();
-    }
-  }
-
-  // ======================================
-  // Message reassembly.
-
-  /** Part of an unconsumed message. */
-  private static final class TransactionData {
-    @Nullable final InputStream stream;
-    @Nullable final byte[] block;
-    final int numBytes;
-    final boolean lastBlockOfMessage;
-
-    TransactionData(InputStream stream, byte[] block, int numBytes, boolean lastBlockOfMessage) {
-      this.stream = stream;
-      this.block = block;
-      this.numBytes = numBytes;
-      this.lastBlockOfMessage = lastBlockOfMessage;
-    }
-
-    @Override
-    public String toString() {
-      return "TransactionData["
-          + numBytes
-          + "b "
-          + (stream != null ? "stream" : "array")
-          + (lastBlockOfMessage ? "(last)]" : "]");
     }
   }
 }

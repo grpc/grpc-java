@@ -18,10 +18,9 @@ package io.grpc.binder.internal;
 
 import static android.os.IBinder.FLAG_ONEWAY;
 import static android.os.Process.myUid;
-import static com.google.common.truth.Truth.assertAbout;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
-import static io.grpc.StatusSubject.status;
+import static io.grpc.StatusSubject.assertThat;
 import static io.grpc.binder.internal.BinderTransport.REMOTE_UID;
 import static io.grpc.binder.internal.BinderTransport.SETUP_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.SHUTDOWN_TRANSPORT;
@@ -58,7 +57,8 @@ import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.ApiConstants;
 import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.SecurityPolicies;
-import io.grpc.binder.internal.OneWayBinderProxies.*;
+import io.grpc.binder.internal.OneWayBinderProxies.BlockingBinderDecorator;
+import io.grpc.binder.internal.OneWayBinderProxies.QueueingOneWayBinderProxy;
 import io.grpc.binder.internal.SettableAsyncSecurityPolicy.AuthRequest;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientStream;
@@ -73,9 +73,7 @@ import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.MockServerTransportListener;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
-import java.io.InputStream;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Before;
@@ -453,7 +451,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
   public void serverAlreadyListening() {}
 
   @Test
-  public void singleTxnMsgsDeliveredToServerOutOfOrder() throws Exception {
+  public void serverAbortsStreamWhenSingleTxnMsgsArriveOutOfOrder() throws Exception {
     server.start(serverListener);
     client =
         newClientTransportBuilder()
@@ -484,7 +482,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     QueueingOneWayBinderProxy.Transaction tx2 = takeNextTransaction(queueingServerProxy);
     QueueingOneWayBinderProxy.Transaction txHalfClose = takeNextTransaction(queueingServerProxy);
 
-    // Deliver messages out of order!
+    // Deliver messages out of order! tx1 shows up only after the gap at tx2 was detected.
     queueingServerProxy.deliver(txHeaders);
     queueingServerProxy.deliver(tx2);
     queueingServerProxy.deliver(tx1);
@@ -494,26 +492,82 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
         serverListener.takeListenerOrFail(TIMEOUT_MS, MILLISECONDS);
     MockServerTransportListener.StreamCreation serverStreamCreation =
         serverTransportListener.takeStreamOrFail(TIMEOUT_MS, MILLISECONDS);
-    serverStreamCreation.stream.request(2);
 
-    // Expect the server to deliver the messages in the order they were originally sent.
-    InputStream msg1 = takeNextMessage(serverStreamCreation.listener.messageQueue);
-    assertThat(methodDescriptor.parseResponse(msg1)).isEqualTo("one");
-
-    InputStream msg2 = takeNextMessage(serverStreamCreation.listener.messageQueue);
-    assertThat(methodDescriptor.parseResponse(msg2)).isEqualTo("two");
-
-    assertThat(serverStreamCreation.listener.awaitHalfClosed(TIMEOUT_MS, MILLISECONDS)).isTrue();
-    serverStreamCreation.stream.close(Status.OK, new Metadata());
-
-    assertAbout(status()).that(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS)).isOk();
-    assertAbout(status())
-        .that(serverStreamCreation.listener.awaitClose(TIMEOUT_MS, MILLISECONDS))
-        .isOk();
+    // The gap aborts the stream.
+    assertThat(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .hasCode(Status.Code.UNAVAILABLE);
+    assertThat(serverStreamCreation.listener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .hasCode(Status.Code.UNAVAILABLE);
   }
 
   @Test
-  public void msgFragmentsDeliveredToServerOutOfOrder() throws Exception {
+  public void transportSurvivesStreamAbortedByOutOfOrderTxns() throws Exception {
+    server.start(serverListener);
+    client =
+        newClientTransportBuilder()
+            .setFactory(
+                newClientTransportFactoryBuilder()
+                    .setBinderDecorator(blockingDecorator)
+                    .buildClientTransportFactory())
+            .build();
+    runIfNotNull(client.start(mockClientTransportListener));
+    blockingDecorator.putNextResult(takeNextBinder(blockingDecorator)); // Endpoint binder.
+    QueueingOneWayBinderProxy queueingServerProxy =
+        new QueueingOneWayBinderProxy(takeNextBinder(blockingDecorator)); // Server binder.
+    blockingDecorator.putNextResult(queueingServerProxy);
+
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportReady();
+
+    ClientStream doomedStream =
+        client.newStream(methodDescriptor, new Metadata(), CallOptions.DEFAULT, noopTracers);
+    ClientStreamListenerBase doomedStreamListener = new ClientStreamListenerBase();
+    doomedStream.start(doomedStreamListener);
+    doomedStream.writeMessage(methodDescriptor.streamRequest("one"));
+    doomedStream.writeMessage(methodDescriptor.streamRequest("two"));
+    doomedStream.halfClose();
+
+    QueueingOneWayBinderProxy.Transaction doomedHeaders = takeNextTransaction(queueingServerProxy);
+    QueueingOneWayBinderProxy.Transaction doomedTx1 = takeNextTransaction(queueingServerProxy);
+    QueueingOneWayBinderProxy.Transaction doomedTx2 = takeNextTransaction(queueingServerProxy);
+    QueueingOneWayBinderProxy.Transaction doomedHalfClose =
+        takeNextTransaction(queueingServerProxy);
+
+    // Deliver messages out of order! doomedTx1 shows up only after the gap at doomedTx2.
+    queueingServerProxy.deliver(doomedHeaders);
+    queueingServerProxy.deliver(doomedTx2);
+    queueingServerProxy.deliver(doomedTx1);
+    queueingServerProxy.deliver(doomedHalfClose);
+
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, MILLISECONDS);
+    MockServerTransportListener.StreamCreation doomedStreamCreation =
+        serverTransportListener.takeStreamOrFail(TIMEOUT_MS, MILLISECONDS);
+    assertThat(doomedStreamCreation.listener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .hasCode(Status.Code.UNAVAILABLE);
+
+    // Only the offending stream was aborted, so a subsequent call on this transport still works.
+    ClientStream survivingStream =
+        client.newStream(methodDescriptor, new Metadata(), CallOptions.DEFAULT, noopTracers);
+    ClientStreamListenerBase survivingStreamListener = new ClientStreamListenerBase();
+    survivingStream.start(survivingStreamListener);
+    survivingStream.writeMessage(methodDescriptor.streamRequest("three"));
+    survivingStream.halfClose();
+
+    queueingServerProxy.deliver(takeNextTransaction(queueingServerProxy)); // Headers.
+    queueingServerProxy.deliver(takeNextTransaction(queueingServerProxy)); // Message "three".
+    queueingServerProxy.deliver(takeNextTransaction(queueingServerProxy)); // Half-close.
+
+    MockServerTransportListener.StreamCreation survivingStreamCreation =
+        serverTransportListener.takeStreamOrFail(TIMEOUT_MS, MILLISECONDS);
+    survivingStreamCreation.stream.request(1);
+    assertThat(survivingStreamCreation.listener.awaitHalfClosed(TIMEOUT_MS, MILLISECONDS)).isTrue();
+    survivingStreamCreation.stream.writeHeaders(new Metadata(), true);
+    survivingStreamCreation.stream.close(Status.OK, new Metadata());
+    assertThat(survivingStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS)).isOk();
+  }
+
+  @Test
+  public void serverAbortsStreamWhenMsgFragmentsArriveOutOfOrder() throws Exception {
     server.start(serverListener);
     client =
         newClientTransportBuilder()
@@ -545,32 +599,26 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     QueueingOneWayBinderProxy.Transaction tx2 = takeNextTransaction(queueingServerProxy);
     QueueingOneWayBinderProxy.Transaction txHalfClose = takeNextTransaction(queueingServerProxy);
 
-    // Deliver fragments out of order!
+    // Deliver fragments out of order! tx1 shows up only after the gap at tx2 was detected.
     queueingServerProxy.deliver(txHeaders);
     queueingServerProxy.deliver(tx2);
     queueingServerProxy.deliver(tx1);
     queueingServerProxy.deliver(txHalfClose);
 
-    // Verify that the server reassembles the transactions correctly.
     MockServerTransportListener serverTransportListener =
         serverListener.takeListenerOrFail(TIMEOUT_MS, MILLISECONDS);
     MockServerTransportListener.StreamCreation serverStreamCreation =
         serverTransportListener.takeStreamOrFail(TIMEOUT_MS, MILLISECONDS);
-    serverStreamCreation.stream.request(1);
-    InputStream msg = takeNextMessage(serverStreamCreation.listener.messageQueue);
-    assertThat(methodDescriptor.parseResponse(msg)).isEqualTo(largeMessage);
 
-    assertThat(serverStreamCreation.listener.awaitHalfClosed(TIMEOUT_MS, MILLISECONDS)).isTrue();
-    serverStreamCreation.stream.close(Status.OK, new Metadata());
-
-    assertAbout(status()).that(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS)).isOk();
-    assertAbout(status())
-        .that(serverStreamCreation.listener.awaitClose(TIMEOUT_MS, MILLISECONDS))
-        .isOk();
+    // The gap aborts the stream.
+    assertThat(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .hasCode(Status.Code.UNAVAILABLE);
+    assertThat(serverStreamCreation.listener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .hasCode(Status.Code.UNAVAILABLE);
   }
 
   @Test
-  public void singleTxnMsgsDeliveredToClientOutOfOrder() throws Exception {
+  public void clientAbortsStreamWhenSingleTxnMsgsArriveOutOfOrder() throws Exception {
     server = newServerBuilder().setClientBinderDecorator(blockingDecorator).build();
     registerServerWithRobolectric((BinderServer) server);
     server.start(serverListener);
@@ -607,25 +655,18 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     QueueingOneWayBinderProxy.Transaction tx2 = takeNextTransaction(queueingClientProxy);
     QueueingOneWayBinderProxy.Transaction txClose = takeNextTransaction(queueingClientProxy);
 
-    // Deliver messages to the client out of order!
+    // Deliver messages to the client out of order! tx1 shows up only after the gap was detected.
     queueingClientProxy.deliver(tx2);
     queueingClientProxy.deliver(tx1);
     queueingClientProxy.deliver(txClose);
 
-    // Client should deliver messages to the application in the order sent.
-    InputStream msg1 = takeNextMessage(clientStreamListener.messageQueue);
-    assertThat(methodDescriptor.parseResponse(msg1)).isEqualTo("one");
-    InputStream msg2 = takeNextMessage(clientStreamListener.messageQueue);
-    assertThat(methodDescriptor.parseResponse(msg2)).isEqualTo("two");
-
-    assertAbout(status()).that(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS)).isOk();
-    assertAbout(status())
-        .that(serverStreamCreation.listener.awaitClose(TIMEOUT_MS, MILLISECONDS))
-        .isOk();
+    // The gap aborts the stream.
+    assertThat(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .hasCode(Status.Code.UNAVAILABLE);
   }
 
   @Test
-  public void msgFragmentsDeliveredToClientOutOfOrder() throws Exception {
+  public void clientAbortsStreamWhenMsgFragmentsArriveOutOfOrder() throws Exception {
     server = newServerBuilder().setClientBinderDecorator(blockingDecorator).build();
     registerServerWithRobolectric((BinderServer) server);
     server.start(serverListener);
@@ -660,13 +701,13 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     QueueingOneWayBinderProxy.Transaction tx1 = takeNextTransaction(queueingClientProxy);
     QueueingOneWayBinderProxy.Transaction tx2 = takeNextTransaction(queueingClientProxy);
 
-    // Deliver them to the client out of order!
+    // Deliver them to the client out of order! tx1 shows up only after the gap was detected.
     queueingClientProxy.deliver(tx2);
     queueingClientProxy.deliver(tx1);
 
-    // Client should reassemble the message correctly.
-    InputStream msg = takeNextMessage(clientStreamListener.messageQueue);
-    assertThat(methodDescriptor.parseResponse(msg)).isEqualTo(largeMessage);
+    // The gap aborts the stream.
+    assertThat(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .hasCode(Status.Code.UNAVAILABLE);
   }
 
   private static OneWayBinderProxy takeNextBinder(
@@ -681,13 +722,6 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     QueueingOneWayBinderProxy.Transaction tx = proxy.pollNextTransaction(TIMEOUT_MS, MILLISECONDS);
     assertThat(tx).isNotNull();
     return tx;
-  }
-
-  private static InputStream takeNextMessage(BlockingQueue<InputStream> messageQueue)
-      throws InterruptedException {
-    InputStream msg = messageQueue.poll(TIMEOUT_MS, MILLISECONDS);
-    assertThat(msg).isNotNull();
-    return msg;
   }
 
   private static String newStringOfLength(int numChars) {
