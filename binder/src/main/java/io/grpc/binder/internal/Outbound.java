@@ -261,7 +261,9 @@ abstract class Outbound {
       transport.sendTransaction(callId, parcel);
       statsTraceContext.outboundWireSize(dataSize);
       statsTraceContext.outboundUncompressedSize(dataSize);
-    } catch (IOException e) {
+    } catch (IOException | RuntimeException e) {
+      // Checked IO failures and unchecked application serialization failures (for example
+      // Parcelable, metadata marshaller, or InputStream) both end the call. Do not catch Error.
       throw Status.INTERNAL.withCause(e).asException();
     }
   }
