@@ -106,9 +106,7 @@ final class SingleMessageServerStream implements ServerStream {
       synchronized (outbound) {
         outbound.sendSingleMessageAndClose(pendingHeaders, pendingSingleMessage, status, trailers);
       }
-      synchronized (inbound) {
-        inbound.onCloseSent(status);
-      }
+      inbound.closeIfSuffixSent();
     } catch (StatusException se) {
       synchronized (inbound) {
         inbound.closeAbnormal(se.getStatus());
