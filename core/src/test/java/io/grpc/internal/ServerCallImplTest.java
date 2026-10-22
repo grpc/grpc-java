@@ -127,6 +127,57 @@ public class ServerCallImplTest {
     callTracer0(Status.UNKNOWN);
   }
 
+  @Test
+  public void callTracer_clientCancelled_reportsCallFailed() {
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+
+    streamListener.closed(Status.CANCELLED);
+
+    ServerStats.Builder afterBuilder = new ServerStats.Builder();
+    serverCallTracer.updateBuilder(afterBuilder);
+    ServerStats after = afterBuilder.build();
+    assertEquals(1, after.callsStarted);
+    assertEquals(0, after.callsSucceeded);
+    assertEquals(1, after.callsFailed);
+  }
+
+  @Test
+  public void callTracer_clientCancelledThenClosed_reportsCallFailedOnce() {
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+
+    streamListener.closed(Status.CANCELLED);
+    call.sendHeaders(new Metadata());
+    call.sendMessage(123L);
+    call.close(Status.OK, new Metadata());
+
+    ServerStats.Builder afterBuilder = new ServerStats.Builder();
+    serverCallTracer.updateBuilder(afterBuilder);
+    ServerStats after = afterBuilder.build();
+    assertEquals(1, after.callsStarted);
+    assertEquals(0, after.callsSucceeded);
+    assertEquals(1, after.callsFailed);
+  }
+
+  @Test
+  public void callTracer_closedThenClientCancelled_reportsCallSucceededOnce() {
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+
+    call.sendHeaders(new Metadata());
+    call.sendMessage(123L);
+    call.close(Status.OK, new Metadata());
+    streamListener.closed(Status.CANCELLED);
+
+    ServerStats.Builder afterBuilder = new ServerStats.Builder();
+    serverCallTracer.updateBuilder(afterBuilder);
+    ServerStats after = afterBuilder.build();
+    assertEquals(1, after.callsStarted);
+    assertEquals(1, after.callsSucceeded);
+    assertEquals(0, after.callsFailed);
+  }
+
   private void callTracer0(Status status) {
     CallTracer tracer = CallTracer.getDefaultFactory().create();
     ServerStats.Builder beforeBuilder = new ServerStats.Builder();
