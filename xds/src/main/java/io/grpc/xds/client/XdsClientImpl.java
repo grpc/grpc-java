@@ -574,6 +574,11 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       XdsResourceType.Args args, List<Any> resources, XdsResourceType<T> xdsResourceType,
       boolean isFirstResponse, ProcessingTracker processingTracker) {
     ControlPlaneClient controlPlaneClient = serverCpClientMap.get(args.serverInfo);
+    if (controlPlaneClient == null) {
+      logger.log(XdsLogLevel.DEBUG,
+          "Couldn't find CPC for {0}, so skipping resource update", args.serverInfo);
+      return;
+    }
 
     if (isFirstResponse) {
       shutdownLowerPriorityCpcs(controlPlaneClient);
