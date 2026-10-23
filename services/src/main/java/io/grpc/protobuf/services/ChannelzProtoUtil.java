@@ -489,6 +489,7 @@ final class ChannelzProtoUtil {
       }
       return ret;
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
       throw Status.INTERNAL.withCause(e).asRuntimeException();
     } catch (ExecutionException e) {
       throw Status.INTERNAL.withCause(e).asRuntimeException();
