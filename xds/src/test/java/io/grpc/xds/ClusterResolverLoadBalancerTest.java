@@ -682,11 +682,15 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private LocalityLbEndpoints createEndpoints(Locality locality, int priority) {
+    // Localities must have distinct endpoint addresses even when their priorities are merged.
+    String address = ImmutableMap.of(
+        LOCALITY1, "127.0.0.1", LOCALITY2, "127.0.0.2", LOCALITY3, "127.0.0.3")
+        .get(locality);
     return LocalityLbEndpoints.newBuilder()
         .setLoadBalancingWeight(UInt32Value.of(70))
         .setLocality(locality)
         .setPriority(priority)
-        .addLbEndpoints(newSocketLbEndpoint("127.0." + priority + ".1", 8080))
+        .addLbEndpoints(newSocketLbEndpoint(address, 8080))
         .build();
   }
 
