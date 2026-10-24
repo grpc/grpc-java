@@ -110,6 +110,29 @@ public class AdvancedTlsX509KeyManagerTest {
   }
 
   @Test
+  public void scheduledReload_doesNotReloadWhenFilesAreUnchanged() throws Exception {
+    FakeClock fakeClock = new FakeClock();
+    AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
+
+    // Give the cert and key files distinct modification times, which is the normal case for two
+    // files written at different instants.
+    serverCert0File.setLastModified(TimeUnit.SECONDS.toMillis(1000));
+    serverKey0File.setLastModified(TimeUnit.SECONDS.toMillis(2000));
+
+    serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File, 1, TimeUnit.MINUTES,
+        fakeClock.getScheduledExecutorService());
+
+    // Let one refresh cycle run; the scheduled reloader starts from a zero baseline, so it reloads
+    // once and rotates the alias.
+    fakeClock.forwardTime(1, TimeUnit.MINUTES);
+    String aliasAfterFirstCycle = serverKeyManager.chooseEngineServerAlias(null, null, null);
+
+    // Subsequent cycles with the files untouched must not reload, so the alias must stay the same.
+    fakeClock.forwardTime(5, TimeUnit.MINUTES);
+    assertEquals(aliasAfterFirstCycle, serverKeyManager.chooseEngineServerAlias(null, null, null));
+  }
+
+  @Test
   public void allAliasMethods_returnNullBeforeCredentialsLoaded() {
     AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
 
