@@ -547,8 +547,99 @@ public final class GrpcUtil {
     try {
       return new URI(null, null, host, port, null, null, null).getAuthority();
     } catch (URISyntaxException ex) {
+      String placeholderHost = addPlaceholderLabelIfLastLabelStartsWithDigit(host);
+      if (placeholderHost != null) {
+        try {
+          new URI(null, null, placeholderHost, port, null, null, null);
+          return port < 0 ? host : host + ":" + port;
+        } catch (URISyntaxException ignored) {
+          // Fall through and throw original exception.
+        }
+      }
       throw new IllegalArgumentException("Invalid host or port: " + host + " " + port, ex);
     }
+  }
+
+  /**
+   * Returns the host of {@code uri}, working around JDK-8188305 where {@link URI#getHost()} returns
+   * {@code null} if the final label of a multi-label hostname starts with a digit.
+   */
+  @Nullable
+  public static String getHost(URI uri) {
+    String host = uri.getHost();
+    if (host != null) {
+      return host;
+    }
+    URI placeholderUri = getPlaceholderAuthorityUri(uri);
+    if (placeholderUri != null) {
+      String placeholderHost = placeholderUri.getHost();
+      if (placeholderHost.endsWith(".a.")) {
+        return placeholderHost.substring(0, placeholderHost.length() - 3) + ".";
+      }
+      return placeholderHost.substring(0, placeholderHost.length() - 2);
+    }
+    return null;
+  }
+
+  /**
+   * Returns the port of {@code uri}, working around JDK-8188305 where {@link URI#getPort()} returns
+   * {@code -1} if the final label of a multi-label hostname starts with a digit.
+   */
+  public static int getPort(URI uri) {
+    int port = uri.getPort();
+    if (port != -1) {
+      return port;
+    }
+    URI placeholderUri = getPlaceholderAuthorityUri(uri);
+    return placeholderUri != null ? placeholderUri.getPort() : -1;
+  }
+
+  @Nullable
+  private static URI getPlaceholderAuthorityUri(URI uri) {
+    if (uri.getHost() != null) {
+      return uri;
+    }
+    String authority = uri.getAuthority();
+    if (authority == null || authority.startsWith("[") || authority.indexOf('@') != -1) {
+      return null;
+    }
+    int colonIndex = authority.indexOf(':');
+    String host = colonIndex != -1 ? authority.substring(0, colonIndex) : authority;
+    String placeholderHost = addPlaceholderLabelIfLastLabelStartsWithDigit(host);
+    if (placeholderHost == null) {
+      return null;
+    }
+    String placeholderAuthority =
+        colonIndex != -1 ? placeholderHost + authority.substring(colonIndex) : placeholderHost;
+    try {
+      URI placeholderUri = new URI(null, placeholderAuthority, null, null, null);
+      return placeholderUri.getHost() != null ? placeholderUri : null;
+    } catch (URISyntaxException e) {
+      return null;
+    }
+  }
+
+  /**
+   * Workaround for JDK-8188305: {@link URI} enforces RFC 2396's {@code toplabel} rule requiring
+   * the final label of a multi-label hostname to start with an ASCII letter, whereas RFC 1123
+   * Section 2.1 and RFC 3986 allow it to start with an ASCII digit.
+   */
+  @Nullable
+  private static String addPlaceholderLabelIfLastLabelStartsWithDigit(String host) {
+    if (host == null || host.indexOf('@') != -1) {
+      return null;
+    }
+    boolean trailingDot = host.endsWith(".");
+    int end = trailingDot ? host.length() - 1 : host.length();
+    int lastDot = host.lastIndexOf('.', end - 1);
+    if (lastDot <= 0 || lastDot + 1 >= end) {
+      return null;
+    }
+    char firstCharOfLastLabel = host.charAt(lastDot + 1);
+    if (firstCharOfLastLabel < '0' || firstCharOfLastLabel > '9') {
+      return null;
+    }
+    return trailingDot ? host.substring(0, end) + ".a." : host + ".a";
   }
 
   /**
