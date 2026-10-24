@@ -1048,6 +1048,28 @@ public class GrpcBootstrapperImplTest {
     assertThat(authorityInfo.fallbackOnReachabilityOnly()).isFalse();
   }
 
+  @Test
+  public void lbEndpointCollectionClientFeature_advertisedWhenEnvVarEnabled() throws Exception {
+    CommonBootstrapperTestUtils.setEnableEndpointFallback(true);
+    bootstrapper.setFileReader(
+        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap(false)));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.node()).isEqualTo(getNodeBuilder()
+        .addClientFeatures(GrpcBootstrapperImpl.CLIENT_FEATURE_LB_ENDPOINT_COLLECTION)
+        .build());
+  }
+
+  @Test
+  public void lbEndpointCollectionClientFeature_notAdvertisedWhenEnvVarDisabled()
+      throws Exception {
+    CommonBootstrapperTestUtils.setEnableEndpointFallback(false);
+    bootstrapper.setFileReader(
+        createFileReader(BOOTSTRAP_FILE_PATH, buildAuthorityBootstrap(false)));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.node()).isEqualTo(getNodeBuilder().build());
+  }
+
+
   private static String buildAuthorityBootstrap(boolean fallbackOnReachabilityOnly) {
     return "{\n"
         + "  \"authorities\": {\n"
