@@ -178,12 +178,21 @@ final class AutoShardingPicker extends SubchannelPicker {
       }
     }
 
+    SliceMap.SliceEntry sliceEntry = sliceMap.getSlices().get(sliceIdx);
+    if (sliceEntry.isFallbackDisabled()) {
+      // A drop, so that wait-for-ready RPCs fail too instead of waiting on a range that the
+      // server has deliberately left unassigned.
+      return PickResult.withDrop(
+          Status.UNAVAILABLE.withDescription(
+              "autosharding: matching slice has fallback disabled by the sharding server"
+                  + " (no endpoints assigned)"));
+    }
+
     if (sliceInFallback[sliceIdx] && fallbackEnabled) {
       return pickFromEndpointIndices(
           sliceMap.getFallbackPool(), args, "No endpoints available in fallback pool");
     }
 
-    SliceMap.SliceEntry sliceEntry = sliceMap.getSlices().get(sliceIdx);
     return pickFromEndpointIndices(
         sliceEntry.getEndpoints(), args, "No valid endpoints in slice and fallback disabled");
   }

@@ -101,17 +101,11 @@ final class AutoshardingClient {
    * different resource, and retaining it could cause the server to withhold assignments
    * indefinitely.
    *
-   * <p>Zero until something is accepted, which the proto reads as "unset". Only meaningful once
-   * {@link #acceptedAnyGeneration} is set, since zero is also a legitimate generation.
+   * <p>Zero until something is accepted, which the proto reads as "unset". A generation 
+   * is only accepted if it is greater than this, so zero and negative generations never
+   * are, and a positive value means an assignment has been reported to the watcher.
    */
   private long latestGeneration;
-
-  /**
-   * Whether any assignment has been accepted, and so reported to the watcher. gRFC A119 only
-   * requires a generation to exceed previously accepted ones, so the first assignment is accepted
-   * whatever its generation. Once set, errors are no longer reported.
-   */
-  private boolean acceptedAnyGeneration;
 
   @Nullable private BackoffPolicy retryBackoffPolicy;
   @Nullable private ScheduledHandle retryTimer;
@@ -216,7 +210,7 @@ final class AutoshardingClient {
    * the load balancer keep using in preference to any later error.
    */
   private void reportError(Status error) {
-    if (shutdown || acceptedAnyGeneration) {
+    if (shutdown || latestGeneration > 0) {
       return;
     }
     watcher.onError(error);
@@ -376,12 +370,14 @@ final class AutoshardingClient {
       List<AssignmentChunk> chunks = new ArrayList<>(bufferedChunks);
       bufferedChunks.clear();
 
-      // Generations are monotonically increasing, so anything we have already accepted is stale.
-      // It is still acknowledged, so that the server does not wait on a reply that never comes.
-      if (acceptedAnyGeneration && generation <= latestGeneration) {
+      // Generations are monotonically increasing, so anything not above the latest accepted one
+      // is stale; before anything is accepted that means zero or below. It is
+      // still acknowledged, so that the server does not wait on a reply that never comes.
+      if (generation <= latestGeneration) {
         String error =
             String.format(
-                "stale generation %s; %s has already been accepted", generation, latestGeneration);
+                "stale generation %s: not greater than the latest generation %s",
+                generation, latestGeneration);
         logger.log(Level.FINE, "Dropping autosharding assignment: {0}", error);
         sendAck(generation, false, error);
         return;
@@ -411,7 +407,6 @@ final class AutoshardingClient {
       }
       sendAck(generation, true, result.errorMessage);
       latestGeneration = generation;
-      acceptedAnyGeneration = true;
       receivedGoodAssignment = true;
       cancelInitialAssignmentTimer();
       watcher.onAssignment(result.assignment);

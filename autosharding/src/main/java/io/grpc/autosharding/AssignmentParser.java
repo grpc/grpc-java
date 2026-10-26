@@ -57,23 +57,24 @@ final class AssignmentParser {
   /**
    * The outcome of parsing one logical assignment.
    *
-   * <p>Maps onto the three non-stale rows of the outcome table in gRFC A119, "Handling
-   * assignments from the Autosharding server":
+   * <p>Maps onto the non-stale rows of the outcome table in gRFC A119, "Handling assignments from
+   * the Autosharding server":
    *
    * <ul>
-   *   <li>every slice usable: {@link #assignment} set, {@link #errorMessage} null;
-   *   <li>some slices dropped but at least one kept: both set;
-   *   <li>slices were received but none was usable: {@link #assignment} null, {@link
+   *   <li>every slice usable and no gaps: {@link #assignment} set, {@link #errorMessage} null;
+   *   <li>gaps, or some slices dropped but at least one kept: both set;
+   *   <li>no usable slice, including none received at all: {@link #assignment} null, {@link
    *       #errorMessage} set.
    * </ul>
    */
   static final class Result {
-    /** The assignment to hand to the LB policy, or null if every slice received was dropped. */
+    /** The assignment to hand to the LB policy, or null if no usable slice remained. */
     @Nullable final Assignment assignment;
 
     /**
-     * Describes the slices that were dropped, suitable for the {@code error_message} of an
-     * {@code AssignmentAck}. Null when every slice was usable.
+     * Describes the dropped slices and the gaps, or that no slice was received at all, suitable
+     * for the {@code error_message} of an {@code AssignmentAck}. Null when every slice was usable
+     * and they left no gaps.
      */
     @Nullable final String errorMessage;
 
@@ -88,6 +89,12 @@ final class AssignmentParser {
    * length of this field MUST NOT exceed 512 characters".
    */
   private static final int MAX_ERROR_MESSAGE_CHARS = 512;
+
+  /**
+   * The limit on slice keys, from {@code autosharding.proto}: "Will be at most 512 bytes". A slice
+   * with a longer key is dropped.
+   */
+  private static final int MAX_KEY_BYTES = 512;
 
   /**
    * How much of a key to hex-encode into a description. Keys may be up to 512 bytes, and only
@@ -106,9 +113,9 @@ final class AssignmentParser {
   /**
    * Parses and validates the buffered chunks of a single logical assignment.
    *
-   * <p>An assignment carrying no slices at all is not an error: the server is saying that nothing
-   * is assigned, and the result is a single endpoint-less slice spanning the keyspace. Only an
-   * assignment whose slices were <em>all</em> dropped is unusable.
+   * <p>An assignment is unusable when no usable slice remains, whether because every slice was
+   * dropped or because it carried none. Gaps are filled and reported, but do not make an
+   * assignment unusable.
    *
    * @param chunks the chunks received since the last {@code AssignmentMetadata}, in the order
    *     they were received
@@ -117,18 +124,20 @@ final class AssignmentParser {
     checkNotNull(chunks, "chunks");
 
     ImmutableList<String> endpointNames = combineEndpointNames(chunks);
-    List<String> dropped = new ArrayList<>();
-    List<Assignment.Slice> slices = combineSlices(chunks, endpointNames.size(), dropped);
+    List<String> problems = new ArrayList<>();
+    List<Assignment.Slice> slices = combineSlices(chunks, endpointNames.size(), problems);
 
     slices.sort(
         (s1, s2) -> UNSIGNED_BYTES_COMPARATOR.compare(s1.getStartKey(), s2.getStartKey()));
-    slices = dropOverlaps(slices, dropped);
+    slices = dropOverlaps(slices, problems);
 
-    String errorMessage = dropped.isEmpty() ? null : describe(dropped);
-    if (slices.isEmpty() && !dropped.isEmpty()) {
-      return new Result(null, errorMessage);
+    if (slices.isEmpty()) {
+      return new Result(
+          null, problems.isEmpty() ? "no slice assignments received" : describe(problems));
     }
-    return new Result(new Assignment(fillGaps(slices), endpointNames), errorMessage);
+    List<Assignment.Slice> filled = fillGaps(slices, problems);
+    String errorMessage = problems.isEmpty() ? null : describe(problems);
+    return new Result(new Assignment(filled, endpointNames), errorMessage);
   }
 
   /**
@@ -146,9 +155,9 @@ final class AssignmentParser {
   }
 
   /**
-   * Concatenates the slice assignments across all chunks, dropping any whose key range is
-   * inverted or whose endpoint indices are out of range. Slice assignments may appear in any
-   * order across chunks.
+   * Concatenates the slice assignments across all chunks, dropping any whose keys are too long,
+   * whose key range is inverted or whose endpoint indices are out of range. Slice assignments may
+   * appear in any order across chunks.
    *
    * @param dropped collects a description of each slice that was dropped
    */
@@ -157,14 +166,25 @@ final class AssignmentParser {
     List<Assignment.Slice> slices = new ArrayList<>();
     for (AssignmentChunk chunk : chunks) {
       for (SliceAssignment sliceAssignment : chunk.getSliceAssignmentsList()) {
-        if (!sliceAssignment.hasSlice()) {
-          // The default Slice reads as ["", inf), which would claim or overlap the whole keyspace.
-          dropped.add("slice assignment has no slice");
-          continue;
-        }
+        // An unset slice reads as ["", inf), the whole keyspace.
         com.google.cloud.autosharding.v1.Slice slice = sliceAssignment.getSlice();
         byte[] startKey = slice.getStartKey().toByteArray();
         byte[] endKey = slice.hasEndKey() ? slice.getEndKey().toByteArray() : null;
+
+        if (startKey.length > MAX_KEY_BYTES) {
+          dropped.add(
+              String.format(
+                  "slice starting at %s has a start_key longer than %s bytes",
+                  encode(startKey), MAX_KEY_BYTES));
+          continue;
+        }
+        if (endKey != null && endKey.length > MAX_KEY_BYTES) {
+          dropped.add(
+              String.format(
+                  "slice starting at %s has an end_key longer than %s bytes",
+                  encode(startKey), MAX_KEY_BYTES));
+          continue;
+        }
 
         if (endKey != null) {
           int keyOrder = UNSIGNED_BYTES_COMPARATOR.compare(startKey, endKey);
@@ -203,7 +223,9 @@ final class AssignmentParser {
           dropped.add(indexProblem);
           continue;
         }
-        slices.add(new Assignment.Slice(startKey, endKey, endpoints));
+        // No endpoints means the server deliberately left the range unassigned, so it must not
+        // fall back either.
+        slices.add(new Assignment.Slice(startKey, endKey, endpoints, endpoints.isEmpty()));
       }
     }
     return slices;
@@ -262,28 +284,39 @@ final class AssignmentParser {
 
   /**
    * Returns a contiguous list of slices covering {@code ["", inf)}, inserting endpoint-less
-   * slices wherever the sorted input leaves a gap.
+   * slices wherever the sorted input leaves a gap. Those slices may fall back: only a range the
+   * server itself assigned no endpoints disables fallback.
+   *
+   * @param problems collects a description of each gap
    */
-  private static List<Assignment.Slice> fillGaps(List<Assignment.Slice> sorted) {
+  private static List<Assignment.Slice> fillGaps(
+      List<Assignment.Slice> sorted, List<String> problems) {
     List<Assignment.Slice> filled = new ArrayList<>(sorted.size() + 1);
     // Exclusive upper bound of the key range covered so far; null once infinity is reached.
     byte[] cursor = EMPTY_BYTES;
     for (Assignment.Slice slice : sorted) {
       if (UNSIGNED_BYTES_COMPARATOR.compare(cursor, slice.getStartKey()) < 0) {
+        problems.add(describeGap(cursor, slice.getStartKey()));
         filled.add(new Assignment.Slice(cursor, slice.getStartKey(), ImmutableList.of()));
       }
       filled.add(slice);
       cursor = slice.getEndKey();
     }
     if (cursor != null) {
+      problems.add(describeGap(cursor, null));
       filled.add(new Assignment.Slice(cursor, null, ImmutableList.of()));
     }
     return filled;
   }
 
+  private static String describeGap(byte[] startKey, @Nullable byte[] endKey) {
+    return String.format(
+        "keys [%s, %s) are not covered by any slice", encode(startKey), encode(endKey));
+  }
+
   /**
-   * Summarizes the dropped slices, reporting as many as the {@code error_message} budget of an
-   * {@code AssignmentAck} allows and naming the count of those left out.
+   * Summarizes the dropped slices and gaps, reporting as many as the {@code error_message} budget
+   * of an {@code AssignmentAck} allows and naming the count of those left out.
    *
    * <p>The result is sized to fit within {@link #MAX_ERROR_MESSAGE_CHARS} so that
    * {@code AutoshardingClient}'s final truncation never has to cut a description in half.

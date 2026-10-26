@@ -57,16 +57,28 @@ final class SliceMap {
   static final class SliceEntry {
     private final byte[] startKey;
     private final ImmutableList<Integer> endpoints;
+    private final boolean fallbackDisabled;
 
     /**
-     * Constructs a {@link SliceEntry}.
+     * Constructs a {@link SliceEntry} that may fall back.
      *
      * @param startKey the inclusive start key of the slice
      * @param endpoints the list of endpoint indices assigned to this slice
      */
     SliceEntry(byte[] startKey, List<Integer> endpoints) {
+      this(startKey, endpoints, false);
+    }
+
+    /**
+     * Constructs a {@link SliceEntry}.
+     *
+     * @param fallbackDisabled whether picks for this slice must fail rather than fall back, as
+     *     when the server assigned the slice no endpoints
+     */
+    SliceEntry(byte[] startKey, List<Integer> endpoints, boolean fallbackDisabled) {
       this.startKey = checkNotNull(startKey, "startKey").clone();
       this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
+      this.fallbackDisabled = fallbackDisabled;
     }
 
     byte[] getStartKey() {
@@ -75,6 +87,10 @@ final class SliceMap {
 
     ImmutableList<Integer> getEndpoints() {
       return endpoints;
+    }
+
+    boolean isFallbackDisabled() {
+      return fallbackDisabled;
     }
   }
 

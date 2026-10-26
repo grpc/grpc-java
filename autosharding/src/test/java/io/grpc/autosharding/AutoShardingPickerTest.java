@@ -348,6 +348,45 @@ public class AutoShardingPickerTest {
   }
 
   @Test
+  public void pick_fallbackDisabledSlice_fallbackEnabled_dropsInsteadOfFallingBack() {
+    PickerEndpoint ep0 = new PickerEndpoint(
+        ConnectivityState.READY, new FakePicker(PickResult.withNoResult()), NOOP_EXIT_IDLER);
+    SliceEntry slice = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.emptyList(), true);
+    SliceMap sliceMap = new SliceMap(
+        Collections.singletonList(slice), Collections.singletonList(0));
+
+    AutoShardingPicker picker = new AutoShardingPicker(
+        sliceMap,
+        Collections.singletonList(ep0),
+        true,
+        AutoShardingPicker.createKeyHeader("x-key"));
+
+    PickResult result = picker.pickSubchannel(createArgs(keyed("x-key")));
+    // A drop, so that wait-for-ready RPCs fail too rather than wait.
+    assertThat(result.isDrop()).isTrue();
+    assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription()).contains("fallback disabled");
+  }
+
+  @Test
+  public void pick_fallbackDisabledSlice_fallbackDisabled_drops() {
+    SliceEntry slice = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.emptyList(), true);
+    SliceMap sliceMap = new SliceMap(
+        Collections.singletonList(slice), Collections.emptyList());
+
+    AutoShardingPicker picker = new AutoShardingPicker(
+        sliceMap,
+        Collections.emptyList(),
+        false,
+        AutoShardingPicker.createKeyHeader("x-key"));
+
+    PickResult result = picker.pickSubchannel(createArgs(keyed("x-key")));
+    assertThat(result.isDrop()).isTrue();
+  }
+
+  @Test
   public void pick_emptyFallbackPool_fallbackEnabled_returnsUnavailable() {
     SliceEntry emptySlice = new SliceEntry(
         "".getBytes(StandardCharsets.UTF_8), Collections.emptyList());

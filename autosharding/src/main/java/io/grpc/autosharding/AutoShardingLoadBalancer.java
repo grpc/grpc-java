@@ -24,13 +24,16 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
@@ -108,10 +111,16 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   @Nullable private AutoShardingLoadBalancerConfig config;
   @Nullable private Metadata.Key<byte[]> keyHeader;
 
-  /** The factory that created {@link #shardingChannel}, through which it is released. */
+  /**
+   * The factory that created {@link #shardingChannel}, through which it is released. Null when
+   * the channel is a {@link LameChannel}, which no factory created.
+   */
   @Nullable private ChannelFactory channelFactory;
 
-  /** Channel borrowed from {@link #channelFactory}; must be given back when we are done. */
+  /**
+   * Channel borrowed from {@link #channelFactory}, which must be given back when we are done, or
+   * a {@link LameChannel} if the factory failed to create one.
+   */
   @Nullable private Channel shardingChannel;
 
   /**
@@ -196,8 +205,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     endpointMap.updateEndpoints(endpoints, resolvedAddresses.getAttributes());
 
     // Each failure below rejects the rest of the update: the next update is compared against the
-    // configuration still in use, so a changed key or target is still acted on then, and a failed
-    // channel is retried.
+    // configuration still in use, so a changed key or target is still acted on then.
     if (endpointMap.size() == 0) {
       return failPermanently("autosharding: name resolver returned no endpoints");
     }
@@ -210,10 +218,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
 
     Channel previousChannel = shardingChannel;
     ChannelFactory previousFactory = channelFactory;
-    Status channelStatus = updateShardingServiceChannel(factory, newConfig);
-    if (!channelStatus.isOk()) {
-      return failPermanently(channelStatus);
-    }
+    updateShardingServiceChannel(factory, newConfig);
 
     if (config == null || !config.keyHeaderName.equals(newConfig.keyHeaderName)) {
       keyHeader = AutoShardingPicker.createKeyHeader(newConfig.keyHeaderName);
@@ -231,7 +236,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     // Only now that the old stream has been cancelled. Release through the factory that produced
     // it, which is not necessarily the new one.
     if (previousChannel != null && previousChannel != shardingChannel) {
-      previousFactory.releaseChannel(previousChannel);
+      releaseChannel(previousChannel, previousFactory);
     }
 
     rebuildSliceMapAndPublish();
@@ -283,7 +288,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     shutdown = true;
     shutdownClient();
     if (shardingChannel != null) {
-      channelFactory.releaseChannel(shardingChannel);
+      releaseChannel(shardingChannel, channelFactory);
       shardingChannel = null;
     }
 
@@ -294,33 +299,42 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    * Creates a channel to the sharding service if this is the first configuration update or the
    * {@code channel_factory_key} changed. A different factory under the same key changes nothing,
    * since the key identifies the channel. Leaves {@link #shardingChannel} untouched when nothing
-   * changed, which is how the caller detects that no new channel was needed, and also on failure,
-   * returning the error. The previous channel is not released here: the caller does that once the
-   * stream on it has been cancelled.
+   * changed, which is how the caller detects that no new channel was needed. The previous channel
+   * is not released here: the caller does that once the stream on it has been cancelled.
+   *
+   * <p>If the factory fails, the new channel is a {@link LameChannel} carrying the error. The
+   * client then fails its stream and reports the error, so RPCs fall back if enabled and fail
+   * otherwise. The key is not retried until it changes.
    */
-  private Status updateShardingServiceChannel(
+  private void updateShardingServiceChannel(
       ChannelFactory factory, AutoShardingLoadBalancerConfig newConfig) {
     if (config != null && config.channelFactoryKey.equals(newConfig.channelFactoryKey)) {
-      return Status.OK;
+      return;
     }
 
-    Channel newChannel;
     try {
-      newChannel = factory.createChannel(newConfig.channelFactoryKey);
+      shardingChannel = factory.createChannel(newConfig.channelFactoryKey);
+      channelFactory = factory;
     } catch (RuntimeException e) {
       logger.log(Level.WARNING, "Failed to create a channel to the sharding service", e);
-      return Status.UNAVAILABLE
-          .withDescription(
-              "autosharding: channel factory rejected key '"
-                  + newConfig.channelFactoryKey
-                  + "': "
-                  + e.getMessage())
-          .withCause(e);
+      shardingChannel =
+          new LameChannel(
+              Status.UNAVAILABLE
+                  .withDescription(
+                      "autosharding: channel factory rejected key '"
+                          + newConfig.channelFactoryKey
+                          + "': "
+                          + e.getMessage())
+                  .withCause(e));
+      channelFactory = null;
     }
+  }
 
-    shardingChannel = newChannel;
-    channelFactory = factory;
-    return Status.OK;
+  /** Gives a channel back to the factory that created it; a lame one has no such factory. */
+  private static void releaseChannel(Channel channel, @Nullable ChannelFactory factory) {
+    if (factory != null) {
+      factory.releaseChannel(channel);
+    }
   }
 
   /**
@@ -480,7 +494,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
           indices.add(endpointIndex);
         }
       }
-      entries.add(new SliceMap.SliceEntry(slice.getStartKey(), indices));
+      entries.add(
+          new SliceMap.SliceEntry(slice.getStartKey(), indices, slice.isFallbackDisabled()));
     }
     return new SliceMap(entries, fallbackPool);
   }
@@ -531,12 +546,50 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    * {@link #acceptResolvedAddresses} to hand back to the channel.
    */
   private Status failPermanently(String description) {
-    return failPermanently(Status.UNAVAILABLE.withDescription(description));
-  }
-
-  private Status failPermanently(Status error) {
+    Status error = Status.UNAVAILABLE.withDescription(description);
     helper.updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
         error)));
     return error;
+  }
+
+  /**
+   * A channel whose every call fails with a fixed status. Stands in for a channel to the sharding
+   * service that the {@link ChannelFactory} failed to create, so that the client reports the
+   * failure like any other error from the sharding service.
+   */
+  private static final class LameChannel extends Channel {
+    private final Status error;
+
+    LameChannel(Status error) {
+      this.error = error;
+    }
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
+      return new ClientCall<ReqT, RespT>() {
+        @Override
+        public void start(Listener<RespT> listener, Metadata headers) {
+          listener.onClose(error, new Metadata());
+        }
+
+        @Override
+        public void request(int numMessages) {}
+
+        @Override
+        public void cancel(@Nullable String message, @Nullable Throwable cause) {}
+
+        @Override
+        public void halfClose() {}
+
+        @Override
+        public void sendMessage(ReqT message) {}
+      };
+    }
+
+    @Override
+    public String authority() {
+      return "lame-channel";
+    }
   }
 }

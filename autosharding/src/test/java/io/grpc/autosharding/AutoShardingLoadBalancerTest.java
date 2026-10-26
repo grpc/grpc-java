@@ -255,36 +255,35 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void unknownChannelFactoryKey_fallbackEnabled_failsRpcsAnyway() {
+  public void unknownChannelFactoryKey_fallbackEnabled_entersFallback() {
     Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, true), "a");
+    reportReady("a");
 
-    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(pick("k").getStatus().getDescription())
-        .contains("channel factory rejected key '" + UNKNOWN_CHANNEL_FACTORY_KEY + "'");
+    // The failure goes to the client as a channel whose every RPC fails, so it is handled like
+    // any other error from the sharding service.
+    assertThat(status.isOk()).isTrue();
+    assertThat(currentState).isEqualTo(READY);
+    assertThat(pickedHost(pick("k"))).isEqualTo("a");
   }
 
   @Test
   public void unknownChannelFactoryKey_fallbackDisabled_failsRpcsWithTheFactoryError() {
     Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
 
-    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(status.isOk()).isTrue();
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
     assertThat(pick("k").getStatus().getDescription())
         .contains("channel factory rejected key '" + UNKNOWN_CHANNEL_FACTORY_KEY + "'");
   }
 
   @Test
-  public void channelFactoryFailure_sameKey_isRetriedOnTheNextUpdate() {
+  public void channelFactoryFailure_sameKey_isNotRetried() {
     deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
-    assertThat(channelFactory.attempts).isEqualTo(1);
 
     Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a", "b");
 
-    // The failed config was never applied, so the same key still looks like a change.
-    assertThat(status.isOk()).isFalse();
-    assertThat(channelFactory.attempts).isEqualTo(2);
-    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(status.isOk()).isTrue();
+    assertThat(channelFactory.attempts).isEqualTo(1);
     assertThat(pick("k").getStatus().getDescription())
         .contains("channel factory rejected key '" + UNKNOWN_CHANNEL_FACTORY_KEY + "'");
   }
@@ -301,32 +300,32 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void channelFactoryFailure_keepsThePreviousChannel() throws Exception {
+  public void channelFactoryFailure_releasesThePreviousChannel() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
     deliverAssignment(1, slice("", "a"));
     reportReady("a");
 
-    Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
+    deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
 
-    assertThat(status.isOk()).isFalse();
-    assertThat(channelFactory.released).isEmpty();
+    assertThat(channelFactory.isReleased(0)).isTrue();
+    assertThat(channelFactory.liveCallsAtRelease).containsExactly(0);
+    // The new client's error replaces the previous assignment.
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
     assertThat(pick("k").getStatus().getDescription()).contains("channel factory rejected key");
   }
 
   @Test
-  public void channelFactoryFailure_thenRecovers_queuesUntilTheNewClientReports()
-      throws Exception {
+  public void channelFactoryFailure_thenNewKey_neverReleasesTheLameChannel() throws Exception {
     deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "a");
-
-    Status status = deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
     reportReady("a");
 
-    assertThat(status.isOk()).isTrue();
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+
+    // The factory never created the failing channel, so it is not handed back.
+    assertThat(channelFactory.released).isEmpty();
     assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
-    PickResult queued = pick("k");
-    assertThat(queued.getStatus().isOk()).isTrue();
-    assertThat(queued.getSubchannel()).isNull();
+    // The previous client's error stands until the new client reports.
+    assertThat(pick("k").getStatus().getDescription()).contains("channel factory rejected key");
 
     deliverAssignment(1, slice("", "a"));
 
@@ -388,17 +387,6 @@ public class AutoShardingLoadBalancerTest {
     reportReady("a");
 
     Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "b");
-
-    assertThat(status.isOk()).isFalse();
-    assertThat(childForHost("a").shutdown).isTrue();
-  }
-
-  @Test
-  public void channelFactoryFailure_stillUpdatesTheEndpoints() throws Exception {
-    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
-    reportReady("a");
-
-    Status status = deliverAddresses(config(UNKNOWN_CHANNEL_FACTORY_KEY, false), "b");
 
     assertThat(status.isOk()).isFalse();
     assertThat(childForHost("a").shutdown).isTrue();
@@ -835,7 +823,7 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void assignmentWithNoSlices_fallbackEnabled_routesToFallback() throws Exception {
+  public void assignmentWithNoSlices_beforeAnyAssignment_entersFallback() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
     reportReady("a");
 
@@ -846,16 +834,45 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void assignmentWithNoSlices_afterAGoodOne_replacesIt() throws Exception {
+  public void assignmentWithNoSlices_afterAGoodOne_keepsServingTheGoodOne() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
     deliverAssignment(1, slice("", "a"));
     reportReady("a");
 
-    // Unlike an unusable assignment, this one is accepted, so the previous one stops applying.
+    // Rejected like an unusable assignment, so the previous one keeps applying.
     deliverAssignment(2);
 
-    assertThat(pick("k").getStatus().getDescription())
-        .contains("No valid endpoints in slice and fallback disabled");
+    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+  }
+
+  @Test
+  public void sliceAssignedNoEndpoints_fallbackEnabled_dropsPicks() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    reportReady("a");
+    StreamObserver<WatchShardingAssignmentResponse> serverStream = currentServerStream();
+
+    serverStream.onNext(
+        WatchShardingAssignmentResponse.newBuilder()
+            .setChunk(
+                AssignmentChunk.newBuilder()
+                    .addEndpoints(EndpointState.newBuilder().setEndpoint("a"))
+                    .addSliceAssignments(sliceAssignment("", "m", 0))
+                    .addSliceAssignments(
+                        SliceAssignment.newBuilder()
+                            .setSlice(
+                                com.google.cloud.autosharding.v1.Slice.newBuilder()
+                                    .setStartKey(ByteString.copyFromUtf8("m")))))
+            .build());
+    serverStream.onNext(
+        WatchShardingAssignmentResponse.newBuilder()
+            .setMetadata(AssignmentMetadata.newBuilder().setGeneration(1))
+            .build());
+
+    assertThat(pickedHost(pick("alpha"))).isEqualTo("a");
+    // The server assigned ["m", inf) nothing on purpose, so it does not fall back.
+    PickResult result = pick("zulu");
+    assertThat(result.isDrop()).isTrue();
+    assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
   }
 
   @Test

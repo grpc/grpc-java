@@ -206,55 +206,42 @@ public class AutoshardingClientTest {
   }
 
   @Test
-  public void assignmentWithNoSlices_isDeliveredAndAccepted() throws Exception {
+  public void assignmentWithNoSlices_nackedAndReportedAsAnError() throws Exception {
     start(client);
     takeRequest();
     StreamObserver<WatchShardingAssignmentResponse> serverStream = takeServerStream();
 
     serverStream.onNext(metadataResponse(1));
 
-    assertThat(takeAssignment().getSlices()).hasSize(1);
-    WatchShardingAssignmentRequest ack = takeRequest();
-    assertThat(ack.getAssignmentAck().getAccepted()).isTrue();
-    assertThat(ack.getAssignmentAck().getErrorMessage()).isEmpty();
-  }
-
-  @Test
-  public void generationZero_acceptedAsTheFirstAssignment() throws Exception {
-    start(client);
-    takeRequest();
-    StreamObserver<WatchShardingAssignmentResponse> serverStream = takeServerStream();
-
-    serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
-    serverStream.onNext(metadataResponse(0));
-
-    takeAssignment();
-    WatchShardingAssignmentRequest ack = takeRequest();
-    assertThat(ack.getAssignmentAck().getGeneration()).isEqualTo(0);
-    assertThat(ack.getAssignmentAck().getAccepted()).isTrue();
-  }
-
-  @Test
-  public void generationZero_resentAfterAcceptance_isStale() throws Exception {
-    start(client);
-    takeRequest();
-    StreamObserver<WatchShardingAssignmentResponse> serverStream = takeServerStream();
-    serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
-    serverStream.onNext(metadataResponse(0));
-    takeAssignment();
-    takeRequest(); // ACK for generation 0
-
-    serverStream.onNext(chunkResponse(chunkWithEndpoint("host-b", "", null, 0)));
-    serverStream.onNext(metadataResponse(0));
-
     WatchShardingAssignmentRequest nack = takeRequest();
     assertThat(nack.getAssignmentAck().getAccepted()).isFalse();
-    assertThat(nack.getAssignmentAck().getErrorMessage()).contains("stale generation");
+    assertThat(nack.getAssignmentAck().getErrorMessage())
+        .contains("no slice assignments received");
+    assertThat(takeError().getDescription()).contains("no slice assignments received");
     assertThat(assignments).isEmpty();
+    assertThat(client.getLatestGeneration()).isEqualTo(0);
   }
 
   @Test
-  public void negativeGeneration_acceptedAsTheFirstAssignment() throws Exception {
+  public void generationZero_isStaleEvenAsTheFirstAssignment() throws Exception {
+    start(client);
+    takeRequest();
+    StreamObserver<WatchShardingAssignmentResponse> serverStream = takeServerStream();
+
+    serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
+    serverStream.onNext(metadataResponse(0));
+
+    // A generation must exceed the latest one, which starts at zero.
+    WatchShardingAssignmentRequest nack = takeRequest();
+    assertThat(nack.getAssignmentAck().getGeneration()).isEqualTo(0);
+    assertThat(nack.getAssignmentAck().getAccepted()).isFalse();
+    assertThat(nack.getAssignmentAck().getErrorMessage()).contains("stale generation 0");
+    assertThat(assignments).isEmpty();
+    assertThat(errors).isEmpty();
+  }
+
+  @Test
+  public void negativeGeneration_isStale() throws Exception {
     start(client);
     takeRequest();
     StreamObserver<WatchShardingAssignmentResponse> serverStream = takeServerStream();
@@ -262,8 +249,10 @@ public class AutoshardingClientTest {
     serverStream.onNext(chunkResponse(chunkWithEndpoint("host-a", "", null, 0)));
     serverStream.onNext(metadataResponse(-3));
 
-    takeAssignment();
-    assertThat(client.getLatestGeneration()).isEqualTo(-3);
+    WatchShardingAssignmentRequest nack = takeRequest();
+    assertThat(nack.getAssignmentAck().getAccepted()).isFalse();
+    assertThat(assignments).isEmpty();
+    assertThat(client.getLatestGeneration()).isEqualTo(0);
   }
 
   @Test

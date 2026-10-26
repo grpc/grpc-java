@@ -53,9 +53,10 @@ final class Assignment {
     private final byte[] startKey;
     @Nullable private final byte[] endKey;
     private final ImmutableList<Integer> endpoints;
+    private final boolean fallbackDisabled;
 
     /**
-     * Constructs a {@link Slice}.
+     * Constructs a {@link Slice} that may fall back.
      *
      * @param startKey the inclusive start key of the range
      * @param endKey the exclusive end key of the range, or {@code null} for the infinity
@@ -63,9 +64,24 @@ final class Assignment {
      * @param endpoints indices into {@link Assignment#getEndpointNames()} assigned to this range
      */
     Slice(byte[] startKey, @Nullable byte[] endKey, List<Integer> endpoints) {
+      this(startKey, endKey, endpoints, false);
+    }
+
+    /**
+     * Constructs a {@link Slice}.
+     *
+     * @param fallbackDisabled whether picks for this range must fail rather than fall back; set
+     *     when the server assigned the range no endpoints, never for a filled gap
+     */
+    Slice(
+        byte[] startKey,
+        @Nullable byte[] endKey,
+        List<Integer> endpoints,
+        boolean fallbackDisabled) {
       this.startKey = checkNotNull(startKey, "startKey").clone();
       this.endKey = endKey == null ? null : endKey.clone();
       this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
+      this.fallbackDisabled = fallbackDisabled;
     }
 
     byte[] getStartKey() {
@@ -81,12 +97,17 @@ final class Assignment {
       return endpoints;
     }
 
+    boolean isFallbackDisabled() {
+      return fallbackDisabled;
+    }
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("startKey", BaseEncoding.base16().encode(startKey))
           .add("endKey", endKey == null ? "inf" : BaseEncoding.base16().encode(endKey))
           .add("endpoints", endpoints)
+          .add("fallbackDisabled", fallbackDisabled)
           .toString();
     }
   }

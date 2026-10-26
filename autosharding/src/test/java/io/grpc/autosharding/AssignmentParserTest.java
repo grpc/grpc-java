@@ -22,6 +22,7 @@ import com.google.cloud.autosharding.v1.AssignmentChunk;
 import com.google.cloud.autosharding.v1.EndpointState;
 import com.google.cloud.autosharding.v1.PerSliceEndpointState;
 import com.google.cloud.autosharding.v1.SliceAssignment;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ByteString;
 import java.nio.charset.StandardCharsets;
@@ -101,11 +102,13 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("d", null, 0))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk));
+    Assignment assignment = parseWithGaps(ImmutableList.of(chunk));
 
     assertThat(assignment.getSlices()).hasSize(2);
     assertSlice(assignment.getSlices().get(0), "", "d");
     assertSlice(assignment.getSlices().get(1), "d", null, 0);
+    // Only slices the server sent without endpoints disable fallback, never a filled gap.
+    assertThat(assignment.getSlices().get(0).isFallbackDisabled()).isFalse();
   }
 
   @Test
@@ -116,7 +119,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("", "d", 0))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk));
+    Assignment assignment = parseWithGaps(ImmutableList.of(chunk));
 
     assertThat(assignment.getSlices()).hasSize(2);
     assertSlice(assignment.getSlices().get(0), "", "d", 0);
@@ -133,7 +136,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("m", null, 1))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk));
+    Assignment assignment = parseWithGaps(ImmutableList.of(chunk));
 
     assertThat(assignment.getSlices()).hasSize(3);
     assertSlice(assignment.getSlices().get(0), "", "d", 0);
@@ -142,21 +145,39 @@ public class AssignmentParserTest {
   }
 
   @Test
-  public void parse_noSlices_yieldsSingleEmptySliceCoveringKeyspace() {
-    Assignment assignment = parseFully(ImmutableList.of(AssignmentChunk.getDefaultInstance()));
+  public void parse_gaps_areAcceptedAndReported() {
+    AssignmentChunk chunk =
+        AssignmentChunk.newBuilder()
+            .addEndpoints(endpoint("host-a"))
+            .addSliceAssignments(sliceAssignment("b", "d", 0))
+            .addSliceAssignments(sliceAssignment("m", "p", 0))
+            .build();
 
-    // Not an error: the server is saying that nothing is assigned.
-    assertThat(assignment.getSlices()).hasSize(1);
-    assertSlice(assignment.getSlices().get(0), "", null);
-    assertThat(assignment.getEndpointNames()).isEmpty();
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
+
+    assertThat(result.assignment).isNotNull();
+    // ["", "b"), ["d", "m") and ["p", inf), with keys hex-encoded.
+    assertThat(result.errorMessage).contains("keys [, 62) are not covered by any slice");
+    assertThat(result.errorMessage).contains("keys [64, 6D) are not covered by any slice");
+    assertThat(result.errorMessage).contains("keys [70, inf) are not covered by any slice");
   }
 
   @Test
-  public void parse_noChunks_yieldsSingleEmptySliceCoveringKeyspace() {
-    Assignment assignment = parseFully(ImmutableList.of());
+  public void parse_noSlices_isRejected() {
+    AssignmentParser.Result result =
+        AssignmentParser.parse(ImmutableList.of(AssignmentChunk.getDefaultInstance()));
 
-    assertThat(assignment.getSlices()).hasSize(1);
-    assertSlice(assignment.getSlices().get(0), "", null);
+    // with no slice at all there is nothing to route by.
+    assertThat(result.assignment).isNull();
+    assertThat(result.errorMessage).isEqualTo("no slice assignments received");
+  }
+
+  @Test
+  public void parse_noChunks_isRejected() {
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of());
+
+    assertThat(result.assignment).isNull();
+    assertThat(result.errorMessage).isEqualTo("no slice assignments received");
   }
 
   @Test
@@ -173,6 +194,9 @@ public class AssignmentParserTest {
     assertThat(assignment.getSlices()).hasSize(2);
     assertSlice(assignment.getSlices().get(0), "", "d");
     assertSlice(assignment.getSlices().get(1), "d", null, 0);
+    // The server deliberately assigned ["", "d") nothing, so it must not fall back.
+    assertThat(assignment.getSlices().get(0).isFallbackDisabled()).isTrue();
+    assertThat(assignment.getSlices().get(1).isFallbackDisabled()).isFalse();
   }
 
   @Test
@@ -207,7 +231,7 @@ public class AssignmentParserTest {
                             .setEndKey(ByteString.copyFrom(new byte[] {(byte) 0x80}))))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk));
+    Assignment assignment = parseWithGaps(ImmutableList.of(chunk));
 
     // Leading gap ["", 0x01) plus the two declared slices.
     assertThat(assignment.getSlices()).hasSize(3);
@@ -225,7 +249,7 @@ public class AssignmentParserTest {
             .addSliceAssignments(sliceAssignment("k", "m", 0))
             .build();
 
-    Assignment assignment = parseFully(ImmutableList.of(chunk));
+    Assignment assignment = parseWithGaps(ImmutableList.of(chunk));
 
     List<Assignment.Slice> slices = assignment.getSlices();
     assertThat(slices.get(0).getStartKey()).isEqualTo(new byte[0]);
@@ -365,7 +389,8 @@ public class AssignmentParserTest {
 
     AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
-    assertThat(result.errorMessage).isNull();
+    // Only the keys either side of it are reported, as gaps; the slice itself is not dropped.
+    assertThat(result.errorMessage).doesNotContain("is empty");
     assertThat(result.assignment.getSlices()).hasSize(3);
     assertThat(result.assignment.getSlices().get(1).getEndpoints()).containsExactly(0);
   }
@@ -540,13 +565,59 @@ public class AssignmentParserTest {
   }
 
   @Test
-  public void parse_sliceAssignmentWithoutSlice_isDroppedNotTreatedAsWholeKeyspace() {
+  public void parse_startKeyLongerThan512Bytes_isDropped() {
+    AssignmentChunk chunk =
+        AssignmentChunk.newBuilder()
+            .addEndpoints(endpoint("host-a"))
+            .addSliceAssignments(sliceAssignment("", "m", 0))
+            .addSliceAssignments(sliceAssignment(Strings.repeat("m", 513), null, 0))
+            .build();
+
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
+
+    // autosharding.proto: keys "Will be at most 512 bytes".
+    assertThat(result.errorMessage).contains("start_key longer than 512 bytes");
+    assertSlice(result.assignment.getSlices().get(0), "", "m", 0);
+    assertSlice(result.assignment.getSlices().get(1), "m", null);
+  }
+
+  @Test
+  public void parse_endKeyLongerThan512Bytes_isDropped() {
+    AssignmentChunk chunk =
+        AssignmentChunk.newBuilder()
+            .addEndpoints(endpoint("host-a"))
+            .addSliceAssignments(sliceAssignment("", Strings.repeat("m", 513), 0))
+            .build();
+
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
+
+    assertThat(result.assignment).isNull();
+    assertThat(result.errorMessage).contains("end_key longer than 512 bytes");
+  }
+
+  @Test
+  public void parse_keysOf512Bytes_areKept() {
+    String key = Strings.repeat("m", 512);
+    AssignmentChunk chunk =
+        AssignmentChunk.newBuilder()
+            .addEndpoints(endpoint("host-a"))
+            .addSliceAssignments(sliceAssignment("", key, 0))
+            .addSliceAssignments(sliceAssignment(key, null, 0))
+            .build();
+
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
+
+    assertThat(assignment.getSlices()).hasSize(2);
+  }
+
+  @Test
+  public void parse_sliceAssignmentWithoutSlice_coversTheWholeKeyspaceAndOverlapsTheRest() {
     AssignmentChunk chunk =
         AssignmentChunk.newBuilder()
             .addEndpoints(endpoint("host-a"))
             .addEndpoints(endpoint("host-b"))
             .addSliceAssignments(sliceAssignment("", "m", 0))
-            // No slice set; its default would read as ["", inf) and overlap everything.
+            // No slice set, so it reads as ["", inf), and overlaps the other one.
             .addSliceAssignments(
                 SliceAssignment.newBuilder()
                     .addEndpoints(PerSliceEndpointState.newBuilder().setEndpointIndex(1)))
@@ -554,14 +625,12 @@ public class AssignmentParserTest {
 
     AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
-    assertThat(result.errorMessage).contains("no slice");
-    assertThat(result.assignment).isNotNull();
-    assertSlice(result.assignment.getSlices().get(0), "", "m", 0);
-    assertSlice(result.assignment.getSlices().get(1), "m", null);
+    assertThat(result.assignment).isNull();
+    assertThat(result.errorMessage).contains("overlaps another slice");
   }
 
   @Test
-  public void parse_onlySliceAssignmentWithoutSlice_isUnusable() {
+  public void parse_onlySliceAssignmentWithoutSlice_coversTheWholeKeyspace() {
     AssignmentChunk chunk =
         AssignmentChunk.newBuilder()
             .addEndpoints(endpoint("host-a"))
@@ -570,10 +639,10 @@ public class AssignmentParserTest {
                     .addEndpoints(PerSliceEndpointState.newBuilder().setEndpointIndex(0)))
             .build();
 
-    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
+    Assignment assignment = parseFully(ImmutableList.of(chunk));
 
-    assertThat(result.assignment).isNull();
-    assertThat(result.errorMessage).contains("no slice");
+    assertThat(assignment.getSlices()).hasSize(1);
+    assertSlice(assignment.getSlices().get(0), "", null, 0);
   }
 
   @Test
@@ -588,6 +657,14 @@ public class AssignmentParserTest {
     slice.getEndKey()[0] = 'y';
 
     assertSlice(slice, "a", "m");
+  }
+
+  /** Parses chunks whose only problem is gaps, which are filled and reported but accepted. */
+  private static Assignment parseWithGaps(List<AssignmentChunk> chunks) {
+    AssignmentParser.Result result = AssignmentParser.parse(chunks);
+    assertThat(result.assignment).isNotNull();
+    assertThat(result.errorMessage).contains("not covered by any slice");
+    return result.assignment;
   }
 
   /** Parses chunks that are expected to be usable in their entirety. */
