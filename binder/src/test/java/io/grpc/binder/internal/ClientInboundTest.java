@@ -19,10 +19,19 @@ package io.grpc.binder.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.StatusSubject.assertThat;
 import static io.grpc.binder.internal.TransactionBuilder.newOutOfBandCloseTxnBuilder;
+import static io.grpc.binder.internal.TransactionBuilder.newShutdownTransportTxnBuilder;
 import static io.grpc.binder.internal.TransactionBuilder.newStreamTxnToClientBuilder;
 import static io.grpc.binder.internal.TransactionBuilder.utf8;
 import static io.grpc.binder.internal.TransactionUtils.FLAG_MESSAGE_DATA;
+import static org.junit.Assert.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.content.ComponentName;
@@ -38,14 +47,17 @@ import io.grpc.StringMarshaller;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.StreamListener.MessageProducer;
+import io.grpc.internal.testing.TestClientStreamTracer;
 import java.net.SocketAddress;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.InOrder;
 import org.robolectric.RobolectricTestRunner;
 
 /**
@@ -489,25 +501,314 @@ public final class ClientInboundTest {
   }
 
   @Test
-  public void abnormalCloseBeforeStreamStartDoesNotThrow() throws Exception {
-    transport.newStream(
+  public void newStream_doesNotRegisterOrCountAsInUseUntilStart() throws Exception {
+    ManagedClientTransport.Listener transportListener = mock(ManagedClientTransport.Listener.class);
+    BinderClientTransport transport =
+        new DummyClientTransportBuilder().setTransportListener(transportListener).build();
+    ClientStream unstartedStream = newUnstartedStream(transport);
+    drainExecutors();
+
+    assertThat(transport.getOngoingCalls()).doesNotContainKey(BinderTransport.FIRST_CALL_ID);
+    verify(transportListener, never()).transportInUse(anyBoolean());
+
+    unstartedStream.start(new FakeClientStreamListener());
+    drainExecutors();
+
+    assertThat(transport.getOngoingCalls()).containsKey(BinderTransport.FIRST_CALL_ID);
+    verify(transportListener).transportInUse(true);
+  }
+
+  @Test
+  public void shutdownNowBeforeStart_closesListenerAndTracersUponStart() throws Exception {
+    TestClientStreamTracer tracer = new TestClientStreamTracer();
+    ClientStream unstartedStream = newUnstartedStream(new ClientStreamTracer[] {tracer});
+
+    transport.shutdownNow(Status.UNAVAILABLE.withDescription("test shutdownNow"));
+    drainExecutors();
+    assertThat(transport.getOngoingCalls()).isEmpty();
+    assertThat(tracer.getStatus()).isNull();
+
+    FakeClientStreamListener unstartedListener = new FakeClientStreamListener();
+    unstartedStream.start(unstartedListener);
+    drainExecutors();
+
+    assertThat(unstartedListener.isClosed()).isTrue();
+    assertThat(unstartedListener.getClosedStatus()).hasCode(Status.Code.UNAVAILABLE);
+    assertThat(unstartedListener.getClosedStatus().getDescription()).isEqualTo("test shutdownNow");
+    assertThat(unstartedListener.getClosedProgress()).isEqualTo(RpcProgress.MISCARRIED);
+    assertThat(unstartedListener.getClosedTrailers().keys()).isEmpty();
+    assertThat(tracer.getStatus()).hasCode(Status.Code.UNAVAILABLE);
+    assertThat(tracer.getStatus().getDescription()).isEqualTo("test shutdownNow");
+    assertThat(tracer.getOutboundHeaders()).isFalse();
+    assertThat(transport.getOngoingCalls()).isEmpty();
+  }
+
+  @Test
+  public void binderDiedBeforeStart_closesListenerUponStart() throws Exception {
+    ClientStream unstartedStream = newUnstartedStream(new ClientStreamTracer[0]);
+
+    transport.binderDied();
+    drainExecutors();
+    assertThat(transport.getOngoingCalls()).isEmpty();
+
+    FakeClientStreamListener unstartedListener = new FakeClientStreamListener();
+    unstartedStream.start(unstartedListener);
+    drainExecutors();
+
+    assertThat(unstartedListener.isClosed()).isTrue();
+    assertThat(unstartedListener.getClosedStatus()).hasCode(Status.Code.UNAVAILABLE);
+    assertThat(unstartedListener.getClosedStatus().getDescription()).contains("binderDied");
+    assertThat(unstartedListener.getClosedProgress()).isEqualTo(RpcProgress.MISCARRIED);
+  }
+
+  @Test
+  public void peerShutdownBeforeStart_closesListenerUponStart() throws Exception {
+    ClientStream unstartedStream = newUnstartedStream(new ClientStreamTracer[0]);
+
+    newShutdownTransportTxnBuilder().dispatchTo(transport);
+    drainExecutors();
+    assertThat(transport.getOngoingCalls()).isEmpty();
+
+    FakeClientStreamListener unstartedListener = new FakeClientStreamListener();
+    unstartedStream.start(unstartedListener);
+    drainExecutors();
+
+    assertThat(unstartedListener.isClosed()).isTrue();
+    assertThat(unstartedListener.getClosedStatus()).hasCode(Status.Code.UNAVAILABLE);
+    assertThat(unstartedListener.getClosedStatus().getDescription())
+        .isEqualTo("transport shutdown by peer");
+    assertThat(unstartedListener.getClosedProgress()).isEqualTo(RpcProgress.MISCARRIED);
+  }
+
+  @Test
+  public void shutdownBeforeStart_closesListenerUponStart() throws Exception {
+    ClientStream unstartedStream = newUnstartedStream(new ClientStreamTracer[0]);
+
+    // The stream from setUp() is still ongoing so this graceful shutdown won't terminate anything.
+    transport.shutdown(Status.UNAVAILABLE.withDescription("test shutdown"));
+    drainExecutors();
+    assertThat(transport.getOngoingCalls()).containsKey(inbound.callId);
+
+    FakeClientStreamListener unstartedListener = new FakeClientStreamListener();
+    unstartedStream.start(unstartedListener);
+    drainExecutors();
+
+    assertThat(unstartedListener.isClosed()).isTrue();
+    assertThat(unstartedListener.getClosedStatus()).hasCode(Status.Code.UNAVAILABLE);
+    assertThat(unstartedListener.getClosedStatus().getDescription()).isEqualTo("test shutdown");
+    assertThat(unstartedListener.getClosedProgress()).isEqualTo(RpcProgress.MISCARRIED);
+    assertThat(transport.getOngoingCalls()).doesNotContainKey(inbound.callId + 1);
+    assertThat(transport.getOngoingCalls()).containsKey(inbound.callId);
+  }
+
+  @Test
+  public void shutdownBeforeStart_doesNotWaitForUnstartedStream() throws Exception {
+    ManagedClientTransport.Listener transportListener = mock(ManagedClientTransport.Listener.class);
+    BinderClientTransport transport =
+        new DummyClientTransportBuilder().setTransportListener(transportListener).build();
+    ClientStream unstartedStream = newUnstartedStream(transport);
+
+    transport.shutdown(Status.UNAVAILABLE.withDescription("test shutdown"));
+    drainExecutors();
+
+    // Nothing was in flight as far as the transport is concerned, so it's already gone.
+    verify(transportListener).transportTerminated();
+    verify(transportListener, never()).transportInUse(anyBoolean());
+
+    FakeClientStreamListener unstartedListener = new FakeClientStreamListener();
+    unstartedStream.start(unstartedListener);
+    drainExecutors();
+
+    assertThat(unstartedListener.isClosed()).isTrue();
+    assertThat(unstartedListener.getClosedStatus()).hasCode(Status.Code.UNAVAILABLE);
+    assertThat(unstartedListener.getClosedStatus().getDescription()).isEqualTo("test shutdown");
+    assertThat(unstartedListener.getClosedProgress()).isEqualTo(RpcProgress.MISCARRIED);
+    verify(transportListener, never()).transportInUse(anyBoolean());
+  }
+
+  @Test
+  public void shutdownNowWithStartedAndUnstartedStreams_reportsNotInUseOnceBeforeTerminated()
+      throws Exception {
+    ManagedClientTransport.Listener transportListener = mock(ManagedClientTransport.Listener.class);
+    BinderClientTransport transport =
+        new DummyClientTransportBuilder().setTransportListener(transportListener).build();
+    ClientStream startedStream = newUnstartedStream(transport);
+    FakeClientStreamListener startedListener = new FakeClientStreamListener();
+    startedStream.start(startedListener);
+    ClientStream unstartedStream = newUnstartedStream(transport);
+    drainExecutors();
+    verify(transportListener).transportInUse(true);
+
+    transport.shutdownNow(Status.UNAVAILABLE.withDescription("test shutdownNow"));
+    drainExecutors();
+    FakeClientStreamListener unstartedListener = new FakeClientStreamListener();
+    unstartedStream.start(unstartedListener);
+    drainExecutors();
+
+    assertThat(startedListener.isClosed()).isTrue();
+    assertThat(startedListener.getClosedProgress()).isEqualTo(RpcProgress.PROCESSED);
+    assertThat(unstartedListener.isClosed()).isTrue();
+    assertThat(unstartedListener.getClosedProgress()).isEqualTo(RpcProgress.MISCARRIED);
+    // Only the started stream ever counted as in use, and the forced termination (not the
+    // never-registered stream's start()) is what un-counts it, exactly once, before terminating.
+    InOrder inOrder = inOrder(transportListener);
+    inOrder.verify(transportListener).transportInUse(true);
+    inOrder.verify(transportListener).transportInUse(false);
+    inOrder.verify(transportListener).transportTerminated();
+    verify(transportListener, times(1)).transportInUse(false);
+  }
+
+  @Test
+  public void shutdownWithStartedAndUnstartedStreams_terminatesWhenStartedStreamCompletes()
+      throws Exception {
+    ManagedClientTransport.Listener transportListener = mock(ManagedClientTransport.Listener.class);
+    BinderClientTransport transport =
+        new DummyClientTransportBuilder().setTransportListener(transportListener).build();
+    ClientStream startedStream = newUnstartedStream(transport);
+    FakeClientStreamListener startedListener = new FakeClientStreamListener();
+    startedStream.start(startedListener);
+    ClientStream unstartedStream = newUnstartedStream(transport);
+    drainExecutors();
+
+    transport.shutdown(Status.UNAVAILABLE.withDescription("test shutdown"));
+    drainExecutors();
+    verify(transportListener).transportShutdown(any(), any());
+    verify(transportListener, never()).transportTerminated();
+
+    // The unstarted stream miscarries but the started one keeps the transport alive.
+    FakeClientStreamListener unstartedListener = new FakeClientStreamListener();
+    unstartedStream.start(unstartedListener);
+    drainExecutors();
+    assertThat(unstartedListener.getClosedProgress()).isEqualTo(RpcProgress.MISCARRIED);
+    verify(transportListener, never()).transportTerminated();
+
+    // Until it completes.
+    Inbound.ClientInbound startedInbound =
+        (Inbound.ClientInbound) transport.getOngoingCalls().get(BinderTransport.FIRST_CALL_ID);
+    newStreamTxnToClientBuilder(0)
+        .withPrefix(new Metadata())
+        .withSuffix(Status.OK, new Metadata())
+        .dispatchTo(startedInbound);
+    drainExecutors();
+
+    assertThat(startedListener.isClosed()).isTrue();
+    assertThat(startedListener.getClosedStatus()).isOk();
+    InOrder inOrder = inOrder(transportListener);
+    inOrder.verify(transportListener).transportInUse(true);
+    inOrder.verify(transportListener).transportInUse(false);
+    inOrder.verify(transportListener).transportTerminated();
+    verify(transportListener, times(1)).transportInUse(false);
+  }
+
+  @Test
+  public void unaryStreamStartedAfterShutdownNow_closesListenerOnceAndSendsNothing()
+      throws Exception {
+    OneWayBinderProxy outgoingBinder = mock(OneWayBinderProxy.class);
+    BinderClientTransport transport =
+        new DummyClientTransportBuilder().setOutgoingBinder(outgoingBinder).build();
+    MethodDescriptor<String, String> unaryMethod =
+        newDummyMethodDescriptorBuilder().setType(MethodDescriptor.MethodType.UNARY).build();
+    ClientStream unaryStream =
+        transport.newStream(
+            unaryMethod, new Metadata(), CallOptions.DEFAULT, new ClientStreamTracer[0]);
+    int callId = BinderTransport.FIRST_CALL_ID;
+    assertThat(transport.getOngoingCalls()).doesNotContainKey(callId);
+    verify(outgoingBinder, never()).transact(eq(callId), any()); // Nothing is sent until start().
+
+    transport.shutdownNow(Status.UNAVAILABLE.withDescription("test shutdownNow"));
+    drainExecutors();
+    // The transport never heard of this call so shutdownNow() has nothing to close on its behalf.
+    verify(outgoingBinder, never()).transact(eq(callId), any());
+
+    // The ClientStream API allows all of this after a close (and it's how a unary RPC typically
+    // drives a stream, without waiting to see whether start() closed it).
+    FakeClientStreamListener unaryListener = new FakeClientStreamListener();
+    unaryStream.start(unaryListener);
+    unaryStream.request(2);
+    unaryStream.writeMessage(unaryMethod.getRequestMarshaller().stream("request"));
+    unaryStream.halfClose();
+    drainExecutors();
+
+    // FakeClientStreamListener throws if closed() is called twice or onReady() follows closed().
+    assertThat(unaryListener.isClosed()).isTrue();
+    assertThat(unaryListener.getClosedStatus()).hasCode(Status.Code.UNAVAILABLE);
+    assertThat(unaryListener.getClosedProgress()).isEqualTo(RpcProgress.MISCARRIED);
+    // None of start()/writeMessage()/halfClose() put anything on the wire for a call the server
+    // must never see.
+    verify(outgoingBinder, never()).transact(eq(callId), any());
+  }
+
+  @Test
+  public void cancelBeforeStart_throwsIllegalStateException() throws Exception {
+    // ClientStream#cancel() "may only be called after start()". gRPC core's normal paths honour
+    // that (ClientCallImpl arms Context/deadline cancellation only after start(); DelayedStream and
+    // RetriableStream start() a stream before they'd ever cancel() it) and other transports NPE if
+    // it happens. Fail loudly rather than inventing a close for a stream nobody is listening to.
+    OneWayBinderProxy outgoingBinder = mock(OneWayBinderProxy.class);
+    ManagedClientTransport.Listener transportListener = mock(ManagedClientTransport.Listener.class);
+    BinderClientTransport transport =
+        new DummyClientTransportBuilder()
+            .setOutgoingBinder(outgoingBinder)
+            .setTransportListener(transportListener)
+            .build();
+    ClientStream unstartedStream = newUnstartedStream(transport);
+    int callId = BinderTransport.FIRST_CALL_ID;
+
+    assertThrows(IllegalStateException.class, () -> unstartedStream.cancel(Status.CANCELLED));
+    drainExecutors();
+
+    // The rejected cancel() left no trace.
+    assertThat(transport.getOngoingCalls()).doesNotContainKey(callId);
+    verify(outgoingBinder, never()).transact(eq(callId), any());
+    verify(transportListener, never()).transportInUse(anyBoolean());
+  }
+
+  @Test
+  public void cancelAfterMiscarriedStart_isNoOp() throws Exception {
+    // Unlike cancel() *before* start(), cancel() after a start() that miscarried is perfectly
+    // legal: ClientCallImpl arms its deadline/Context cancellation only after start() returns.
+    OneWayBinderProxy outgoingBinder = mock(OneWayBinderProxy.class);
+    BinderClientTransport transport =
+        new DummyClientTransportBuilder().setOutgoingBinder(outgoingBinder).build();
+    ClientStream unstartedStream = newUnstartedStream(transport);
+    int callId = BinderTransport.FIRST_CALL_ID;
+
+    transport.shutdownNow(Status.UNAVAILABLE.withDescription("test shutdownNow"));
+    drainExecutors();
+    FakeClientStreamListener unstartedListener = new FakeClientStreamListener();
+    unstartedStream.start(unstartedListener);
+    drainExecutors();
+    assertThat(unstartedListener.isClosed()).isTrue();
+    assertThat(unstartedListener.getClosedProgress()).isEqualTo(RpcProgress.MISCARRIED);
+
+    unstartedStream.cancel(Status.CANCELLED.withDescription("cancelled after miscarry"));
+    drainExecutors();
+
+    // FakeClientStreamListener throws if closed() is called twice.
+    assertThat(unstartedListener.getClosedStatus()).hasCode(Status.Code.UNAVAILABLE);
+    assertThat(transport.getOngoingCalls()).doesNotContainKey(callId);
+    // Nothing was ever sent for this call: no prefix, and no out-of-band close for the cancel.
+    verify(outgoingBinder, never()).transact(eq(callId), any());
+  }
+
+  private ClientStream newUnstartedStream(ClientStreamTracer[] tracers) {
+    return transport.newStream(
+        newDummyMethodDescriptorBuilder().build(), new Metadata(), CallOptions.DEFAULT, tracers);
+  }
+
+  private static ClientStream newUnstartedStream(BinderClientTransport transport) {
+    return transport.newStream(
         newDummyMethodDescriptorBuilder().build(),
         new Metadata(),
         CallOptions.DEFAULT,
         new ClientStreamTracer[0]);
-    Inbound.ClientInbound unstartedInbound =
-        (Inbound.ClientInbound) transport.getOngoingCalls().get(inbound.callId + 1);
-    assertThat(transport.getOngoingCalls()).containsKey(unstartedInbound.callId);
-
-    newOutOfBandCloseTxnBuilder(Status.CANCELLED.withDescription("remote abort"))
-        .dispatchTo(unstartedInbound);
-
-    drainExecutors();
-    assertThat(transport.getOngoingCalls()).doesNotContainKey(unstartedInbound.callId);
   }
 
   private static final class DummyClientTransportBuilder {
     private final BinderClientTransportFactory.Builder factoryBuilder;
+    private OneWayBinderProxy outgoingBinder = mock(OneWayBinderProxy.class); // Blackhole.
+    private ManagedClientTransport.Listener transportListener =
+        mock(ManagedClientTransport.Listener.class);
 
     DummyClientTransportBuilder() {
       MainThreadScheduledExecutorService mainThreadExecutor =
@@ -517,6 +818,17 @@ public final class ClientInboundTest {
               .setSourceContext(ApplicationProvider.getApplicationContext())
               .setOffloadExecutorPool(new FixedObjectPool<>(mainThreadExecutor))
               .setScheduledExecutorPool(new FixedObjectPool<>(mainThreadExecutor));
+    }
+
+    public DummyClientTransportBuilder setOutgoingBinder(OneWayBinderProxy outgoingBinder) {
+      this.outgoingBinder = outgoingBinder;
+      return this;
+    }
+
+    public DummyClientTransportBuilder setTransportListener(
+        ManagedClientTransport.Listener transportListener) {
+      this.transportListener = transportListener;
+      return this;
     }
 
     public BinderClientTransport build() {
@@ -529,10 +841,9 @@ public final class ClientInboundTest {
               .build();
       // This hack lets us create a transport without the need for a real server for handshaking.
       synchronized (transport) {
-        // Blackhole Outbound.
-        transport.setOutgoingBinder(mock(OneWayBinderProxy.class));
+        transport.setOutgoingBinder(outgoingBinder);
       }
-      Runnable unused = transport.start(mock(ManagedClientTransport.Listener.class));
+      Runnable unused = transport.start(transportListener);
       synchronized (transport) {
         transport.setState(BinderTransport.TransportState.READY);
       }

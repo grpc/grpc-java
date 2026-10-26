@@ -54,6 +54,11 @@ public abstract class TransactionBuilder {
     return new OutOfBandCloseTxnBuilder(status);
   }
 
+  /** Creates a builder for a transport-level SHUTDOWN_TRANSPORT control transaction. */
+  public static ShutdownTransportTxnBuilder newShutdownTransportTxnBuilder() {
+    return new ShutdownTransportTxnBuilder();
+  }
+
   /** Functional interface for parcel consumers that may throw checked exceptions. */
   @FunctionalInterface
   public interface ParcelConsumer {
@@ -256,6 +261,33 @@ public abstract class TransactionBuilder {
         parcel.writeInt(0);
         int flags = FLAG_OUT_OF_BAND_CLOSE | TransactionUtils.writeStatus(parcel, status);
         TransactionUtils.fillInFlags(parcel, flags);
+        parcel.setDataPosition(0);
+        consumer.accept(parcel);
+      } finally {
+        parcel.recycle();
+      }
+    }
+  }
+
+  /**
+   * Builder for the SHUTDOWN_TRANSPORT control transaction a peer sends when it terminates.
+   *
+   * <p>Unlike stream transactions, this one is addressed to the transport as a whole rather than to
+   * a particular call, so use {@link #dispatchTo(BinderTransport)}.
+   */
+  public static final class ShutdownTransportTxnBuilder extends TransactionBuilder {
+    private ShutdownTransportTxnBuilder() {}
+
+    /** Dispatches the synthesized parcel to a transport, as if it came from the peer. */
+    public void dispatchTo(BinderTransport transport) throws Exception {
+      dispatchTo(parcel -> transport.handleTransaction(BinderTransport.SHUTDOWN_TRANSPORT, parcel));
+    }
+
+    @Override
+    public void dispatchTo(ParcelConsumer consumer) throws Exception {
+      Parcel parcel = Parcel.obtain();
+      try {
+        parcel.writeInt(0); // Flags. Always empty but present, mirroring what a real peer sends.
         parcel.setDataPosition(0);
         consumer.accept(parcel);
       } finally {

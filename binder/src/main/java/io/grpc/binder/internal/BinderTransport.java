@@ -396,11 +396,21 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     }
   }
 
-  protected void unregisterInbound(Inbound<?, ?> inbound) {
-    unregisterCall(inbound.callId);
+  /**
+   * Removes {@code inbound} from the set of ongoing calls, if it's there.
+   *
+   * @return true iff {@code inbound} was registered (and now isn't)
+   */
+  protected boolean unregisterInbound(Inbound<?, ?> inbound) {
+    return unregisterCall(inbound.callId);
   }
 
-  final void unregisterCall(int callId) {
+  /**
+   * Removes the call identified by {@code callId} from the set of ongoing calls, if it's there.
+   *
+   * @return true iff {@code callId} was registered (and now isn't)
+   */
+  final boolean unregisterCall(int callId) {
     boolean removed = (ongoingCalls.remove(callId) != null);
     if (removed && ongoingCalls.isEmpty()) {
       // If inState(SHUTDOWN), we'd need to terminate (as the last call to finish). But we can't
@@ -416,6 +426,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
             }
           });
     }
+    return removed;
   }
 
   final void sendTransaction(int callId, ParcelHolder parcel) throws StatusException {
