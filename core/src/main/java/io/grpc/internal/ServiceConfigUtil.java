@@ -112,9 +112,12 @@ public final class ServiceConfigUtil {
       return null;
     }
 
-    // TODO(dapengzhang0): check if this is null.
-    float maxTokens = JsonUtil.getNumberAsDouble(throttling, "maxTokens").floatValue();
-    float tokenRatio = JsonUtil.getNumberAsDouble(throttling, "tokenRatio").floatValue();
+    float maxTokens = checkNotNull(
+        JsonUtil.getNumberAsDouble(throttling, "maxTokens"),
+        "maxTokens cannot be empty").floatValue();
+    float tokenRatio = checkNotNull(
+        JsonUtil.getNumberAsDouble(throttling, "tokenRatio"),
+        "tokenRatio cannot be empty").floatValue();
     checkState(maxTokens > 0f, "maxToken should be greater than zero");
     checkState(tokenRatio > 0f, "tokenRatio should be greater than zero");
     return new Throttle(maxTokens, tokenRatio);
