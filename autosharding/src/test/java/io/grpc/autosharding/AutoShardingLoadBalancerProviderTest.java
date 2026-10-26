@@ -94,12 +94,10 @@ public class AutoShardingLoadBalancerProviderTest {
   }
 
   @Test
-  public void parse_optionalFieldsAbsent_useGrfcDefaults() throws IOException {
+  public void parse_optionalFieldsAbsent_useDefaults() throws IOException {
     AutoShardingLoadBalancerConfig config =
-        parseSuccessfully("{\"keyHeaderName\": \"x-shard-key\"}");
+        parseSuccessfully(configJson("\"keyHeaderName\": \"x-shard-key\""));
 
-    assertThat(config.channelFactoryKey).isEmpty();
-    assertThat(config.autoshardingTarget).isEmpty();
     assertThat(config.enableFallback).isFalse();
     assertThat(config.initialAssignmentTimeoutNanos)
         .isEqualTo(AutoShardingLoadBalancerConfig.DEFAULT_INITIAL_ASSIGNMENT_TIMEOUT_NANOS);
@@ -109,26 +107,49 @@ public class AutoShardingLoadBalancerProviderTest {
   @Test
   public void parse_binaryKeyHeaderName() throws IOException {
     AutoShardingLoadBalancerConfig config =
-        parseSuccessfully("{\"keyHeaderName\": \"x-shard-key-bin\"}");
+        parseSuccessfully(configJson("\"keyHeaderName\": \"x-shard-key-bin\""));
 
     assertThat(config.keyHeaderName).isEqualTo("x-shard-key-bin");
   }
 
   @Test
+  public void parse_missingOrEmptyChannelFactoryKey_isRejected() throws IOException {
+    assertThat(parseError("{\"autoshardingTarget\": \"t\", \"keyHeaderName\": \"k\"}"))
+        .contains("'channelFactoryKey' is required");
+    assertThat(
+            parseError(
+                "{\"channelFactoryKey\": \"\", \"autoshardingTarget\": \"t\","
+                    + " \"keyHeaderName\": \"k\"}"))
+        .contains("'channelFactoryKey' is required");
+  }
+
+  @Test
+  public void parse_missingOrEmptyAutoshardingTarget_isRejected() throws IOException {
+    assertThat(parseError("{\"channelFactoryKey\": \"c\", \"keyHeaderName\": \"k\"}"))
+        .contains("'autoshardingTarget' is required");
+    assertThat(
+            parseError(
+                "{\"channelFactoryKey\": \"c\", \"autoshardingTarget\": \"\","
+                    + " \"keyHeaderName\": \"k\"}"))
+        .contains("'autoshardingTarget' is required");
+  }
+
+  @Test
   public void parse_missingKeyHeaderName_isRejected() throws IOException {
-    assertThat(parseError("{}")).contains("'keyHeaderName' is required");
+    assertThat(parseError(configJson(""))).contains("'keyHeaderName' is required");
   }
 
   @Test
   public void parse_emptyKeyHeaderName_isRejected() throws IOException {
     // There would be no header to read the routing key from.
-    assertThat(parseError("{\"keyHeaderName\": \"\"}")).contains("'keyHeaderName' is required");
+    assertThat(parseError(configJson("\"keyHeaderName\": \"\"")))
+        .contains("'keyHeaderName' is required");
   }
 
   @Test
   public void parse_malformedKeyHeaderName_isRejected() throws IOException {
     // Reported here rather than thrown out of Metadata.Key on the synchronization context.
-    assertThat(parseError("{\"keyHeaderName\": \"not a header\"}"))
+    assertThat(parseError(configJson("\"keyHeaderName\": \"not a header\"")))
         .contains("'keyHeaderName' is not a valid header name");
   }
 
@@ -138,7 +159,7 @@ public class AutoShardingLoadBalancerProviderTest {
     // lands. The gRFC does not forbid it, so the parser does not either.
     AutoShardingLoadBalancerConfig config =
         parseSuccessfully(
-            "{\"keyHeaderName\": \"x-shard-key\", \"initialAssignmentTimeout\": \"0s\"}");
+            configJson("\"keyHeaderName\": \"x-shard-key\", \"initialAssignmentTimeout\": \"0s\""));
 
     assertThat(config.initialAssignmentTimeoutNanos).isEqualTo(0);
   }
@@ -147,7 +168,8 @@ public class AutoShardingLoadBalancerProviderTest {
   public void parse_negativeInitialAssignmentTimeout_isRejected() throws IOException {
     assertThat(
             parseError(
-                "{\"keyHeaderName\": \"x-shard-key\", \"initialAssignmentTimeout\": \"-1s\"}"))
+                configJson(
+                    "\"keyHeaderName\": \"x-shard-key\", \"initialAssignmentTimeout\": \"-1s\"")))
         .contains("'initialAssignmentTimeout' must not be negative");
   }
 
@@ -156,13 +178,14 @@ public class AutoShardingLoadBalancerProviderTest {
     // Durations are JSON strings ending in "s"; a bare number is a ClassCastException inside
     // JsonUtil, which the provider turns into an error rather than letting it escape.
     assertThat(
-            parseError("{\"keyHeaderName\": \"x-shard-key\", \"initialAssignmentTimeout\": 60}"))
+            parseError(
+                configJson("\"keyHeaderName\": \"x-shard-key\", \"initialAssignmentTimeout\": 60")))
         .isEqualTo("Failed parsing configuration for autosharding_experimental");
   }
 
   @Test
   public void parse_wronglyTypedField_isReportedAsFailure() throws IOException {
-    assertThat(parseError("{\"keyHeaderName\": 42}"))
+    assertThat(parseError(configJson("\"keyHeaderName\": 42")))
         .isEqualTo("Failed parsing configuration for autosharding_experimental");
   }
 
@@ -179,6 +202,12 @@ public class AutoShardingLoadBalancerProviderTest {
     Status error = configOrError.getError();
     assertThat(error.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     return error.getDescription();
+  }
+
+  /** Returns a JSON config with the other required fields set, plus {@code members}. */
+  private static String configJson(String members) {
+    String required = "\"channelFactoryKey\": \"shard-service\", \"autoshardingTarget\": \"t\"";
+    return "{" + required + (members.isEmpty() ? "" : ", " + members) + "}";
   }
 
   @SuppressWarnings("unchecked")

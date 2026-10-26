@@ -160,8 +160,9 @@ final class AutoShardingPicker extends SubchannelPicker {
   public PickResult pickSubchannel(PickSubchannelArgs args) {
     byte[] key = args.getHeaders().get(keyHeader);
     if (key == null) {
-      // A drop rather than an error: wait-for-ready RPCs would otherwise queue forever.
-      return PickResult.withDrop(
+      // wait-for-ready RPCs keep waiting for a picker
+      // that can route them, and the others fail.
+      return PickResult.withError(
           Status.UNAVAILABLE.withDescription(
               "autosharding: request is missing the '" + keyHeader.name() + "' key header"));
     }

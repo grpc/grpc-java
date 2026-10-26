@@ -271,7 +271,7 @@ public class AutoShardingPickerTest {
   }
 
   @Test
-  public void pick_missingKeyHeader_dropsWithoutConnecting() {
+  public void pick_missingKeyHeader_failsWithoutConnecting() {
     AtomicInteger connectCalls = new AtomicInteger(0);
     PickerEndpoint ep0 = new PickerEndpoint(
         ConnectivityState.IDLE,
@@ -291,8 +291,8 @@ public class AutoShardingPickerTest {
 
     PickResult result = picker.pickSubchannel(createArgs(new Metadata()));
 
-    // A drop, so wait-for-ready RPCs fail instead of queuing for a header that never arrives.
-    assertThat(result.isDrop()).isTrue();
+    // wait-for-ready RPCs keep waiting.
+    assertThat(result.isDrop()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).contains("x-slice-key");
     assertThat(connectCalls.get()).isEqualTo(0);

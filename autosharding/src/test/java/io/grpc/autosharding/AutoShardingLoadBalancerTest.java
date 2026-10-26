@@ -436,7 +436,7 @@ public class AutoShardingLoadBalancerTest {
 
     PickResult result = pick(OTHER_KEY_HEADER, "z");
 
-    assertThat(result.isDrop()).isTrue();
+    assertThat(result.isDrop()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).contains(KEY_HEADER);
   }

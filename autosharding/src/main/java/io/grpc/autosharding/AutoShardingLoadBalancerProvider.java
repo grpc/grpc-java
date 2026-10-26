@@ -70,22 +70,18 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
   /**
    * Translates {@code AutoshardingLbConfig} from its JSON form, as specified by gRFC A119.
    *
-   * <p>The configuration is a proto3 message, so an absent string field and an empty one are the
-   * same value and no field is required. What gets rejected here is therefore a judgment call
-   * rather than something the gRFC spells out, and the bar is deliberately high: a value is only
-   * turned away when it has no coherent reading, or when honouring it would go wrong quietly.
-   * Anything the sharding service or the "Channel Factory" is the authority on is left to fail
-   * visibly at runtime instead of being guessed at here.
+   * <p>{@code channelFactoryKey}, {@code autoshardingTarget} and
+   * {@code keyHeaderName} are required, and {@code keyHeaderName} must be a valid header name.
    */
   private ConfigOrError parseLoadBalancingPolicyConfigInternal(Map<String, ?> rawConfig) {
     String channelFactoryKey = JsonUtil.getString(rawConfig, "channelFactoryKey");
-    if (channelFactoryKey == null) {
-      channelFactoryKey = "";
+    if (channelFactoryKey == null || channelFactoryKey.isEmpty()) {
+      return error("'channelFactoryKey' is required, LB policy config=" + rawConfig);
     }
 
     String autoshardingTarget = JsonUtil.getString(rawConfig, "autoshardingTarget");
-    if (autoshardingTarget == null) {
-      autoshardingTarget = "";
+    if (autoshardingTarget == null || autoshardingTarget.isEmpty()) {
+      return error("'autoshardingTarget' is required, LB policy config=" + rawConfig);
     }
 
     String keyHeaderName = JsonUtil.getString(rawConfig, "keyHeaderName");
