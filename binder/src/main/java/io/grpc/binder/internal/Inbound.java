@@ -313,8 +313,13 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
     Outbound outbound = null;
     StreamListener listener = null;
     synchronized (this) {
+      // closed() is always the listener's final callback.
+      if (!isClosed()) {
+        listener = this.listener;
+      }
+      // But poke the Outbound even if we're closed since a server stream's close could be sitting
+      // in it, blocked on flow control.
       outbound = this.outbound;
-      listener = this.listener;
     }
     if (listener != null) {
       listener.onReady();

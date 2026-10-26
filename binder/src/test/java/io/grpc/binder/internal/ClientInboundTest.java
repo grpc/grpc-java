@@ -411,6 +411,20 @@ public final class ClientInboundTest {
   }
 
   @Test
+  public void transportReadyAfterClosed_doesNotReportOnReady() throws Exception {
+    newStreamTxnToClientBuilder(nextTxIndex++).withPrefix(new Metadata()).dispatchTo(inbound);
+    newOutOfBandCloseTxnBuilder(Status.CANCELLED).dispatchTo(inbound);
+    drainExecutors();
+    assertThat(listener.isClosed()).isTrue();
+
+    // Simulates BinderTransport.handleAcknowledgedBytes() picking this Inbound out of ongoingCalls
+    // just before a concurrent close (e.g. cancel()) unregistered it. FakeClientStreamListener
+    // throws if onReady() is invoked after closed().
+    inbound.onTransportReady();
+    drainExecutors();
+  }
+
+  @Test
   public void allInOneUnaryTransaction() throws Exception {
     newStreamTxnToClientBuilder(0)
         .withPrefix(new Metadata())
