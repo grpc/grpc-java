@@ -154,12 +154,11 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
 
   @GuardedBy("this")
   final void init(Outbound outbound, L listener) {
+    checkState(isUninitialized(), "init() in state %s", deliveryState);
     this.outbound = outbound;
     this.statsTraceContext = outbound.getStatsTraceContext();
     this.listener = listener;
-    if (!isClosed()) {
-      onDeliveryState(State.INITIALIZED);
-    }
+    onDeliveryState(State.INITIALIZED);
   }
 
   final void unregister() {
@@ -182,6 +181,12 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
   @GuardedBy("this")
   protected final boolean isClosed() {
     return deliveryState == State.CLOSED;
+  }
+
+  /** Returns true iff our delivery state is still {@link State#UNINITIALIZED}. */
+  @GuardedBy("this")
+  final boolean isUninitialized() {
+    return deliveryState == State.UNINITIALIZED;
   }
 
   @GuardedBy("this")
@@ -285,7 +290,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
   private final void closeAbnormal(
       Status outboundStatus, Status internalStatus, boolean isOobFromRemote) {
     if (!isClosed()) {
-      boolean wasInitialized = (deliveryState != State.UNINITIALIZED);
+      boolean wasInitialized = !isUninitialized();
       onDeliveryState(State.CLOSED);
       if (wasInitialized) {
         statsTraceContext.streamClosed(internalStatus);
@@ -615,6 +620,34 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
     @GuardedBy("this")
     protected void deliverCloseAbnormal(Status status) {
       listener.closed(status, RpcProgress.PROCESSED, new Metadata());
+    }
+
+    /**
+     * Handles {@link io.grpc.internal.ClientStream#cancel}, which "may only be called after
+     * start()".
+     *
+     * <p>Nothing can reach us before we're registered, which happens at start(), so still being
+     * {@link State#UNINITIALIZED} here can only mean that contract was broken.
+     */
+    @GuardedBy("this")
+    void cancel(Status status) {
+      checkState(!isUninitialized(), "cancel() before start()");
+      closeOnCancel(status);
+    }
+
+    /**
+     * Closes a stream that couldn't be registered because its transport had already shut down.
+     *
+     * <p>Nothing has been sent on the stream's behalf, so this is reported as {@link
+     * RpcProgress#MISCARRIED}. And since the stream was never registered, there's no out-of-band
+     * close to send and nothing to unregister().
+     */
+    @GuardedBy("this")
+    void closeMiscarried(Status status) {
+      checkState(!isClosed(), "already closed");
+      onDeliveryState(State.CLOSED);
+      statsTraceContext.streamClosed(status);
+      listener.closed(status, RpcProgress.MISCARRIED, new Metadata());
     }
   }
 
