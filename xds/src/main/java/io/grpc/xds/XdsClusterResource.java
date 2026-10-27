@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.client.Bootstrapper.ServerInfo;
-import static io.grpc.xds.client.LoadStatsManager2.isEnabledOrcaLrsPropagation;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
@@ -225,7 +224,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     boolean isHttp11ProxyAvailable = false;
     BackendMetricPropagation backendMetricPropagation = null;
 
-    if (isEnabledOrcaLrsPropagation && !cluster.getLrsReportEndpointMetricsList().isEmpty()) {
+    if (!cluster.getLrsReportEndpointMetricsList().isEmpty()) {
       backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
           cluster.getLrsReportEndpointMetricsList());
     }

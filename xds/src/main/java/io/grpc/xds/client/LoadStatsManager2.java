@@ -25,7 +25,6 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
 import io.grpc.Internal;
 import io.grpc.Status;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.client.Stats.BackendLoadMetricStats;
 import io.grpc.xds.client.Stats.ClusterStats;
 import io.grpc.xds.client.Stats.DroppedRequests;
@@ -58,8 +57,6 @@ public final class LoadStatsManager2 {
   private final Map<String, Map<String,
       Map<Locality, ReferenceCounted<ClusterLocalityStats>>>> allLoadStats = new HashMap<>();
   private final Supplier<Stopwatch> stopwatchSupplier;
-  public static boolean isEnabledOrcaLrsPropagation =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ORCA_LRS_PROPAGATION", true);
 
   @VisibleForTesting
   public LoadStatsManager2(Supplier<Stopwatch> stopwatchSupplier) {
@@ -385,11 +382,6 @@ public final class LoadStatsManager2 {
      * Metrics are filtered based on the backend metric propagation configuration if configured.
      */
     public synchronized void recordBackendLoadMetricStats(Map<String, Double> namedMetrics) {
-      if (!isEnabledOrcaLrsPropagation) {
-        namedMetrics.forEach((name, value) -> updateLoadMetricStats(name, value));
-        return;
-      }
-
       namedMetrics.forEach((name, value) -> {
         if (backendMetricPropagation.shouldPropagateNamedMetric(name)) {
           updateLoadMetricStats("named_metrics." + name, value);
