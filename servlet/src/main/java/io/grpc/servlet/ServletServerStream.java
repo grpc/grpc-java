@@ -82,6 +82,8 @@ final class ServletServerStream extends AbstractServerStream {
     this.resp = (HttpServletResponse) asyncCtx.getResponse();
     this.writer = new AsyncServletOutputStreamWriter(
         asyncCtx, transportState, logId);
+    // Register before the peer can reset the stream and cause the container to commit the response.
+    resp.setTrailerFields(sink.trailerSupplier);
     resp.getOutputStream().setWriteListener(new GrpcWriteListener());
   }
 
@@ -231,7 +233,6 @@ final class ServletServerStream extends AbstractServerStream {
     @Override
     public void writeHeaders(Metadata headers, boolean flush) {
       writeHeadersToServletResponse(headers);
-      resp.setTrailerFields(trailerSupplier);
       try {
         writer.flush();
       } catch (IOException e) {
