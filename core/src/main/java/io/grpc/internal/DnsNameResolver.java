@@ -163,14 +163,15 @@ public class DnsNameResolver extends NameResolver {
     // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
     // opaque URI, thus the authority and host of the resulted URI would be null.
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
-    Preconditions.checkArgument(nameUri.getHost() != null, "Invalid DNS name: %s", name);
+    host = GrpcUtil.getHost(nameUri);
+    Preconditions.checkArgument(host != null, "Invalid DNS name: %s", name);
     authority = Preconditions.checkNotNull(nameUri.getAuthority(),
         "nameUri (%s) doesn't have an authority", nameUri);
-    host = nameUri.getHost();
-    if (nameUri.getPort() == -1) {
+    int uriPort = GrpcUtil.getPort(nameUri);
+    if (uriPort == -1) {
       port = args.getDefaultPort();
     } else {
-      port = nameUri.getPort();
+      port = uriPort;
     }
     this.proxyDetector = checkNotNull(args.getProxyDetector(), "proxyDetector");
     Executor offloadExecutor = args.getOffloadExecutor();
