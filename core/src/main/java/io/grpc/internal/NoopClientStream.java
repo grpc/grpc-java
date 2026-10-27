@@ -69,6 +69,11 @@ public class NoopClientStream implements ClientStream {
   }
 
   @Override
+  public void setMessageCompression(boolean enabled, String compressorName) {
+    // noop
+  }
+
+  @Override
   public void optimizeForDirectExecutor() {}
 
   @Override
