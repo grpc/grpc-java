@@ -19,7 +19,9 @@ package io.grpc.okhttp.internal.framed;
 import static io.grpc.okhttp.internal.framed.Http2.FLAG_NONE;
 import static io.grpc.okhttp.internal.framed.Http2.FLAG_PADDED;
 import static io.grpc.okhttp.internal.framed.Http2.TYPE_DATA;
+import static io.grpc.okhttp.internal.framed.Http2.TYPE_WINDOW_UPDATE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
@@ -73,6 +75,41 @@ public class Http2Test {
 
     verify(mockHandler).data(eq(false), eq(STREAM_ID), eq(bufferIn), eq(2037 - 126), eq(2037));
     assertEquals(2037 - 125, bufferIn.size());
+  }
+
+  // RFC 9113 section 6.9: a WINDOW_UPDATE with a flow-control window increment of 0 is a
+  // protocol error, but the *scope* of that error (stream vs connection) depends on whether
+  // streamId is 0. The parser's job is only to preserve and dispatch streamId + increment;
+  // scope classification is the Handler's responsibility. These tests pin that contract at the
+  // parser layer, independent of any particular Handler's classification logic.
+  @Test
+  public void windowUpdateStreamScopedZeroIncrementIsDispatchedToHandler() throws IOException {
+    Buffer bufferIn = createWindowUpdate(STREAM_ID, 0);
+    http2FrameReader = new Http2.Reader(bufferIn, 100, true);
+
+    assertTrue(http2FrameReader.nextFrame(mockHandler));
+
+    verify(mockHandler).windowUpdate(STREAM_ID, 0);
+  }
+
+  @Test
+  public void windowUpdateConnectionScopedZeroIncrementIsDispatchedToHandler() throws IOException {
+    Buffer bufferIn = createWindowUpdate(0, 0);
+    http2FrameReader = new Http2.Reader(bufferIn, 100, true);
+
+    assertTrue(http2FrameReader.nextFrame(mockHandler));
+
+    verify(mockHandler).windowUpdate(0, 0);
+  }
+
+  private Buffer createWindowUpdate(int streamId, long increment) throws IOException {
+    Buffer sink = new Buffer();
+    writeLength(sink, 4);
+    sink.writeByte(TYPE_WINDOW_UPDATE);
+    sink.writeByte(FLAG_NONE);
+    sink.writeInt(streamId);
+    sink.writeInt((int) increment);
+    return sink;
   }
 
   private Buffer createData(int flag, int length, int paddingLength) throws IOException {
