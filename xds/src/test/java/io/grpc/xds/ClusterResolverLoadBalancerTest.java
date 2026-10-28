@@ -62,6 +62,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.FixedResultPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
@@ -885,6 +886,52 @@ public class ClusterResolverLoadBalancerTest {
     Status expectedStatus = Status.UNAVAILABLE
         .withDescription("No usable endpoint from cluster: " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), expectedStatus, null);
+  }
+
+  @Test
+  public void handleEdsResource_allEndpointsRemovedAfterReady_failsAndRecovers() {
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8000)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
+
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    childBalancer.helper.updateBalancingState(
+        ConnectivityState.READY, new FixedResultPicker(PickResult.withNoResult()));
+    verify(helper).updateBalancingState(eq(ConnectivityState.READY), any());
+
+    // An empty ClusterLoadAssignment must not leave the previous READY picker in place
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME,
+        ClusterLoadAssignment.newBuilder().setClusterName(EDS_SERVICE_NAME).build()));
+
+    assertThat(childBalancer.shutdown).isTrue();
+    assertThat(childBalancers).isEmpty();
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    Status expectedStatus = Status.UNAVAILABLE
+        .withDescription("No usable endpoint from cluster: " + CLUSTER);
+    assertPicker(pickerCaptor.getValue(), expectedStatus, null);
+
+    // Endpoints come back: a new child policy is created
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment.toBuilder()
+          .setEndpoints(0, clusterLoadAssignment.getEndpoints(0).toBuilder()
+            .setLbEndpoints(0, newSocketLbEndpoint("127.0.0.2", 8000)))
+          .build()));
+
+    FakeLoadBalancer newChildBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(newChildBalancer).isNotSameInstanceAs(childBalancer);
+    assertThat(newChildBalancer.shutdown).isFalse();
+    assertAddressesEqual(
+        Arrays.asList(new EquivalentAddressGroup(newInetSocketAddress("127.0.0.2", 8000))),
+        newChildBalancer.addresses);
   }
 
   @Test
