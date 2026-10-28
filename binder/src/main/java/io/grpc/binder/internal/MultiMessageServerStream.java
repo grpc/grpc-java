@@ -114,9 +114,7 @@ final class MultiMessageServerStream implements ServerStream {
       synchronized (outbound) {
         outbound.sendClose(status, trailers);
       }
-      synchronized (inbound) {
-        inbound.onCloseSent(status);
-      }
+      inbound.closeIfSuffixSent();
     } catch (StatusException se) {
       synchronized (inbound) {
         inbound.closeAbnormal(se.getStatus());

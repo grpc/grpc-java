@@ -251,7 +251,7 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
           break;
         }
         onDeliveryState(State.ALL_MESSAGES_DELIVERED);
-        // Fall-through.
+        // fall through
       case ALL_MESSAGES_DELIVERED:
         if (suffixAvailable) {
           onDeliveryState(State.SUFFIX_DELIVERED);
@@ -303,16 +303,21 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
   @GuardedBy("this")
   protected abstract void deliverCloseAbnormal(Status status);
 
-  final void onTransportReady() {
+  void onTransportReady() {
     // Report transport readiness to the listener, and the outbound data.
     Outbound outbound = null;
-    StreamListener listener = null;
     synchronized (this) {
+      if (isClosed()) {
+        return;
+      }
+      if (listener != null) {
+        listener.onReady();
+      }
+      // The listener may have cancelled or closed the stream in onReady().
+      if (isClosed()) {
+        return;
+      }
       outbound = this.outbound;
-      listener = this.listener;
-    }
-    if (listener != null) {
-      listener.onReady();
     }
     if (outbound != null) {
       try {
@@ -680,12 +685,34 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
       }
     }
 
-    @GuardedBy("this")
-    void onCloseSent(Status status) {
-      if (!isClosed()) {
-        onDeliveryState(State.CLOSED);
-        statsTraceContext.streamClosed(status);
-        listener.closed(Status.OK);
+    @Override
+    void onTransportReady() {
+      super.onTransportReady();
+      closeIfSuffixSent();
+    }
+
+    void closeIfSuffixSent() {
+      Outbound.ServerOutbound outbound;
+      synchronized (this) {
+        if (isClosed()) {
+          return;
+        }
+        outbound = (Outbound.ServerOutbound) this.outbound;
+      }
+      if (outbound == null) {
+        return;
+      }
+      Status status;
+      synchronized (outbound) {
+        status = outbound.getCloseStatusIfSent();
+      }
+      synchronized (this) {
+        if (status != null && !isClosed()) {
+          onDeliveryState(State.CLOSED);
+          unregister();
+          statsTraceContext.streamClosed(status);
+          listener.closed(Status.OK);
+        }
       }
     }
   }
