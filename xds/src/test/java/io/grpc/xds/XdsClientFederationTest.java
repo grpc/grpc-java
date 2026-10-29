@@ -26,6 +26,9 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Any;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.StatusOr;
@@ -140,6 +143,51 @@ public class XdsClientFederationTest {
     }));
     verify(mockDirectPathWatcher, times(1)).onResourceChanged(any());
     verify(mockDirectPathWatcher, never()).onAmbientError(any());
+  }
+
+  /**
+   * Assures that resource updates happening in one control plane do not trigger update events
+   * in watchers of resources owned by other control planes.
+   */
+  @Test
+  public void isolatedResourceUpdates() {
+    trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
+        ControlPlaneRule.buildClientListener("test-server"));
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "test-server", mockWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
+        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server", mockDirectPathWatcher);
+
+    verify(mockWatcher, timeout(10000)).onResourceChanged(any());
+
+    // trafficdirector (top-level server) erroneously sends a response containing both an update
+    // for test-server and a listener owned by server-one.
+    Listener alienListener = ControlPlaneRule.buildClientListener(
+        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
+    Listener updatedClientListener = ControlPlaneRule.buildClientListener("test-server",
+        "new-route-config.googleapis.com");
+    DiscoveryResponse rogueResponse = DiscoveryResponse.newBuilder()
+        .setTypeUrl(XdsTestControlPlaneService.ADS_TYPE_URL_LDS)
+        .setVersionInfo("rogue-version-1")
+        .setNonce("rogue-nonce-1")
+        .addResources(Any.pack(updatedClientListener))
+        .addResources(Any.pack(alienListener))
+        .build();
+    trafficdirector.getService().sendDiscoveryResponse(rogueResponse);
+
+    // Confirm that trafficdirector's second response was processed by waiting for mockWatcher
+    // to receive the updated test-server config.
+    verify(mockWatcher, timeout(10000).times(2)).onResourceChanged(any());
+
+    // mockDirectPathWatcher should not receive the update sent by trafficdirector.
+    verify(mockDirectPathWatcher, never()).onResourceChanged(any());
+
+    // When server-one sends its LDS config, mockDirectPathWatcher should then receive the update.
+    directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
+        ControlPlaneRule.buildClientListener(
+            "xdstp://server-one/envoy.config.listener.v3.Listener/test-server"));
+
+    verify(mockDirectPathWatcher, timeout(10000)).onResourceChanged(any());
   }
 
   /**
