@@ -17,9 +17,14 @@
 package io.grpc.android;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 
+import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
 import android.net.LocalSocketAddress.Namespace;
+import com.google.common.testing.EqualsTester;
+import java.net.InetSocketAddress;
+import java.net.SocketException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -28,7 +33,7 @@ import org.robolectric.RobolectricTestRunner;
 public final class UdsSocketTest {
 
   private final UdsSocket socket =
-      new UdsSocket(new LocalSocketAddress("uds-socket-test", Namespace.ABSTRACT));
+      new UdsSocket.Client(new LocalSocketAddress("uds-socket-test", Namespace.ABSTRACT));
 
   /**
    * grpc-okhttp's channelz support ({@code Utils.getSocketOptions}) reads these options and logs
@@ -43,5 +48,45 @@ public final class UdsSocketTest {
     assertThat(socket.getSoLinger()).isEqualTo(-1);
     assertThat(socket.getTcpNoDelay()).isTrue();
     assertThat(socket.getTrafficClass()).isEqualTo(0);
+  }
+
+  @Test
+  public void acceptedSocket_getLocalSocketAddress_returnsListenAddress() {
+    UdsSocketAddress listenAddress = UdsSocketAddress.forAbstractName("uds-socket-test");
+    UdsSocket.Accepted accepted =
+        new UdsSocket.Accepted(
+            new LocalSocket(), listenAddress, new UdsPeerSocketAddress(10187, 10188, 4242));
+
+    assertThat(accepted.getLocalSocketAddress()).isEqualTo(listenAddress);
+  }
+
+  @Test
+  public void acceptedSocket_getRemoteSocketAddress_returnsPeerAddress() {
+    UdsPeerSocketAddress peerAddress = new UdsPeerSocketAddress(10187, 10188, 4242);
+    UdsSocket.Accepted accepted =
+        new UdsSocket.Accepted(
+            new LocalSocket(), UdsSocketAddress.forAbstractName("test"), peerAddress);
+
+    assertThat(accepted.getRemoteSocketAddress()).isEqualTo(peerAddress);
+    assertThat(accepted.getRemoteSocketAddress().toString())
+        .isEqualTo("unix-peer:uid=10187,gid=10188,pid=4242");
+    new EqualsTester()
+        .addEqualityGroup(peerAddress, new UdsPeerSocketAddress(10187, 10188, 4242))
+        .addEqualityGroup(new UdsPeerSocketAddress(10189, 10188, 4242))
+        .addEqualityGroup(new UdsPeerSocketAddress(10187, 10189, 4242))
+        .addEqualityGroup(new UdsPeerSocketAddress(10187, 10188, 4243))
+        .testEquals();
+  }
+
+  @Test
+  public void acceptedSocket_connect_throwsSocketException() {
+    UdsSocket.Accepted accepted =
+        new UdsSocket.Accepted(
+            new LocalSocket(),
+            UdsSocketAddress.forAbstractName("test"),
+            new UdsPeerSocketAddress(10187, 10188, 4242));
+
+    assertThrows(SocketException.class, () -> accepted.connect(new InetSocketAddress(0)));
+    assertThrows(SocketException.class, () -> accepted.connect(new InetSocketAddress(0), 1000));
   }
 }
