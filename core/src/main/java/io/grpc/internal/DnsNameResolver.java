@@ -163,14 +163,32 @@ public class DnsNameResolver extends NameResolver {
     // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
     // opaque URI, thus the authority and host of the resulted URI would be null.
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
-    Preconditions.checkArgument(nameUri.getHost() != null, "Invalid DNS name: %s", name);
     authority = Preconditions.checkNotNull(nameUri.getAuthority(),
         "nameUri (%s) doesn't have an authority", nameUri);
-    host = nameUri.getHost();
-    if (nameUri.getPort() == -1) {
-      port = args.getDefaultPort();
+    if (nameUri.getHost() != null) {
+      host = nameUri.getHost();
+      if (nameUri.getPort() == -1) {
+        port = args.getDefaultPort();
+      } else {
+        port = nameUri.getPort();
+      }
     } else {
-      port = nameUri.getPort();
+      // JDK-8188305: java.net.URI.getHost() returns null when the last label of a hostname
+      // starts with a digit (e.g. otlp.1234-k8s-namespace). Parse host and port from authority.
+      Preconditions.checkArgument(authority.indexOf('@') == -1, "Invalid DNS name: %s", name);
+      int colonIndex = authority.lastIndexOf(':');
+      if (colonIndex != -1 && (authority.indexOf(']') == -1 || colonIndex > authority.lastIndexOf(']'))) {
+        host = authority.substring(0, colonIndex);
+        try {
+          port = Integer.parseInt(authority.substring(colonIndex + 1));
+        } catch (NumberFormatException e) {
+          throw new IllegalArgumentException("Invalid DNS name: " + name, e);
+        }
+      } else {
+        host = authority;
+        port = args.getDefaultPort();
+      }
+      Preconditions.checkArgument(!host.isEmpty(), "Invalid DNS name: %s", name);
     }
     this.proxyDetector = checkNotNull(args.getProxyDetector(), "proxyDetector");
     Executor offloadExecutor = args.getOffloadExecutor();
