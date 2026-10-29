@@ -23,6 +23,7 @@ import com.google.protobuf.Message;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
+import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.grpc.SynchronizationContext;
 import io.grpc.stub.StreamObserver;
 import java.util.HashMap;
@@ -74,6 +75,8 @@ final class XdsTestControlPlaneService extends
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
+  static final String ADS_TYPE_URL_LEDS =
+      "type.googleapis.com/envoy.config.endpoint.v3.LbEndpointCollection";
 
   private final Map<String, HashMap<String, Message>> xdsResources = new HashMap<>();
   private ImmutableMap<String, Map<StreamObserver<DiscoveryResponse>, Set<String>>> subscribers
@@ -81,19 +84,22 @@ final class XdsTestControlPlaneService extends
       ADS_TYPE_URL_LDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
       ADS_TYPE_URL_RDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
       ADS_TYPE_URL_CDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
-      ADS_TYPE_URL_EDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>());
+      ADS_TYPE_URL_EDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
+      ADS_TYPE_URL_LEDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>());
   private final ImmutableMap<String, AtomicInteger> xdsVersions = ImmutableMap.of(
       ADS_TYPE_URL_LDS, new AtomicInteger(1),
       ADS_TYPE_URL_RDS, new AtomicInteger(1),
       ADS_TYPE_URL_CDS, new AtomicInteger(1),
-      ADS_TYPE_URL_EDS, new AtomicInteger(1)
+      ADS_TYPE_URL_EDS, new AtomicInteger(1),
+      ADS_TYPE_URL_LEDS, new AtomicInteger(1)
   );
   private final ImmutableMap<String, Map<StreamObserver<DiscoveryResponse>, AtomicInteger>>
       xdsNonces = ImmutableMap.of(
       ADS_TYPE_URL_LDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
       ADS_TYPE_URL_RDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
       ADS_TYPE_URL_CDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
-      ADS_TYPE_URL_EDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>()
+      ADS_TYPE_URL_EDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
+      ADS_TYPE_URL_LEDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>()
   );
 
 
@@ -201,8 +207,18 @@ final class XdsTestControlPlaneService extends
     for (String resourceName: resourceNames) {
       if (xdsResources.containsKey(resourceType)
           && xdsResources.get(resourceType).containsKey(resourceName)) {
-        responseBuilder.addResources(Any.pack(xdsResources.get(resourceType).get(resourceName),
-            resourceType));
+        Message message = xdsResources.get(resourceType).get(resourceName);
+        if (ADS_TYPE_URL_LEDS.equals(resourceType)) {
+          // LbEndpointCollection has no name field, so it must be wrapped in a
+          // discovery.v3.Resource to convey the resource name.
+          responseBuilder.addResources(Any.pack(
+              Resource.newBuilder()
+                  .setName(resourceName)
+                  .setResource(Any.pack(message))
+                  .build()));
+        } else {
+          responseBuilder.addResources(Any.pack(message, resourceType));
+        }
       }
     }
     return responseBuilder.build();
