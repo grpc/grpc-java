@@ -80,6 +80,16 @@ public class DnsNameResolverProviderTest {
   }
 
   @Test
+  public void newNameResolver_acceptsHostStartingWithDigit() {
+    NameResolver nameResolver = newNameResolver("dns:///otlp.1234-k8s-namespace:4317", args);
+    assertThat(nameResolver).isNotNull();
+    assertThat(nameResolver.getClass()).isSameInstanceAs(DnsNameResolver.class);
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo("otlp.1234-k8s-namespace:4317");
+    assertThat(((DnsNameResolver) nameResolver).getHost()).isEqualTo("otlp.1234-k8s-namespace");
+    assertThat(((DnsNameResolver) nameResolver).getPort()).isEqualTo(4317);
+  }
+
+  @Test
   public void newNameResolver_acceptsRootless() {
     assume().that(enableRfc3986UrisParam).isTrue();
     NameResolver nameResolver = newNameResolver("dns:localhost:443", args);
