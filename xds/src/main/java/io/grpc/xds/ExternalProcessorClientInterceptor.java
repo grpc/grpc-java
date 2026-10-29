@@ -934,6 +934,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       return observer != null && observer.isReady();
     }
 
+    private boolean isUpstreamReady() {
+      return method.getType().clientSendsOneMessage() || super.isReady();
+    }
+
     @Override
     public boolean isReady() {
       if (passThroughMode.get()) {
@@ -1193,7 +1197,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             boolean sendImmediately = false;
             synchronized (streamLock) {
               sidestreamToUpstreamWindow -= body.size();
-              if (pendingUpstreamBodyMessages.isEmpty() && super.isReady()) {
+              if (pendingUpstreamBodyMessages.isEmpty() && isUpstreamReady()) {
                 sendImmediately = true;
                 accumulatedWindowUpdateSidestreamToUpstream += body.size();
               } else {
@@ -1307,7 +1311,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         ByteString body = null;
         boolean triggerHalfClose = false;
         synchronized (streamLock) {
-          if (!pendingUpstreamBodyMessages.isEmpty() && super.isReady()) {
+          if (!pendingUpstreamBodyMessages.isEmpty() && isUpstreamReady()) {
             body = pendingUpstreamBodyMessages.poll();
             accumulatedWindowUpdateSidestreamToUpstream += body.size();
             if (pendingUpstreamBodyMessages.isEmpty()
@@ -1366,16 +1370,16 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         boolean triggerHalfClose = false;
 
         synchronized (streamLock) {
-          if (!pendingUpstreamBodyMessages.isEmpty() && super.isReady()) {
+          if (!pendingUpstreamBodyMessages.isEmpty() && isUpstreamReady()) {
             msg = pendingUpstreamBodyMessages.poll();
             isMutated = true;
           } else if (pendingUpstreamBodyMessages.isEmpty()
-              && !pendingRequestBodyMessages.isEmpty() && super.isReady()) {
+              && !pendingRequestBodyMessages.isEmpty() && isUpstreamReady()) {
             msg = pendingRequestBodyMessages.poll();
             isMutated = true;
           } else if (pendingUpstreamBodyMessages.isEmpty()
               && pendingRequestBodyMessages.isEmpty()
-              && !pendingDrainingMessages.isEmpty() && super.isReady()) {
+              && !pendingDrainingMessages.isEmpty() && isUpstreamReady()) {
             msg = pendingDrainingMessages.poll();
             isMutated = false;
           }

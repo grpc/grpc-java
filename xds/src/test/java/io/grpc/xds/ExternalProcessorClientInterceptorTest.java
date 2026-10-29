@@ -50,6 +50,7 @@ import io.grpc.ClientInterceptors;
 import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -150,6 +151,14 @@ public class ExternalProcessorClientInterceptorTest {
       MethodDescriptor.<String, String>newBuilder()
           .setType(MethodDescriptor.MethodType.CLIENT_STREAMING)
           .setFullMethodName("test.TestService/ClientStreaming")
+          .setRequestMarshaller(new StringMarshaller())
+          .setResponseMarshaller(new StringMarshaller())
+          .build();
+
+  private static final MethodDescriptor<String, String> METHOD_SERVER_STREAMING =
+      MethodDescriptor.<String, String>newBuilder()
+          .setType(MethodDescriptor.MethodType.SERVER_STREAMING)
+          .setFullMethodName("test.TestService/ServerStreaming")
           .setRequestMarshaller(new StringMarshaller())
           .setResponseMarshaller(new StringMarshaller())
           .build();
@@ -22395,6 +22404,821 @@ public class ExternalProcessorClientInterceptorTest {
 
     channelManager.close();
     shutdownAndAwaitTermination(executor);
+  }
+
+  // --- Category 30: Unary and Server-Streaming Outbound Flow Control ---
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void unaryCall_whenUpstreamNotReady_messageAndHalfCloseForwardedImmediately()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                } else if (request.hasRequestBody()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestBody(BodyResponse.newBuilder()
+                          .setResponse(CommonResponse.newBuilder()
+                              .setBodyMutation(BodyMutation.newBuilder()
+                                  .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                      .setBody(ByteString.copyFromUtf8("mutated-ping"))
+                                      .setEndOfStream(true)
+                                      .build())
+                                  .build())
+                              .build())
+                          .build())
+                      .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final AtomicReference<String> receivedServerRequest = new AtomicReference<>();
+    final AtomicBoolean serverReceivedHalfClose = new AtomicBoolean(false);
+    final CountDownLatch serverDoneLatch = new CountDownLatch(1);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          receivedServerRequest.set(request);
+          serverReceivedHalfClose.set(true);
+          responseObserver.onNext("Hello " + request);
+          responseObserver.onCompleted();
+          serverDoneLatch.countDown();
+        }))
+        .build());
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .directExecutor()
+        .build().start());
+
+    // Interceptor simulating DelayedStream / stream allocation delay where isReady() returns false
+    // and onReady() is suppressed (matching ClientCallImpl behavior for clientSendsOneMessage()).
+    ClientInterceptor unreadyUpstreamInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          @Override
+          public boolean isReady() {
+            return false;
+          }
+
+          @Override
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+              @Override
+              public void onReady() {
+                // Suppress onReady matching ClientCallImpl behavior for clientSendsOneMessage()
+              }
+            }, headers);
+          }
+        };
+      }
+    };
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .intercept(unreadyUpstreamInterceptor)
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> proxyCall = interceptCall(
+        interceptor,
+        METHOD_SAY_HELLO,
+        DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+        dataPlaneChannel);
+
+    final AtomicReference<String> clientReceivedResponse = new AtomicReference<>();
+    final AtomicReference<Status> clientReceivedStatus = new AtomicReference<>();
+    final CountDownLatch clientDoneLatch = new CountDownLatch(1);
+
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onMessage(String message) {
+        clientReceivedResponse.set(message);
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        clientReceivedStatus.set(status);
+        clientDoneLatch.countDown();
+      }
+    }, new Metadata());
+
+    proxyCall.request(1);
+    proxyCall.sendMessage("ping");
+    proxyCall.halfClose();
+
+    assertThat(serverDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(clientDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    assertThat(receivedServerRequest.get()).isEqualTo("mutated-ping");
+    assertThat(serverReceivedHalfClose.get()).isTrue();
+    assertThat(clientReceivedResponse.get()).isEqualTo("Hello mutated-ping");
+    assertThat(clientReceivedStatus.get().getCode()).isEqualTo(Status.Code.OK);
+
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void unaryCall_whenExtProcSendsEndOfStreamWithoutMessage_whenUpstreamNotReady_succeeds()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                } else if (request.hasRequestBody()) {
+                  // Response 1: body message without end_of_stream
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestBody(BodyResponse.newBuilder()
+                          .setResponse(CommonResponse.newBuilder()
+                              .setBodyMutation(BodyMutation.newBuilder()
+                                  .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                      .setBody(ByteString.copyFromUtf8("chunk-ping"))
+                                      .setEndOfStream(false)
+                                      .build())
+                                  .build())
+                              .build())
+                          .build())
+                      .build());
+                  // Response 2: end_of_stream without message
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestBody(BodyResponse.newBuilder()
+                          .setResponse(CommonResponse.newBuilder()
+                              .setBodyMutation(BodyMutation.newBuilder()
+                                  .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                      .setEndOfStream(true)
+                                      .setEndOfStreamWithoutMessage(true)
+                                      .build())
+                                  .build())
+                              .build())
+                          .build())
+                      .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final List<String> receivedServerRequests = new ArrayList<>();
+    final CountDownLatch serverDoneLatch = new CountDownLatch(1);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          receivedServerRequests.add(request);
+          responseObserver.onNext("Hello " + request);
+          responseObserver.onCompleted();
+          serverDoneLatch.countDown();
+        }))
+        .build());
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .directExecutor()
+        .build().start());
+
+    ClientInterceptor unreadyUpstreamInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          @Override
+          public boolean isReady() {
+            return false;
+          }
+
+          @Override
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+              @Override
+              public void onReady() {}
+            }, headers);
+          }
+        };
+      }
+    };
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .intercept(unreadyUpstreamInterceptor)
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> proxyCall = interceptCall(
+        interceptor,
+        METHOD_SAY_HELLO,
+        DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+        dataPlaneChannel);
+
+    final CountDownLatch clientDoneLatch = new CountDownLatch(1);
+    final AtomicReference<Status> clientStatus = new AtomicReference<>();
+
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        clientStatus.set(status);
+        clientDoneLatch.countDown();
+      }
+    }, new Metadata());
+
+    proxyCall.request(1);
+    proxyCall.sendMessage("ping");
+    proxyCall.halfClose();
+
+    assertThat(serverDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(clientDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(receivedServerRequests).containsExactly("chunk-ping");
+    assertThat(clientStatus.get().getCode()).isEqualTo(Status.Code.OK);
+
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void unaryCall_whenExtProcDraining_whenUpstreamNotReady_drainingMessagesFlushed()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .setRequestDrain(true)
+                      .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final AtomicReference<String> receivedServerRequest = new AtomicReference<>();
+    final CountDownLatch serverDoneLatch = new CountDownLatch(1);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          receivedServerRequest.set(request);
+          responseObserver.onNext("Hello " + request);
+          responseObserver.onCompleted();
+          serverDoneLatch.countDown();
+        }))
+        .build());
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .directExecutor()
+        .build().start());
+
+    ClientInterceptor unreadyUpstreamInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          @Override
+          public boolean isReady() {
+            return false;
+          }
+
+          @Override
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+              @Override
+              public void onReady() {}
+            }, headers);
+          }
+        };
+      }
+    };
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .intercept(unreadyUpstreamInterceptor)
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> proxyCall = interceptCall(
+        interceptor,
+        METHOD_SAY_HELLO,
+        DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+        dataPlaneChannel);
+
+    final AtomicReference<String> clientResponse = new AtomicReference<>();
+    final AtomicReference<Status> clientStatus = new AtomicReference<>();
+    final CountDownLatch clientDoneLatch = new CountDownLatch(1);
+
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onMessage(String message) {
+        clientResponse.set(message);
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        clientStatus.set(status);
+        clientDoneLatch.countDown();
+      }
+    }, new Metadata());
+
+    proxyCall.request(1);
+    proxyCall.sendMessage("unmutated-ping");
+    proxyCall.halfClose();
+
+    assertThat(serverDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(clientDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(receivedServerRequest.get()).isEqualTo("unmutated-ping");
+    assertThat(clientResponse.get()).isEqualTo("Hello unmutated-ping");
+    assertThat(clientStatus.get().getCode()).isEqualTo(Status.Code.OK);
+
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void serverStreamingCall_whenUpstreamNotReady_messageAndHalfCloseForwarded()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                } else if (request.hasRequestBody()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestBody(BodyResponse.newBuilder()
+                          .setResponse(CommonResponse.newBuilder()
+                              .setBodyMutation(BodyMutation.newBuilder()
+                                  .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                      .setBody(ByteString.copyFromUtf8("stream-query"))
+                                      .setEndOfStream(true)
+                                      .build())
+                                  .build())
+                              .build())
+                          .build())
+                      .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final AtomicReference<String> receivedServerQuery = new AtomicReference<>();
+    final CountDownLatch serverDoneLatch = new CountDownLatch(1);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SERVER_STREAMING,
+            ServerCalls.asyncServerStreamingCall((request, responseObserver) -> {
+              receivedServerQuery.set(request);
+              responseObserver.onNext("Item 1 for " + request);
+              responseObserver.onNext("Item 2 for " + request);
+              responseObserver.onCompleted();
+              serverDoneLatch.countDown();
+            }))
+        .build());
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .directExecutor()
+        .build().start());
+
+    ClientInterceptor unreadyUpstreamInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          @Override
+          public boolean isReady() {
+            return false;
+          }
+
+          @Override
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+              @Override
+              public void onReady() {}
+            }, headers);
+          }
+        };
+      }
+    };
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .intercept(unreadyUpstreamInterceptor)
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> proxyCall = interceptCall(
+        interceptor,
+        METHOD_SERVER_STREAMING,
+        DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+        dataPlaneChannel);
+
+    final List<String> clientItems = new ArrayList<>();
+    final AtomicReference<Status> clientStatus = new AtomicReference<>();
+    final CountDownLatch clientDoneLatch = new CountDownLatch(1);
+
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onMessage(String message) {
+        clientItems.add(message);
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        clientStatus.set(status);
+        clientDoneLatch.countDown();
+      }
+    }, new Metadata());
+
+    proxyCall.request(10);
+    proxyCall.sendMessage("query");
+    proxyCall.halfClose();
+
+    assertThat(serverDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(clientDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(receivedServerQuery.get()).isEqualTo("stream-query");
+    assertThat(clientItems)
+        .containsExactly("Item 1 for stream-query", "Item 2 for stream-query");
+    assertThat(clientStatus.get().getCode()).isEqualTo(Status.Code.OK);
+
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void clientStreamingCall_whenUpstreamNotReady_messageGatedUntilOnReady()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                } else if (request.hasRequestBody()) {
+                  boolean eosWithoutMsg =
+                      request.getRequestBody().getEndOfStreamWithoutMessage();
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestBody(BodyResponse.newBuilder()
+                          .setResponse(CommonResponse.newBuilder()
+                              .setBodyMutation(BodyMutation.newBuilder()
+                                  .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                      .setBody(request.getRequestBody().getBody())
+                                      .setEndOfStream(request.getRequestBody().getEndOfStream())
+                                      .setEndOfStreamWithoutMessage(eosWithoutMsg)
+                                      .build())
+                                  .build())
+                              .build())
+                          .build())
+                      .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final List<String> receivedServerRequests = new ArrayList<>();
+    final CountDownLatch serverReceivedFirstMessageLatch = new CountDownLatch(1);
+    final CountDownLatch serverDoneLatch = new CountDownLatch(1);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_CLIENT_STREAMING,
+            ServerCalls.asyncClientStreamingCall(responseObserver -> {
+              return new StreamObserver<String>() {
+                @Override
+                public void onNext(String value) {
+                  receivedServerRequests.add(value);
+                  serverReceivedFirstMessageLatch.countDown();
+                }
+
+                @Override
+                public void onError(Throwable t) {}
+
+                @Override
+                public void onCompleted() {
+                  responseObserver.onNext("Total: " + receivedServerRequests.size());
+                  responseObserver.onCompleted();
+                  serverDoneLatch.countDown();
+                }
+              };
+            }))
+        .build());
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .directExecutor()
+        .build().start());
+
+    final AtomicBoolean upstreamIsReady = new AtomicBoolean(false);
+    final AtomicReference<ClientCall.Listener<?>> capturedListener = new AtomicReference<>();
+
+    ClientInterceptor controllableInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          @Override
+          public boolean isReady() {
+            return upstreamIsReady.get();
+          }
+
+          @Override
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            capturedListener.set(responseListener);
+            super.start(responseListener, headers);
+          }
+        };
+      }
+    };
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .intercept(controllableInterceptor)
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> proxyCall = interceptCall(
+        interceptor,
+        METHOD_CLIENT_STREAMING,
+        DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+        dataPlaneChannel);
+
+    final AtomicReference<String> clientResponse = new AtomicReference<>();
+    final AtomicReference<Status> clientStatus = new AtomicReference<>();
+    final CountDownLatch clientDoneLatch = new CountDownLatch(1);
+
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onMessage(String message) {
+        clientResponse.set(message);
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        clientStatus.set(status);
+        clientDoneLatch.countDown();
+      }
+    }, new Metadata());
+
+    proxyCall.request(1);
+    // Send message while upstream is NOT ready
+    proxyCall.sendMessage("msg1");
+
+    // Give ext-proc time to process and return BodyResponse
+    // Upstream should NOT have received it yet because isReady is false for client streaming
+    assertThat(serverReceivedFirstMessageLatch.await(200, TimeUnit.MILLISECONDS)).isFalse();
+    assertThat(receivedServerRequests).isEmpty();
+
+    // Now make upstream ready and trigger onReady()
+    upstreamIsReady.set(true);
+    capturedListener.get().onReady();
+
+    // Now msg1 should be flushed to server
+    assertThat(serverReceivedFirstMessageLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(receivedServerRequests).containsExactly("msg1");
+
+    proxyCall.halfClose();
+    assertThat(serverDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(clientDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(clientResponse.get()).isEqualTo("Total: 1");
+    assertThat(clientStatus.get().getCode()).isEqualTo(Status.Code.OK);
+
+    channelManager.close();
   }
 
   private static List<ProcessingRequest> filterClientRequests(List<ProcessingRequest> requests) {
