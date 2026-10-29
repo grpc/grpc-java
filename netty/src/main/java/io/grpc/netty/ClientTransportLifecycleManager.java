@@ -21,6 +21,9 @@ import io.grpc.Attributes;
 import io.grpc.Status;
 import io.grpc.internal.DisconnectError;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.SimpleDisconnectError;
+import io.netty.handler.codec.http2.StreamBufferingEncoder;
+
 
 /** Maintainer of transport lifecycle status. */
 final class ClientTransportLifecycleManager {
@@ -30,6 +33,8 @@ final class ClientTransportLifecycleManager {
   private boolean transportInUse;
   /** null iff !transportShutdown. */
   private Status shutdownStatus;
+  /** The DisconnectError that produced shutdownStatus. Valid iff shutdownStatus != null. */
+  private DisconnectError shutdownDisconnectError;
   /** null iff !transportShutdown. */
   private boolean transportTerminated;
 
@@ -69,9 +74,32 @@ final class ClientTransportLifecycleManager {
   public boolean notifyShutdown(Status s, DisconnectError disconnectError) {
     notifyGracefulShutdown(s, disconnectError);
     if (shutdownStatus != null) {
+      // The original shutdown was self-initiated (a graceful subchannel/channel shutdown) iff
+      // it was reported with SUBCHANNEL_SHUTDOWN. This is a reliable signal, unlike checking
+      // for a Throwable cause: the genuine network-death path (NettyClientHandler
+      // #channelInactive's default "Network closed for unknown reason") has no cause either.
+      boolean wasSelfInitiated =
+          shutdownDisconnectError == SimpleDisconnectError.SUBCHANNEL_SHUTDOWN;
+
+      // Some exceptions are just artifacts of the channel closing and carry no real
+      // diagnostic value; don't let them count as "a real error" for the purposes of the
+      // upgrade below.
+      boolean isRoutineClosureArtifact =
+          s.getCause() instanceof java.nio.channels.ClosedChannelException
+          || s.getCause() instanceof StreamBufferingEncoder.Http2ChannelClosedException;
+      
+      // Status Upgrade: an external event should replace a self-initiated shutdown status,
+      // unless the external event is itself just a routine closure artifact.
+      if (wasSelfInitiated
+          && disconnectError != SimpleDisconnectError.SUBCHANNEL_SHUTDOWN
+          && !isRoutineClosureArtifact) {
+        shutdownStatus = s;
+        shutdownDisconnectError = disconnectError;
+      }
       return false;
     }
     shutdownStatus = s;
+    shutdownDisconnectError = disconnectError;
     return true;
   }
 
