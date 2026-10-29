@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.StatusOr;
@@ -140,6 +141,39 @@ public class XdsClientFederationTest {
     }));
     verify(mockDirectPathWatcher, times(1)).onResourceChanged(any());
     verify(mockDirectPathWatcher, never()).onAmbientError(any());
+  }
+
+  /**
+   * Assures that resource updates happening in one control plane do not trigger update events
+   * in watchers of resources owned by other control planes.
+   */
+  @Test
+  public void isolatedResourceUpdates() {
+    Listener serverListener = ControlPlaneRule.buildServerListener();
+    Listener clientListener1 = ControlPlaneRule.buildClientListener("test-server");
+    Listener clientListener2 = ControlPlaneRule.buildClientListener(
+        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
+    // trafficdirector (top-level server) erroneously sends a listener owned by server-one.
+    trafficdirector.getService().setXdsConfig(XdsTestControlPlaneService.ADS_TYPE_URL_LDS,
+        ImmutableMap.of(
+            serverListener.getName(), serverListener,
+            clientListener1.getName(), clientListener1,
+            clientListener2.getName(), clientListener2));
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "test-server", mockWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
+        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server", mockDirectPathWatcher);
+
+    verify(mockWatcher, timeout(10000)).onResourceChanged(any());
+    // mockDirectPathWatcher should not receive the update sent by trafficdirector.
+    verify(mockDirectPathWatcher, never()).onResourceChanged(any());
+
+    // When server-one sends its LDS config, mockDirectPathWatcher should then receive the update.
+    directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
+        ControlPlaneRule.buildClientListener(
+            "xdstp://server-one/envoy.config.listener.v3.Listener/test-server"));
+
+    verify(mockDirectPathWatcher, timeout(10000)).onResourceChanged(any());
   }
 
   /**
