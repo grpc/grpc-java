@@ -16,6 +16,8 @@
 
 package io.grpc.android;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
@@ -39,10 +41,58 @@ import java.nio.channels.SocketChannel;
  * unnecessary delays.
  */
 @SuppressWarnings("UnsynchronizedOverridesSynchronized") // Rely on LocalSocket's synchronization
-class UdsSocket extends Socket {
+abstract class UdsSocket extends Socket {
 
-  private final LocalSocket localSocket;
-  private final LocalSocketAddress localSocketAddress;
+  /** Client-side {@link UdsSocket} that connects to a preconfigured {@link LocalSocketAddress}. */
+  static final class Client extends UdsSocket {
+    private final LocalSocketAddress connectAddress;
+
+    Client(LocalSocketAddress connectAddress) {
+      super(new LocalSocket());
+      this.connectAddress = checkNotNull(connectAddress, "connectAddress");
+    }
+
+    @Override
+    public void connect(SocketAddress endpoint) throws IOException {
+      localSocket.connect(connectAddress);
+    }
+
+    @Override
+    public void connect(SocketAddress endpoint, int timeout) throws IOException {
+      localSocket.connect(connectAddress, timeout);
+    }
+  }
+
+  /**
+   * Already-connected server-side {@link UdsSocket} returned by {@link
+   * UdsListeningSocket#accept()}. Cannot be {@link #connect connected} again.
+   */
+  static final class Accepted extends UdsSocket {
+    private final UdsSocketAddress localAddress;
+
+    Accepted(LocalSocket connectedLocalSocket, UdsSocketAddress localAddress) {
+      super(connectedLocalSocket);
+      this.localAddress = checkNotNull(localAddress, "localAddress");
+    }
+
+    @Override
+    public void connect(SocketAddress endpoint) throws IOException {
+      // Same exception and message as java.net.Socket.connect() on a connected socket.
+      throw new SocketException("already connected");
+    }
+
+    @Override
+    public void connect(SocketAddress endpoint, int timeout) throws IOException {
+      throw new SocketException("already connected");
+    }
+
+    @Override
+    public SocketAddress getLocalSocketAddress() {
+      return localAddress;
+    }
+  }
+
+  final LocalSocket localSocket;
 
   @GuardedBy("this")
   private boolean closed = false;
@@ -53,9 +103,8 @@ class UdsSocket extends Socket {
   @GuardedBy("this")
   private boolean outputShutdown = false;
 
-  public UdsSocket(LocalSocketAddress localSocketAddress) {
-    this.localSocketAddress = localSocketAddress;
-    localSocket = new LocalSocket();
+  private UdsSocket(LocalSocket localSocket) {
+    this.localSocket = checkNotNull(localSocket, "localSocket");
   }
 
   @Override
@@ -79,14 +128,10 @@ class UdsSocket extends Socket {
   }
 
   @Override
-  public void connect(SocketAddress endpoint) throws IOException {
-    localSocket.connect(localSocketAddress);
-  }
+  public abstract void connect(SocketAddress endpoint) throws IOException;
 
   @Override
-  public void connect(SocketAddress endpoint, int timeout) throws IOException {
-    localSocket.connect(localSocketAddress, timeout);
-  }
+  public abstract void connect(SocketAddress endpoint, int timeout) throws IOException;
 
   @Override
   public SocketChannel getChannel() {
