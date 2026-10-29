@@ -119,6 +119,21 @@ final class XdsTestControlPlaneService extends
     });
   }
 
+  /**
+   * Directly sends the given DiscoveryResponse to all active subscribers of the response's type.
+   */
+  public void sendDiscoveryResponse(DiscoveryResponse response) {
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        for (StreamObserver<DiscoveryResponse> observer :
+            subscribers.get(response.getTypeUrl()).keySet()) {
+          observer.onNext(response);
+        }
+      }
+    });
+  }
+
   ImmutableMap<String, Message> getCurrentConfig(String type) {
     HashMap<String, Message> hashMap = xdsResources.get(type);
     return (hashMap != null) ? ImmutableMap.copyOf(hashMap) : ImmutableMap.of();
