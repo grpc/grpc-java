@@ -38,6 +38,9 @@ public final class CelMatcherTestHelper {
           })
           .build();
 
+  // setStandardEnvironmentEnabled is deprecated in CEL 0.15.0 in favor of modular environment
+  // configuration.
+  @SuppressWarnings("deprecation")
   private static final CelCompiler COMPILER = CelCompilerFactory.standardCelCompilerBuilder()
       .setStandardEnvironmentEnabled(false)
       .setStandardDeclarations(DECLARATIONS)

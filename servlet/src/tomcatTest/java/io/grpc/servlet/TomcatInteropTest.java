@@ -73,7 +73,7 @@ public class TomcatInteropTest extends AbstractInteropTest {
             ctx, "io.grpc.servlet.TomcatInteropTest",
             new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter()))
         .setAsyncSupported(true);
-    ctx.addServletMappingDecoded("/*", "io.grpc.servlet.TomcatInteropTest");
+    ctx.addServletMapping("/*", "io.grpc.servlet.TomcatInteropTest");
 
     // Explicitly disable safeguards against malicious clients, as some unit tests trigger these
     Http2Protocol http2Protocol = new Http2Protocol();

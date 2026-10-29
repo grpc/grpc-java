@@ -18,16 +18,16 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auto.value:auto-value-annotations:1.11.0",
     "com.google.auto.value:auto-value:1.11.0",
     "com.google.code.findbugs:jsr305:3.0.2",
-    "com.google.code.gson:gson:2.14.0",
-    "com.google.errorprone:error_prone_annotations:2.50.0",
+    "com.google.code.gson:gson:2.15.0",
+    "com.google.errorprone:error_prone_annotations:2.51.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:33.6.0-android",
+    "com.google.guava:guava:33.7.2-android",
     "com.google.re2j:re2j:1.8",
     "com.google.s2a.proto.v2:s2a-proto:0.1.3",
     "com.google.truth:truth:1.4.5",
-    "dev.cel:runtime:0.13.1",
-    "dev.cel:protobuf:0.13.1",
-    "dev.cel:common:0.13.1",
+    "dev.cel:runtime:0.15.0",
+    "dev.cel:protobuf:0.15.0",
+    "dev.cel:common:0.15.0",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
     "io.netty:netty-buffer:4.2.17.Final",
@@ -50,7 +50,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "junit:junit:4.13.2",
     "org.mockito:mockito-core:4.4.0",
     "org.checkerframework:checker-qual:3.49.5",
-    "org.codehaus.mojo:animal-sniffer-annotations:1.27",
+    "org.codehaus.mojo:animal-sniffer-annotations:1.28",
 ]
 # GRPC_DEPS_END
 
