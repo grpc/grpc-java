@@ -75,6 +75,9 @@ final class CelCommon {
           + "add|subtract|multiply|divide|modulo|negate)"
           + "[0-9]*(_.*)?$");
 
+  // standardCelRuntimeBuilder and setStandardEnvironmentEnabled are deprecated in CEL 0.15.0
+  // in favor of modular environment configuration.
+  @SuppressWarnings("deprecation")
   static final CelRuntime RUNTIME = CelRuntimeFactory.standardCelRuntimeBuilder()
       .setStandardEnvironmentEnabled(false)
       .setStandardFunctions(FUNCTIONS)
