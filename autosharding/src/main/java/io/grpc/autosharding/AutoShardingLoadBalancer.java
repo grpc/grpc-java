@@ -151,7 +151,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    */
   @Nullable private Status clientError;
 
-  /** Join of {@link #assignment} and {@link #endpointMap}; null only before the first update. */
+  /**
+   * Join of {@link #assignment} and {@link #endpointMap}, rebuilt whenever either changes; null
+   * only before the first update.
+   */
   @Nullable private SliceMap sliceMap;
 
   private boolean shutdown;
@@ -200,9 +203,11 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
                 resolvedAddresses.getLoadBalancingPolicyConfig(), "missing autosharding config");
 
     // The endpoints are always applied. When the set is empty this tears the children down, so
-    // that in-flight picks stop resolving to endpoints the resolver has retracted.
+    // that in-flight picks stop resolving to endpoints the resolver has retracted. The slice map
+    // indexes into the endpoints, so it is rebuilt with them, before anything below can fail.
     List<EquivalentAddressGroup> endpoints = resolvedAddresses.getAddresses();
     endpointMap.updateEndpoints(endpoints, resolvedAddresses.getAttributes());
+    sliceMap = buildSliceMap();
 
     // Each failure below rejects the rest of the update: the next update is compared against the
     // configuration still in use, so a changed key or target is still acted on then.
@@ -239,7 +244,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       releaseChannel(previousChannel, previousFactory);
     }
 
-    rebuildSliceMapAndPublish();
+    publishPicker();
     return Status.OK;
   }
 

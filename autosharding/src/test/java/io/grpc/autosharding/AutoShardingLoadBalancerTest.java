@@ -393,6 +393,22 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
+  public void missingChannelFactory_laterChildUpdate_usesTheNewEndpointIndices()
+      throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a", "b", "c");
+    deliverAssignment(1, slice("", "a"), slice("h", "b"), slice("p", "c"));
+
+    // The endpoints are applied even though the update then fails, so "c" moves to index 0.
+    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "c");
+    reportReady("c");
+
+    // The picker published by the child update must not use indices from the old endpoints.
+    assertThat(pickedHost(pick("zulu"))).isEqualTo("c");
+    assertThat(pick("alpha").getStatus().getDescription())
+        .contains("No valid endpoints in slice and fallback disabled");
+  }
+
+  @Test
   public void channelFactoryKeyChangedWhileEndpointsEmpty_appliesOnceEndpointsReturn() {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
     assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
