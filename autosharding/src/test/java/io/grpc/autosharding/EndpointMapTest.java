@@ -37,6 +37,8 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
@@ -127,12 +129,50 @@ public class EndpointMapTest {
   }
 
   @Test
-  public void hostnameAttributeAbsent_fallsBackToFirstAddress() {
+  public void hostnameAttributeAbsent_otherAddressType_usesToString() {
     EquivalentAddressGroup eag = new EquivalentAddressGroup(new NamedAddress("1.2.3.4:80"));
 
     endpointMap.updateEndpoints(ImmutableList.of(eag), Attributes.EMPTY);
 
     assertThat(endpointMap.indexOf("1.2.3.4:80")).isEqualTo(0);
+  }
+
+  @Test
+  public void hostnameAttributeAbsent_inetAddress_isNamedByIpAndPort() throws Exception {
+    // InetSocketAddress.toString() would give "/10.0.0.1:443" and
+    // "my-svc.example.com/10.0.0.2:443", neither of which an assignment would use.
+    InetAddress resolved =
+        InetAddress.getByAddress("my-svc.example.com", new byte[] {10, 0, 0, 2});
+    endpointMap.updateEndpoints(
+        ImmutableList.of(
+            new EquivalentAddressGroup(
+                new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 443)),
+            new EquivalentAddressGroup(new InetSocketAddress(resolved, 443))),
+        Attributes.EMPTY);
+
+    assertThat(endpointMap.indexOf("10.0.0.1:443")).isEqualTo(0);
+    assertThat(endpointMap.indexOf("10.0.0.2:443")).isEqualTo(1);
+  }
+
+  @Test
+  public void hostnameAttributeAbsent_ipv6Address_isCompressedAndBracketed() throws Exception {
+    EquivalentAddressGroup eag =
+        new EquivalentAddressGroup(
+            new InetSocketAddress(InetAddress.getByName("2001:db8:0:0:0:0:0:1"), 443));
+
+    endpointMap.updateEndpoints(ImmutableList.of(eag), Attributes.EMPTY);
+
+    assertThat(endpointMap.indexOf("[2001:db8::1]:443")).isEqualTo(0);
+  }
+
+  @Test
+  public void hostnameAttributeAbsent_unresolvedAddress_isNamedByHostAndPort() {
+    EquivalentAddressGroup eag =
+        new EquivalentAddressGroup(InetSocketAddress.createUnresolved("my-svc.example.com", 443));
+
+    endpointMap.updateEndpoints(ImmutableList.of(eag), Attributes.EMPTY);
+
+    assertThat(endpointMap.indexOf("my-svc.example.com:443")).isEqualTo(0);
   }
 
   // ---------------------------------------------------------------------------------------------

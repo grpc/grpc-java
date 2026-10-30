@@ -24,6 +24,8 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
+import com.google.common.net.HostAndPort;
+import com.google.common.net.InetAddresses;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -38,6 +40,8 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.LazyLoadBalancer;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -307,7 +311,24 @@ final class EndpointMap {
   private static String hostnameOf(EquivalentAddressGroup endpoint) {
     String hostname =
         endpoint.getAttributes().get(InternalEquivalentAddressGroup.ATTR_ADDRESS_NAME);
-    return hostname != null ? hostname : endpoint.getAddresses().get(0).toString();
+    return hostname != null ? hostname : addressName(endpoint.getAddresses().get(0));
+  }
+
+  /**
+   * Formats an address as {@code ip:port}, with IPv6 compressed and in brackets, to match how an
+   * assignment names endpoints. {@link InetSocketAddress#toString()} would add a {@code /} and
+   * any hostname.
+   */
+  private static String addressName(SocketAddress address) {
+    if (!(address instanceof InetSocketAddress)) {
+      return address.toString();
+    }
+    InetSocketAddress inetAddress = (InetSocketAddress) address;
+    String host =
+        inetAddress.isUnresolved()
+            ? inetAddress.getHostString()
+            : InetAddresses.toAddrString(inetAddress.getAddress());
+    return HostAndPort.fromParts(host, inetAddress.getPort()).toString();
   }
 
   @Override
