@@ -41,6 +41,9 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
 
   private static final Metadata.Key<String> X_ENVOY_AUTH_FAILURE_MODE_ALLOWED =
       Metadata.Key.of("x-envoy-auth-failure-mode-allowed", Metadata.ASCII_STRING_MARSHALLER);
+  private static final HeaderMutator HEADER_MUTATOR = HeaderMutator.create();
+  private static final HeaderMutations EMPTY_MUTATIONS =
+      HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
 
   private final DelayedClientCall<ReqT, RespT> delayedCall;
   private final Channel next;
@@ -48,8 +51,6 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
   private final CallOptions callOptions;
   private final Executor callExecutor;
   private final CheckResponseHandler responseHandler;
-  // TODO(sauravzg): Make this static seeing that it holds no state.
-  private final HeaderMutator headerMutator = HeaderMutator.create();
   private final ExtAuthzConfig config;
   private final Context.CancellableContext authzContext;
 
@@ -97,7 +98,7 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
             delegate,
             authzResponse.requestHeaderMutations(),
             authzResponse.responseHeaderMutations(),
-            headerMutator);
+            HEADER_MUTATOR);
       }
       setCallAndDrain(finalCall);
     } else {
@@ -113,7 +114,7 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
         failingCall = new FailingCallWithTrailerMutations<>(
             status,
             authzResponse.responseHeaderMutations(),
-            headerMutator);
+            HEADER_MUTATOR);
       }
       setCallAndDrain(failingCall);
     }
@@ -130,12 +131,8 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
                 HeaderValue.create(X_ENVOY_AUTH_FAILURE_MODE_ALLOWED.name(), "true"),
                 HeaderValueOption.HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD)),
             ImmutableList.of());
-        // TODO(sauravz): Consider using a static EMPTY_MUTATIONS constant
-        // to avoid repeated allocation of empty HeaderMutations.
-        HeaderMutations responseMutations =
-            HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
         finalCall = new MutatingClientCall<>(
-            delegate, requestMutations, responseMutations, headerMutator);
+            delegate, requestMutations, EMPTY_MUTATIONS, HEADER_MUTATOR);
       } else {
         finalCall = delegate;
       }
