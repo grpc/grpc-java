@@ -499,6 +499,24 @@ public class AssignmentParserTest {
   }
 
   @Test
+  public void parse_sliceExtendingToInfinityFollowedByAFiniteOne_bothAreDropped() {
+    AssignmentChunk chunk =
+        AssignmentChunk.newBuilder()
+            .addEndpoints(endpoint("host-a"))
+            .addSliceAssignments(sliceAssignment("", "a", 0))
+            .addSliceAssignments(sliceAssignment("a", null, 0))
+            .addSliceAssignments(sliceAssignment("m", "p", 0))
+            .build();
+
+    AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
+
+    // ["a", inf) overlaps ["m", "p"), so both go; only the slice clear of them survives.
+    assertThat(result.errorMessage).contains("overlaps");
+    assertSlice(result.assignment.getSlices().get(0), "", "a", 0);
+    assertSlice(result.assignment.getSlices().get(1), "a", null);
+  }
+
+  @Test
   public void parse_everySliceInvalid_yieldsNoAssignment() {
     AssignmentChunk chunk =
         AssignmentChunk.newBuilder()

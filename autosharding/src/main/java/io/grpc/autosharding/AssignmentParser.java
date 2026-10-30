@@ -253,7 +253,9 @@ final class AssignmentParser {
       int end = index + 1;
       while (end < sorted.size() && reaches(runEndKey, sorted.get(end).getStartKey())) {
         byte[] endKey = sorted.get(end).getEndKey();
-        if (endKey == null || UNSIGNED_BYTES_COMPARATOR.compare(endKey, runEndKey) > 0) {
+        // A run that already reaches infinity cannot be extended any further.
+        if (runEndKey != null
+            && (endKey == null || UNSIGNED_BYTES_COMPARATOR.compare(endKey, runEndKey) > 0)) {
           runEndKey = endKey;
         }
         end++;
