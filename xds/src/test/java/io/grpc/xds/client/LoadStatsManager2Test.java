@@ -259,9 +259,7 @@ public class LoadStatsManager2Test {
   }
 
   @Test
-  public void recordMetrics_orcaLrsPropagationEnabled_specificMetrics() {
-    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
+  public void recordMetrics_specificMetrics() {
     BackendMetricPropagation backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
         Arrays.asList("cpu_utilization", "named_metrics.named1"));
     ClusterLocalityStats stats = loadStatsManager.getClusterLocalityStats(
@@ -283,13 +281,10 @@ public class LoadStatsManager2Test {
     assertThat(localityStats.loadMetricStatsMap().get("named_metrics.named1").totalMetricValue())
         .isWithin(TOLERANCE).of(123.4);
     assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("named_metrics.named2");
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
   }
 
   @Test
-  public void recordMetrics_orcaLrsPropagationEnabled_wildcardNamedMetrics() {
-    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
+  public void recordMetrics_wildcardNamedMetrics() {
     BackendMetricPropagation backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
         Arrays.asList("named_metrics.*"));
     ClusterLocalityStats stats = loadStatsManager.getClusterLocalityStats(
@@ -308,7 +303,6 @@ public class LoadStatsManager2Test {
     assertThat(localityStats.loadMetricStatsMap()).containsKey("named_metrics.named2");
     assertThat(localityStats.loadMetricStatsMap().get("named_metrics.named2").totalMetricValue())
         .isWithin(TOLERANCE).of(567.8);
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
   }
 
   @Test
