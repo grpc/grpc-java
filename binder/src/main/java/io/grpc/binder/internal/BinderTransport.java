@@ -251,10 +251,19 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   @GuardedBy("this")
   abstract void notifyTerminated();
 
-  void notifyTerminatedUnlocked() {}
+  ListenableFuture<?> notifyTerminatedUnlocked() {
+    return immediateFuture(null);
+  }
 
   void releaseExecutors() {
     executorServicePool.returnObject(scheduledExecutorService);
+  }
+
+  private void finishTermination() {
+    synchronized (this) {
+      notifyTerminated();
+    }
+    releaseExecutors();
   }
 
   // Registers the specified future for eventual safe cancellation upon shutdown/terminate.
@@ -337,12 +346,12 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
               future.cancel(false); // No effect if already isDone().
             }
 
-            notifyTerminatedUnlocked();
-
-            synchronized (this) {
-              notifyTerminated();
+            ListenableFuture<?> termination = notifyTerminatedUnlocked();
+            if (termination.isDone()) {
+              finishTermination();
+            } else {
+              termination.addListener(this::finishTermination, scheduledExecutorService);
             }
-            releaseExecutors();
           });
     }
   }
