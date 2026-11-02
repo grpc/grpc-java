@@ -586,11 +586,12 @@ final class OkHttpServerTransport implements ServerTransport,
       try {
         try {
           frameReader.readConnectionPreface();
-        } catch (EOFException e) {
-          // The client closed the connection before sending the preface, e.g. a TCP health check
-          // from a load balancer. This is expected, so don't log it as a warning.
+        } catch (EOFException | SocketException e) {
+          // The client went away before sending the preface, e.g. a TCP health check from a load
+          // balancer. Closing without reading the server's SETTINGS resets the connection, so this
+          // can be a SocketException as well as an EOF. This is expected, so don't log a warning.
           log.log(Level.FINE, "Connection closed before receiving the connection preface", e);
-          abruptShutdown(ErrorCode.INTERNAL_ERROR, "EOF while reading connection preface",
+          abruptShutdown(ErrorCode.INTERNAL_ERROR, "Connection closed reading connection preface",
               Status.UNAVAILABLE.withDescription("Connection closed before connection preface"),
               false);
           return;

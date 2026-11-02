@@ -320,6 +320,20 @@ public class OkHttpServerTransportTest {
 
   @Test
   public void closeDuringHttp2Preface_doesNotLogWarning() throws Exception {
+    assertNoWarningLoggedAfter(() -> socketPair.client.shutdownOutput());
+  }
+
+  @Test
+  public void resetDuringHttp2Preface_doesNotLogWarning() throws Exception {
+    // A client that closes without reading the server's SETTINGS resets the connection instead of
+    // closing it cleanly. A linger of 0 makes the reset deterministic.
+    assertNoWarningLoggedAfter(() -> {
+      socketPair.client.setSoLinger(true, 0);
+      socketPair.client.close();
+    });
+  }
+
+  private void assertNoWarningLoggedAfter(ClientDisconnect disconnect) throws Exception {
     Logger logger = Logger.getLogger(OkHttpServerTransport.class.getName());
     List<String> warnings = Collections.synchronizedList(new ArrayList<>());
     Handler handler = new Handler() {
@@ -339,7 +353,7 @@ public class OkHttpServerTransportTest {
     logger.addHandler(handler);
     try {
       initTransport();
-      socketPair.client.close();
+      disconnect.run();
 
       verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
       assertThat(warnings).isEmpty();
@@ -1607,6 +1621,10 @@ public class OkHttpServerTransportTest {
         throw new RuntimeException(ex);
       }
     }
+  }
+
+  private interface ClientDisconnect {
+    void run() throws IOException;
   }
 
   private interface DataFrameHandler {
