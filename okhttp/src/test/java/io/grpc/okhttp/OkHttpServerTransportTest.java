@@ -72,6 +72,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -312,6 +316,36 @@ public class OkHttpServerTransportTest {
 
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     verify(transportListener, never()).transportReady(any(Attributes.class));
+  }
+
+  @Test
+  public void closeDuringHttp2Preface_doesNotLogWarning() throws Exception {
+    Logger logger = Logger.getLogger(OkHttpServerTransport.class.getName());
+    List<String> warnings = Collections.synchronizedList(new ArrayList<>());
+    Handler handler = new Handler() {
+      @Override
+      public void publish(LogRecord record) {
+        if (record.getLevel().intValue() >= Level.WARNING.intValue()) {
+          warnings.add(record.getMessage() + ": " + record.getThrown());
+        }
+      }
+
+      @Override
+      public void flush() {}
+
+      @Override
+      public void close() {}
+    };
+    logger.addHandler(handler);
+    try {
+      initTransport();
+      socketPair.client.close();
+
+      verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+      assertThat(warnings).isEmpty();
+    } finally {
+      logger.removeHandler(handler);
+    }
   }
 
   @Test
