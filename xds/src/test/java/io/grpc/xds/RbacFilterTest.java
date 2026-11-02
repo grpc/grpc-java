@@ -195,6 +195,32 @@ public class RbacFilterTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  public void authenticatedParser_noPrincipalName_matchesAnyTlsConnection() {
+    List<Permission> permissionList = Arrays.asList(
+        Permission.newBuilder().setAny(true).build());
+    List<Principal> principalList = Arrays.asList(
+        Principal.newBuilder().setAuthenticated(Authenticated.getDefaultInstance()).build());
+    ConfigOrError<RbacConfig> result = parse(permissionList, principalList);
+    assertThat(result.errorDetail).isNull();
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(result.config.authConfig());
+
+    // TLS connection without a client certificate.
+    Attributes tlsAttributes = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, mock(SSLSession.class))
+        .build();
+    ServerCall<Void,Void> tlsCall = mock(ServerCall.class);
+    when(tlsCall.getAttributes()).thenReturn(tlsAttributes);
+    assertThat(engine.evaluate(new Metadata(), tlsCall).decision())
+        .isEqualTo(GrpcAuthorizationEngine.Action.DENY);
+
+    ServerCall<Void,Void> plaintextCall = mock(ServerCall.class);
+    when(plaintextCall.getAttributes()).thenReturn(Attributes.EMPTY);
+    assertThat(engine.evaluate(new Metadata(), plaintextCall).decision())
+        .isEqualTo(GrpcAuthorizationEngine.Action.ALLOW);
+  }
+
+  @Test
   @SuppressWarnings({"unchecked", "deprecation"})
   public void headerParser() {
     HeaderMatcher headerMatcher = HeaderMatcher.newBuilder()
