@@ -1283,35 +1283,46 @@ final class XdsNameResolver extends NameResolver {
       };
     }
 
-    private static <ReqT> void sendSerializedMessage(
-        ClientCall<InputStream, ?> rawCall,
-        MethodDescriptor<ReqT, ?> method,
-        ReqT message) {
-      ByteString byteString;
-      try {
-        InputStream stream = method.getRequestMarshaller().stream(message);
-        try {
-          byteString = ExternalProcessorUtil.outboundStreamToByteString(stream);
-        } finally {
-          try {
-            stream.close();
-          } catch (IOException ignored) {
-            // ignore
-          }
-        }
-      } catch (IOException | RuntimeException e) {
-        rawCall.cancel("Failed to read message for raw message interceptor", e);
-        return;
-      } catch (Error e) {
-        rawCall.cancel("Client sendMessage() failed with Error", e);
-        throw e;
-      }
-      rawCall.sendMessage(new KnownLengthInputStream(byteString));
-    }
-
     private abstract static class PartialForwardingClientCall<ReqT, RespT>
         extends ClientCall<ReqT, RespT> {
+      private boolean aborted;
+      private boolean cancelCalled;
+
       protected abstract ClientCall<?, ?> delegate();
+
+      protected void sendSerializedMessage(
+          ClientCall<InputStream, ?> rawCall,
+          MethodDescriptor<ReqT, ?> method,
+          ReqT message) {
+        if (aborted) {
+          return;
+        }
+        if (cancelCalled) {
+          rawCall.sendMessage(null);
+          return;
+        }
+        ByteString byteString;
+        try {
+          InputStream stream = method.getRequestMarshaller().stream(message);
+          try {
+            byteString = ExternalProcessorUtil.outboundStreamToByteString(stream);
+          } finally {
+            try {
+              stream.close();
+            } catch (IOException ignored) {
+              // ignore
+            }
+          }
+        } catch (IOException | RuntimeException e) {
+          aborted = true;
+          rawCall.cancel("Failed to read message for raw message interceptor", e);
+          return;
+        } catch (Error e) {
+          rawCall.cancel("Client sendMessage() failed with Error", e);
+          throw e;
+        }
+        rawCall.sendMessage(new KnownLengthInputStream(byteString));
+      }
 
       @Override
       public void request(int numMessages) {
@@ -1320,11 +1331,16 @@ final class XdsNameResolver extends NameResolver {
 
       @Override
       public void cancel(@Nullable String message, @Nullable Throwable cause) {
+        aborted = false;
+        cancelCalled = true;
         delegate().cancel(message, cause);
       }
 
       @Override
       public void halfClose() {
+        if (aborted) {
+          return;
+        }
         delegate().halfClose();
       }
 

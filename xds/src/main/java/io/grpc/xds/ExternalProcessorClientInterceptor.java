@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.applyHeaderMutations;
 import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.collectAttributes;
 import static io.grpc.xds.internal.extproc.ExternalProcessorUtil.markDataPlaneCallClosed;
@@ -366,6 +367,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
     final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
     final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
+    final AtomicBoolean aborted = new AtomicBoolean(false);
+    final AtomicBoolean cancelCalled = new AtomicBoolean(false);
 
     protected DataPlaneClientCall(
         DataPlaneDelayedCall<ReqT, RespT> delayedCall,
@@ -994,6 +997,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @SuppressWarnings("unchecked")
     @Override
     public void sendMessage(ReqT message) {
+      if (aborted.get()) {
+        return;
+      }
+      checkState(!cancelCalled.get(), "call was cancelled");
       if (requestSideClosed.get()) {
         // External processor already closed the request stream. Discard further messages.
         return;
@@ -1080,6 +1087,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void proceedWithHalfClose() {
+      if (aborted.get()) {
+        return;
+      }
       if (clientHalfCloseStartNanos > 0) {
         long durationNanos = System.nanoTime() - clientHalfCloseStartNanos;
         recordDuration(clientHalfCloseDuration, durationNanos);
@@ -1090,6 +1100,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void halfClose() {
+      if (aborted.get()) {
+        return;
+      }
+      checkState(!cancelCalled.get(), "call was cancelled");
       if (appHalfClosed.compareAndSet(false, true)) {
         clientHalfCloseStartNanos = System.nanoTime();
       }
@@ -1159,11 +1173,16 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     void cancelDownstream(@Nullable String message, @Nullable Throwable cause) {
+      if (!cancelCalled.get()) {
+        aborted.set(true);
+      }
       delayedCall.cancel(message, cause);
     }
 
     @Override
     public void cancel(@Nullable String message, @Nullable Throwable cause) {
+      cancelCalled.set(true);
+      aborted.set(false);
       synchronized (streamLock) {
         if (markExtProcStreamFailed(extProcStreamState)) {
           if (extProcClientCallRequestObserver != null) {

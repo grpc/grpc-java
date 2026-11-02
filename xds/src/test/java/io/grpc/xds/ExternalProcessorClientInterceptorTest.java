@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 
 import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -11423,6 +11424,114 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
+  @Test
+  @SuppressWarnings("unchecked")
+  public void
+      givenSendMessageIoException_whenSubsequentSendMessageOrHalfClose_thenNoOp()
+      throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config ->
+        grpcCleanup.register(
+            InProcessChannelBuilder.forName(extProcServerName).directExecutor().build()));
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              // No-op
+            }))
+        .build());
+
+    ManagedChannel dataPlaneChannel =
+        grpcCleanup.register(
+            InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    CallOptions callOptions = DEFAULT_CALL_OPTIONS
+        .withExecutor(MoreExecutors.directExecutor())
+        .withOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY, false);
+    ClientCall<InputStream, InputStream> rawProxyCall =
+        (ClientCall<InputStream, InputStream>) (ClientCall<?, ?>)
+            interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+
+    final CountDownLatch closeLatch = new CountDownLatch(1);
+    final AtomicReference<Status> closeStatus = new AtomicReference<>();
+    rawProxyCall.start(new ClientCall.Listener<InputStream>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        closeStatus.set(status);
+        closeLatch.countDown();
+      }
+    }, new Metadata());
+
+    IOException ioException = new IOException("Simulated stream read error");
+    InputStream failingStream = new InputStream() {
+      @Override
+      public int read() throws IOException {
+        throw ioException;
+      }
+    };
+
+    // Internal cancellation during sendMessage when reading InputStream fails
+    rawProxyCall.sendMessage(failingStream);
+
+    assertThat(closeLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(closeStatus.get().getCode()).isEqualTo(Status.Code.CANCELLED);
+    assertThat(closeStatus.get().getDescription())
+        .isEqualTo("Failed to serialize message for External Processor");
+    assertThat(closeStatus.get().getCause()).isSameInstanceAs(ioException);
+
+    // Subsequent sendMessage and halfClose after internal cancellation must be no-ops
+    // and not throw IllegalStateException.
+    rawProxyCall.sendMessage(new ByteArrayInputStream("ignored".getBytes(StandardCharsets.UTF_8)));
+    rawProxyCall.halfClose();
+
+    channelManager.close();
+  }
+
   // --- Category 18: Immediate Response Handling ---
 
   @Test
@@ -12135,6 +12244,11 @@ public class ExternalProcessorClientInterceptorTest {
 
     // Application cancels the RPC
     proxyCall.cancel("User cancelled", null);
+
+    // Subsequent sendMessage or halfClose after explicit application cancellation must throw
+    // IllegalStateException.
+    assertThrows(IllegalStateException.class, () -> proxyCall.sendMessage("after-cancel"));
+    assertThrows(IllegalStateException.class, () -> proxyCall.halfClose());
 
     // Verify sidecar stream also cancelled
     assertThat(cancelLatch.await(5, TimeUnit.SECONDS)).isTrue();
