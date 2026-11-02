@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -932,6 +933,11 @@ public class ClusterResolverLoadBalancerTest {
     assertAddressesEqual(
         Arrays.asList(new EquivalentAddressGroup(newInetSocketAddress("127.0.0.2", 8000))),
         newChildBalancer.addresses);
+
+    // The new child's READY state reaches the channel, replacing the error picker
+    newChildBalancer.helper.updateBalancingState(
+        ConnectivityState.READY, new FixedResultPicker(PickResult.withNoResult()));
+    verify(helper, times(2)).updateBalancingState(eq(ConnectivityState.READY), any());
   }
 
   @Test
