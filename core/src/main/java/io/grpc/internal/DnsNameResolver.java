@@ -52,7 +52,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 
 /**
@@ -66,20 +65,6 @@ import javax.annotation.Nullable;
 public class DnsNameResolver extends NameResolver {
 
   private static final Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
-
-  private static final Pattern VALID_DNS_HOST_PATTERN =
-      Pattern.compile("^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?"
-          + "(\\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$");
-
-  private static boolean isValidHost(String host) {
-    if (host.isEmpty()) {
-      return false;
-    }
-    if (host.startsWith("[") && host.endsWith("]")) {
-      return true;
-    }
-    return VALID_DNS_HOST_PATTERN.matcher(host).matches();
-  }
 
   private static final String SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY = "clientLanguage";
   private static final String SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY = "percentage";
@@ -204,7 +189,7 @@ public class DnsNameResolver extends NameResolver {
         host = authority;
         port = args.getDefaultPort();
       }
-      Preconditions.checkArgument(isValidHost(host), "Invalid DNS name: %s", name);
+      Preconditions.checkArgument(GrpcUtil.isValidHost(host), "Invalid DNS name: %s", name);
     }
     this.proxyDetector = checkNotNull(args.getProxyDetector(), "proxyDetector");
     Executor offloadExecutor = args.getOffloadExecutor();
