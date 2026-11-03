@@ -63,6 +63,11 @@ abstract class ForwardingClientStream implements ClientStream {
   }
 
   @Override
+  public void setMessageCompression(boolean enabled, String compressorName) {
+    delegate().setMessageCompression(enabled, compressorName);
+  }
+
+  @Override
   public void cancel(Status reason) {
     delegate().cancel(reason);
   }
