@@ -549,7 +549,8 @@ public final class GrpcUtil {
     } catch (URISyntaxException ex) {
       // JDK-8188305: java.net.URI rejects valid RFC 1123 hostnames whose last label starts with
       // a digit (e.g. otlp.1234-k8s-namespace). Fall back to manual combination and checkAuthority.
-      String formattedHost = (host.contains(":") && !host.startsWith("[")) ? "[" + host + "]" : host;
+      String formattedHost =
+          (host.contains(":") && !host.startsWith("[")) ? "[" + host + "]" : host;
       String authority = formattedHost + ":" + port;
       try {
         return checkAuthority(authority);
