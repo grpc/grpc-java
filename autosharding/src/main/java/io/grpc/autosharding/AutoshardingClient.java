@@ -185,6 +185,11 @@ final class AutoshardingClient {
     }
   }
 
+  /** Returns the target this client asks the sharding service for. */
+  String getTarget() {
+    return target;
+  }
+
   @VisibleForTesting
   long getLatestGeneration() {
     return latestGeneration;

@@ -195,22 +195,7 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void missingChannelFactory_onKeyChange_failsAndKeepsTheOldChannel() throws Exception {
-    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
-    deliverAssignment(1, slice("", "a"));
-    reportReady("a");
-
-    Status status =
-        deliverWithoutChannelFactory(config(OTHER_CHANNEL_FACTORY_KEY, false), "a");
-
-    assertThat(status.isOk()).isFalse();
-    assertThat(channelFactory.released).isEmpty();
-    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
-  }
-
-  @Test
-  public void missingChannelFactory_sameKey_failsAndKeepsTheChannel() throws Exception {
+  public void missingChannelFactory_closesTheClientAndChannel() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
     deliverAssignment(1, slice("", "a"));
     reportReady("a");
@@ -219,10 +204,49 @@ public class AutoShardingLoadBalancerTest {
     Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "a");
 
     assertThat(status.isOk()).isFalse();
-    assertThat(channelFactory.released).isEmpty();
-    assertThat(service.streamCount.get()).isEqualTo(1);
+    // The stream is cancelled before its channel is handed back.
+    assertThat(channelFactory.isReleased(0)).isTrue();
+    assertThat(channelFactory.liveCallsAtRelease).containsExactly(0);
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
     assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
+  }
+
+  @Test
+  public void missingChannelFactory_thenSuppliedAgain_startsAfresh() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "a");
+
+    Status status = deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a");
+
+    // A new channel and client under the same key, and the previous assignment is not reused.
+    assertThat(status.isOk()).isTrue();
+    assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY, CHANNEL_FACTORY_KEY);
+    assertThat(service.streamCount.get()).isEqualTo(2);
+    PickResult queued = pick("k");
+    assertThat(queued.getStatus().isOk()).isTrue();
+    assertThat(queued.getSubchannel()).isNull();
+
+    deliverAssignment(1, slice("", "a"));
+
+    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+  }
+
+  @Test
+  public void missingChannelFactory_inFallback_thenSuppliedAgain_queuesInsteadOfFallingBack() {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    fakeClock.forwardNanos(ASSIGNMENT_TIMEOUT_NANOS);
+    reportReady("a");
+    assertThat(pickedHost(pick("k"))).isEqualTo("a");
+    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, true), "a");
+
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+
+    // The previous client's error is dropped with it, so the new client gets its own wait.
+    PickResult queued = pick("k");
+    assertThat(queued.getStatus().isOk()).isTrue();
+    assertThat(queued.getSubchannel()).isNull();
   }
 
   @Test
@@ -352,7 +376,14 @@ public class AutoShardingLoadBalancerTest {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
     reportReady("a");
 
+    // The previous client was closed with the endpoints, and its assignment dropped.
     assertThat(currentState).isEqualTo(READY);
+    PickResult queued = pick("k");
+    assertThat(queued.getStatus().isOk()).isTrue();
+    assertThat(queued.getSubchannel()).isNull();
+
+    deliverAssignment(1, slice("", "a"));
+
     assertThat(pickedHost(pick("k"))).isEqualTo("a");
   }
 
@@ -370,15 +401,24 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void endpointsRetracted_newAssignment_staysFailed() throws Exception {
+  public void endpointsRetracted_closesTheClientAndChannel() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
     deliverAssignment(1, slice("", "a"));
 
-    deliverAddresses(config(CHANNEL_FACTORY_KEY, true));
-    deliverAssignment(2, slice("", "a"));
+    deliverAddresses(config(OTHER_CHANNEL_FACTORY_KEY, true));
 
-    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    // The stream is cancelled before its channel is handed back, so no later assignment can
+    // revive the policy. Nothing is leased for the new key until an update is accepted.
+    assertThat(channelFactory.isReleased(0)).isTrue();
+    assertThat(channelFactory.liveCallsAtRelease).containsExactly(0);
+    assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
     assertThat(pick("k").getStatus().getDescription()).contains("no endpoints");
+
+    deliverAddresses(config(OTHER_CHANNEL_FACTORY_KEY, true), "a");
+
+    assertThat(channelFactory.keys)
+        .containsExactly(CHANNEL_FACTORY_KEY, OTHER_CHANNEL_FACTORY_KEY)
+        .inOrder();
   }
 
   @Test
@@ -393,39 +433,17 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void missingChannelFactory_laterChildUpdate_usesTheNewEndpointIndices()
-      throws Exception {
-    deliverAddresses(config(CHANNEL_FACTORY_KEY, false), "a", "b", "c");
-    deliverAssignment(1, slice("", "a"), slice("h", "b"), slice("p", "c"));
-
-    // The endpoints are applied even though the update then fails, so "c" moves to index 0.
-    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, false), "c");
-    reportReady("c");
-
-    // The picker published by the child update must not use indices from the old endpoints.
-    assertThat(pickedHost(pick("zulu"))).isEqualTo("c");
-    assertThat(pick("alpha").getStatus().getDescription())
-        .contains("No valid endpoints in slice and fallback disabled");
-  }
-
-  @Test
-  public void channelFactoryKeyChangedWhileEndpointsEmpty_appliesOnceEndpointsReturn() {
+  public void missingChannelFactory_laterChildUpdate_staysInTransientFailure() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
-    assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
 
-    // Nothing from an update without endpoints is applied, so the key is still seen as changed
-    // by the next update.
-    deliverAddresses(config(OTHER_CHANNEL_FACTORY_KEY, true));
+    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, true), "a");
+    syncContext.execute(() -> childForHost("a").reportReady());
 
-    assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
-    assertThat(channelFactory.released).isEmpty();
-
-    deliverAddresses(config(OTHER_CHANNEL_FACTORY_KEY, true), "a");
-
-    assertThat(channelFactory.keys)
-        .containsExactly(CHANNEL_FACTORY_KEY, OTHER_CHANNEL_FACTORY_KEY)
-        .inOrder();
-    assertThat(channelFactory.isReleased(0)).isTrue();
+    // The failure stands until an update is accepted, whatever the endpoints report meanwhile.
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no channel factory");
   }
 
   @Test
@@ -435,6 +453,8 @@ public class AutoShardingLoadBalancerTest {
 
     deliverAddresses(configWithKeyHeader(OTHER_KEY_HEADER));
     deliverAddresses(configWithKeyHeader(OTHER_KEY_HEADER), "a", "b");
+    // The update without endpoints closed the previous client, so the new one reports afresh.
+    deliverAssignment(1, slice("", "a"), slice("m", "b"));
     reportReady("a");
     reportReady("b");
 
@@ -516,6 +536,8 @@ public class AutoShardingLoadBalancerTest {
     deliverAddresses(retargetedConfig("other-target"), "a");
 
     assertThat(channelFactory.keys).containsExactly(CHANNEL_FACTORY_KEY);
+    // The new client streams on the same channel, so its lease stays open.
+    assertThat(channelFactory.released).isEmpty();
     assertThat(service.streamCount.get()).isEqualTo(2);
     assertThat(takeRequest().getInitialClientConfig().getTarget()).isEqualTo("other-target");
   }
@@ -567,17 +589,19 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void targetWithLocalityToken_endpointsRetracted_keepsTheLocality() throws Exception {
+  public void targetWithLocalityToken_endpointsRetracted_neverTargetsTheEmptyLocality()
+      throws Exception {
     AutoShardingLoadBalancerConfig localityConfig = retargetedConfig("target/%s");
     deliverEndpoints(localityConfig, endpointInLocality("a", "us-central1-a"));
     takeRequest();
 
-    // An empty update carries no locality, and must not move the client to "target/" and then
-    // back again once the endpoints return.
+    // An empty update carries no locality, and is rejected before a target is resolved from it.
     deliverEndpoints(localityConfig);
     deliverEndpoints(localityConfig, endpointInLocality("a", "us-central1-a"));
 
-    assertThat(service.streamCount.get()).isEqualTo(1);
+    assertThat(service.streamCount.get()).isEqualTo(2);
+    assertThat(takeRequest().getInitialClientConfig().getTarget())
+        .isEqualTo("target/us-central1-a");
   }
 
   @Test
@@ -1130,6 +1154,23 @@ public class AutoShardingLoadBalancerTest {
     syncContext.execute(
         () -> loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("boom")));
 
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("boom");
+  }
+
+  @Test
+  public void nameResolutionError_afterRejectedUpdate_reportsTheResolverError() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+    deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, true), "a");
+
+    syncContext.execute(
+        () -> loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("boom")));
+    syncContext.execute(() -> childForHost("a").reportReady());
+
+    // Nothing is being served after a rejected update, so the newer error is reported instead,
+    // and it too stands until an update is accepted.
     assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
     assertThat(pick("k").getStatus().getDescription()).contains("boom");
   }

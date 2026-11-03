@@ -77,7 +77,10 @@ import javax.annotation.Nullable;
  * error, depending on {@code enable_fallback}. A new client is created whenever the channel
  * factory key or the sharding target changes; whatever the previous client last reported keeps
  * being used until the new one reports, so a change of sharding service does not interrupt
- * traffic. A failure to create the channel is handled like an error from the client.
+ * traffic. A failure to create the channel is handled like an error from the client. An update
+ * with no endpoints or no channel factory is rejected instead: the client and its channel are
+ * closed, and RPCs fail until an update is accepted, after which they queue for the new client
+ * as at startup.
  *
  * <h3>Threading model</h3>
  *
@@ -112,30 +115,21 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   @Nullable private Metadata.Key<byte[]> keyHeader;
 
   /**
-   * Lease on the channel to the sharding service, or a {@link LameChannel} if the factory failed
-   * to create one. Closed once no client uses the channel any more.
+   * The client streaming assignments, and the lease on the channel it streams on. Null until an
+   * update is accepted, and again after one is rejected.
    */
-  @Nullable private ChannelFactory.ChannelLease shardingChannelLease;
+  @Nullable private ShardingConnection shardingConnection;
 
   /**
-   * The {@code autosharding_target} the current {@link #client} was created with, after {@code %s}
-   * substitution. Tracked separately from the config because the substitution depends on the
-   * locality attribute of the resolved endpoints, so the target can change while the config does
-   * not.
+   * Set when an update is rejected, or when the name resolver reports an error while no update is
+   * in effect; cleared when an update is accepted. While set there is no client, and every RPC
+   * fails with this error.
    */
-  @Nullable private String shardingTarget;
-
-  /**
-   * Locality last derived from the endpoints, substituted for {@code %s} in the target. Null when
-   * the endpoints did not share one.
-   */
-  @Nullable private String locality; // used only in acceptResolvedAddresses
-
-  @Nullable private AutoshardingClient client;
+  @Nullable private Status resolverError;
 
   /**
    * Most recent assignment reported by an {@link AutoshardingClient}. Survives client
-   * replacement, and is cleared only when a client reports an error instead.
+   * replacement, and is cleared when a client reports an error instead or an update is rejected.
    */
   @Nullable private Assignment assignment;
 
@@ -197,44 +191,55 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
                 resolvedAddresses.getLoadBalancingPolicyConfig(), "missing autosharding config");
 
     // The endpoints are always applied. When the set is empty this tears the children down, so
-    // that in-flight picks stop resolving to endpoints the resolver has retracted. The slice map
-    // indexes into the endpoints, so it is rebuilt with them, before anything below can fail.
+    // that in-flight picks stop resolving to endpoints the resolver has retracted.
     List<EquivalentAddressGroup> endpoints = resolvedAddresses.getAddresses();
     endpointMap.updateEndpoints(endpoints, resolvedAddresses.getAttributes());
-    sliceMap = buildSliceMap();
 
-    // Each failure below rejects the rest of the update: the next update is compared against the
-    // configuration still in use, so a changed key or target is still acted on then.
     if (endpointMap.size() == 0) {
-      return failPermanently("autosharding: name resolver returned no endpoints");
+      return rejectUpdate("autosharding: name resolver returned no endpoints");
     }
-
     ChannelFactory factory =
         resolvedAddresses.getAttributes().get(AutoShardingAttributes.ATTR_CHANNEL_FACTORY);
     if (factory == null) {
-      return failPermanently("autosharding: no channel factory supplied to the LB policy");
+      return rejectUpdate("autosharding: no channel factory supplied to the LB policy");
     }
 
-    ChannelFactory.ChannelLease previousLease = shardingChannelLease;
-    updateShardingServiceChannel(factory, newConfig);
+    // Decide what changes. The key identifies the channel, so a different factory under the same
+    // key changes nothing. The target depends on the locality of the endpoints, so it can change
+    // while the configuration does not. With no client, as before the first update or after a
+    // rejected one, both are new.
+    boolean channelFactoryKeyChanged =
+        shardingConnection == null
+            || !config.channelFactoryKey.equals(newConfig.channelFactoryKey);
+    String target = resolveTarget(newConfig.autoshardingTarget, sharedLocality(endpoints));
+    boolean targetChanged =
+        shardingConnection == null || !target.equals(shardingConnection.client.getTarget());
 
+    // Then apply it. The new client starts before the previous one is shut down, and the previous
+    // channel is closed last, so no client is ever left streaming on a closed channel.
+    resolverError = null;
     if (config == null || !config.keyHeaderName.equals(newConfig.keyHeaderName)) {
       keyHeader = AutoShardingPicker.createKeyHeader(newConfig.keyHeaderName);
     }
     config = newConfig;
-
-    // The locality comes from the endpoints, so the target can change even when the config did
-    // not.
-    locality = sharedLocality(endpoints);
-    maybeRecreateClient(
-        shardingChannelLease != previousLease,
-        resolveTarget(newConfig.autoshardingTarget, locality),
-        newConfig.initialAssignmentTimeoutNanos);
-
-    // Only now that the old stream has been cancelled.
-    if (previousLease != null && previousLease != shardingChannelLease) {
-      previousLease.close();
+    if (channelFactoryKeyChanged || targetChanged) {
+      ShardingConnection previous = shardingConnection;
+      ChannelFactory.ChannelLease channelLease =
+          channelFactoryKeyChanged
+              ? leaseChannel(factory, newConfig.channelFactoryKey)
+              : previous.channelLease;
+      AutoshardingClient client =
+          startClient(channelLease.channel(), target, newConfig.initialAssignmentTimeoutNanos);
+      shardingConnection = new ShardingConnection(channelLease, client);
+      if (previous != null) {
+        previous.client.shutdown();
+        if (channelFactoryKeyChanged) {
+          previous.channelLease.close();
+        }
+      }
     }
+    // The slice map indexes into the endpoints, so it is rebuilt with them.
+    sliceMap = buildSliceMap();
 
     publishPicker();
     return Status.OK;
@@ -243,6 +248,18 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     if (shutdown) {
+      return;
+    }
+    Status failure =
+        error.isOk()
+            ? Status.UNAVAILABLE.withDescription("autosharding: name resolution failed")
+            : error;
+    if (shardingConnection == null) {
+      // No update is in effect, so there is nothing to serve with. As after a rejected update,
+      // RPCs fail with the error until an update is accepted.
+      resolverError = failure;
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(failure)));
       return;
     }
     // Endpoints from an earlier resolution stay usable, and the error is
@@ -256,20 +273,14 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     // an assignment or an error, so a failed refresh must not turn that queue into failures.
     boolean queueingForAssignment = assignment == null && clientError == null;
     ConnectivityState state = endpointMap.aggregateConnectivityState();
-    if (endpointMap.size() > 0
-        && (queueingForAssignment
-            || state == ConnectivityState.READY
-            || state == ConnectivityState.IDLE)) {
+    if (queueingForAssignment
+        || state == ConnectivityState.READY
+        || state == ConnectivityState.IDLE) {
       logger.log(Level.FINE, "Ignoring name resolution error, still serving: {0}", error);
       return;
     }
     helper.updateBalancingState(
-        TRANSIENT_FAILURE,
-        new FixedResultPicker(
-            PickResult.withError(
-                error.getCode() == Status.Code.OK
-                    ? Status.UNAVAILABLE.withDescription("autosharding: name resolution failed")
-                    : error)));
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(failure)));
   }
 
   @Override
@@ -283,51 +294,35 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       return;
     }
     shutdown = true;
-    shutdownClient();
-    if (shardingChannelLease != null) {
-      shardingChannelLease.close();
-      shardingChannelLease = null;
-    }
+    closeShardingConnection();
 
     endpointMap.shutdown();
   }
 
   /**
-   * Leases a channel to the sharding service if this is the first configuration update or the
-   * {@code channel_factory_key} changed. A different factory under the same key changes nothing,
-   * since the key identifies the channel. Leaves {@link #shardingChannelLease} untouched when
-   * nothing changed, which is how the caller detects that no new channel was needed. The previous
-   * lease is not closed here: the caller does that once the stream on it has been cancelled.
-   *
-   * <p>If the factory fails, the new lease is a {@link LameChannel} carrying the error. The
-   * client then fails its stream and reports the error, so RPCs fall back if enabled and fail
-   * otherwise. The key is not retried until it changes.
+   * Leases a channel to the sharding service. If the factory fails, returns a {@link LameChannel}
+   * carrying the error instead: the client then fails its stream and reports the error, so RPCs
+   * fall back if enabled and fail otherwise. The key is not retried until it changes.
    */
-  private void updateShardingServiceChannel(
-      ChannelFactory factory, AutoShardingLoadBalancerConfig newConfig) {
-    if (config != null && config.channelFactoryKey.equals(newConfig.channelFactoryKey)) {
-      return;
-    }
-
+  private static ChannelFactory.ChannelLease leaseChannel(
+      ChannelFactory factory, String channelFactoryKey) {
     try {
-      shardingChannelLease = factory.createChannel(newConfig.channelFactoryKey);
+      return factory.createChannel(channelFactoryKey);
     } catch (RuntimeException e) {
       logger.log(Level.WARNING, "Failed to create a channel to the sharding service", e);
-      shardingChannelLease =
-          new LameChannel(
-              Status.UNAVAILABLE
-                  .withDescription(
-                      "autosharding: channel factory rejected key '"
-                          + newConfig.channelFactoryKey
-                          + "': "
-                          + e.getMessage())
-                  .withCause(e));
+      return new LameChannel(
+          Status.UNAVAILABLE
+              .withDescription(
+                  "autosharding: channel factory rejected key '"
+                      + channelFactoryKey
+                      + "': "
+                      + e.getMessage())
+              .withCause(e));
     }
   }
 
   /**
-   * Replaces the {@link AutoshardingClient} when there is none yet, or when the channel to the
-   * sharding service or the resolved target changed.
+   * Creates and starts an {@link AutoshardingClient}.
    *
    * <p>A new client, rather than the old one pointed elsewhere, because its accepted-generation
    * watermark is only meaningful against the server and the resource it was learned from;
@@ -336,26 +331,21 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    * <p>Each new client starts its own initial assignment timer. Whatever the previous client
    * reported keeps being served until the new one reports.
    */
-  private void maybeRecreateClient(boolean channelChanged, String newTarget, long timeoutNanos) {
-    if (client != null && !channelChanged && newTarget.equals(shardingTarget)) {
-      return;
-    }
-    if (client != null) {
-      client.shutdown();
-    }
-    shardingTarget = newTarget;
-    client =
+  private AutoshardingClient startClient(
+      Channel channel, String target, long initialAssignmentTimeoutNanos) {
+    AutoshardingClient client =
         new AutoshardingClient(
             clientUuid,
             syncContext,
             timeService,
             backoffPolicyProvider,
             stopwatchSupplier,
-            shardingChannelLease.channel(),
-            newTarget,
-            timeoutNanos,
+            channel,
+            target,
+            initialAssignmentTimeoutNanos,
             new AssignmentWatcherImpl());
     client.start();
+    return client;
   }
 
   /**
@@ -394,14 +384,6 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     return configuredTarget.substring(0, token)
         + (locality == null ? "" : locality)
         + configuredTarget.substring(token + 2);
-  }
-
-  private void shutdownClient() {
-    if (client != null) {
-      client.shutdown();
-      client = null;
-    }
-    shardingTarget = null;
   }
 
   /**
@@ -489,11 +471,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   private void publishPicker() {
-    if (shutdown || config == null) {
-      return;
-    }
-    if (endpointMap.size() == 0) {
-      // acceptResolvedAddresses already reported TRANSIENT_FAILURE for this case.
+    // Before the first accepted update there is nothing to publish. After a rejected one, or a
+    // resolver error with no update in effect, the TRANSIENT_FAILURE already reported stands
+    // until an update is accepted.
+    if (shutdown || config == null || resolverError != null) {
       return;
     }
     ConnectivityState state = endpointMap.aggregateConnectivityState();
@@ -530,14 +511,40 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Reports TRANSIENT_FAILURE with a picker that fails every RPC, and returns the same error for
-   * {@link #acceptResolvedAddresses} to hand back to the channel.
+   * Rejects an update the policy cannot use, returning the error for {@link
+   * #acceptResolvedAddresses} to hand back to the channel. Every RPC fails with it until an update
+   * is accepted. The client and its channel are closed and what the client reported is dropped,
+   * so the next accepted update starts afresh, queueing RPCs until its client reports.
    */
-  private Status failPermanently(String description) {
-    Status error = Status.UNAVAILABLE.withDescription(description);
-    helper.updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
-        error)));
-    return error;
+  private Status rejectUpdate(String description) {
+    resolverError = Status.UNAVAILABLE.withDescription(description);
+    closeShardingConnection();
+    assignment = null;
+    clientError = null;
+    sliceMap = buildSliceMap();
+    helper.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(resolverError)));
+    return resolverError;
+  }
+
+  /** Shuts down the client, then closes the lease on the channel it streamed on. */
+  private void closeShardingConnection() {
+    if (shardingConnection != null) {
+      shardingConnection.client.shutdown();
+      shardingConnection.channelLease.close();
+      shardingConnection = null;
+    }
+  }
+
+  /** An {@link AutoshardingClient} and the lease on the channel it streams on. */
+  private static final class ShardingConnection {
+    final ChannelFactory.ChannelLease channelLease;
+    final AutoshardingClient client;
+
+    ShardingConnection(ChannelFactory.ChannelLease channelLease, AutoshardingClient client) {
+      this.channelLease = channelLease;
+      this.client = client;
+    }
   }
 
   /**
