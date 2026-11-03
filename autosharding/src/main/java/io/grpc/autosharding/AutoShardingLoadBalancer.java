@@ -35,6 +35,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -128,20 +129,15 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   @Nullable private Status resolverError;
 
   /**
-   * Most recent assignment reported by an {@link AutoshardingClient}. Survives client
-   * replacement, and is cleared when a client reports an error instead or an update is rejected.
+   * The last assignment or error reported by an {@link AutoshardingClient}. Survives client
+   * replacement, so what the previous client reported stays in use until the new one reports.
+   * Null until a client reports, which queues RPCs, and cleared when an update is rejected.
    */
-  @Nullable private Assignment assignment;
+  @Nullable private StatusOr<Assignment> assignmentOrError;
 
   /**
-   * Most recent error reported by an {@link AutoshardingClient}. Never set together with
-   * {@link #assignment}; with both null, nothing has been reported yet and RPCs are queued.
-   */
-  @Nullable private Status clientError;
-
-  /**
-   * Join of {@link #assignment} and {@link #endpointMap}, rebuilt whenever either changes; null
-   * only before the first update.
+   * Join of the assignment in {@link #assignmentOrError} and {@link #endpointMap}, rebuilt
+   * whenever either changes; null only before the first update.
    */
   @Nullable private SliceMap sliceMap;
 
@@ -271,7 +267,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     // CONNECTING and TRANSIENT_FAILURE endpoints do report, which restores the picker.
     // The one addition is the wait for the sharding service: RPCs queue until a client reports
     // an assignment or an error, so a failed refresh must not turn that queue into failures.
-    boolean queueingForAssignment = assignment == null && clientError == null;
+    boolean queueingForAssignment = assignmentOrError == null;
     ConnectivityState state = endpointMap.aggregateConnectivityState();
     if (queueingForAssignment
         || state == ConnectivityState.READY
@@ -400,8 +396,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       if (shutdown) {
         return;
       }
-      assignment = newAssignment;
-      clientError = null;
+      assignmentOrError = StatusOr.fromValue(newAssignment);
       rebuildSliceMapAndPublish();
     }
 
@@ -416,8 +411,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
           Level.WARNING,
           "No assignment from the sharding service; proceeding {0} fallback: {1}",
           new Object[] {config != null && config.enableFallback ? "with" : "without", error});
-      assignment = null;
-      clientError = error;
+      assignmentOrError = StatusOr.fromStatus(error);
       rebuildSliceMapAndPublish();
     }
   }
@@ -441,8 +435,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
    * hostnames into endpoint indices. Hostnames the resolver has not given us are dropped, which
    * can leave a slice with no endpoints; the picker treats such a slice as being in fallback.
    *
-   * <p>Before any assignment has been received the result has no slices, so every lookup misses
-   * and the picker routes through the fallback pool or fails, according to configuration.
+   * <p>Without an assignment the result has no slices, so every lookup misses and the picker
+   * routes through the fallback pool or fails, according to configuration.
    */
   private SliceMap buildSliceMap() {
     int endpointCount = endpointMap.size();
@@ -450,10 +444,11 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     for (int i = 0; i < endpointCount; i++) {
       fallbackPool.add(i);
     }
-    if (assignment == null) {
+    if (assignmentOrError == null || !assignmentOrError.hasValue()) {
       return new SliceMap(ImmutableList.of(), fallbackPool);
     }
 
+    Assignment assignment = assignmentOrError.getValue();
     ImmutableList<String> endpointNames = assignment.getEndpointNames();
     List<SliceMap.SliceEntry> entries = new ArrayList<>(assignment.getSlices().size());
     for (Assignment.Slice slice : assignment.getSlices()) {
@@ -478,15 +473,16 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       return;
     }
     ConnectivityState state = endpointMap.aggregateConnectivityState();
-    if (assignment == null && clientError == null) {
+    if (assignmentOrError == null) {
       // RPCs are queued, but the state still follows the endpoints, so the policy starts IDLE
       // like any lazily-connecting one. Reporting CONNECTING instead would keep a parent
       // priority policy's failover timer running while the sharding service answers.
       helper.updateBalancingState(state, ASSIGNMENT_PENDING_PICKER);
-    } else if (assignment == null && !config.enableFallback) {
+    } else if (!assignmentOrError.hasValue() && !config.enableFallback) {
       // No endpoint can be picked, so there is nothing to connect for either.
       helper.updateBalancingState(
-          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(clientError)));
+          TRANSIENT_FAILURE,
+          new FixedResultPicker(PickResult.withError(assignmentOrError.getStatus())));
       return;
     } else {
       helper.updateBalancingState(
@@ -519,8 +515,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   private Status rejectUpdate(String description) {
     resolverError = Status.UNAVAILABLE.withDescription(description);
     closeShardingConnection();
-    assignment = null;
-    clientError = null;
+    assignmentOrError = null;
     sliceMap = buildSliceMap();
     helper.updateBalancingState(
         TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(resolverError)));
