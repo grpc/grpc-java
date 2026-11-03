@@ -39,7 +39,11 @@ final class MetadataGetter implements TextMapGetter<Metadata> {
     return INSTANCE;
   }
 
+  // keys() is deprecated in OpenTelemetry 1.66+ in favor of treating TextMapGetter as a
+  // functional interface, but we keep the implementation for compatibility with propagators
+  // that inspect carrier keys.
   @Override
+  @SuppressWarnings("deprecation")
   public Iterable<String> keys(Metadata carrier) {
     return carrier.keys();
   }
