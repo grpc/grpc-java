@@ -28,9 +28,9 @@ import io.grpc.Internal;
  * control plane cannot escalate privileges, per gRFC A102. Implementations must therefore ensure
  * the key uniquely encodes every parameter needed to create the channel.
  *
- * <p>Channels are borrowed rather than owned: implementations may return the same underlying
- * channel for repeated calls with the same key, so a caller must never shut one down directly
- * and must instead hand it back with {@link #releaseChannel}.
+ * <p>Channels are leased rather than owned: implementations may share one channel between
+ * several leases, so a caller must never shut a channel down directly and must instead close its
+ * lease.
  *
  * <p>Injected into the LB policy through
  * {@link AutoShardingAttributes#ATTR_CHANNEL_FACTORY}. In xDS deployments the
@@ -42,10 +42,8 @@ import io.grpc.Internal;
 public interface ChannelFactory {
 
   /**
-   * Returns a channel to the sharding service identified by {@code channelFactoryKey}.
-   *
-   * <p>The caller must pass the returned channel to {@link #releaseChannel} exactly once when it
-   * is done with it.
+   * Returns a lease on a channel to the sharding service identified by {@code channelFactoryKey}.
+   * The caller must close the lease once it no longer uses the channel.
    *
    * <p>Failure is reported by throwing, for a key that is not recognized or not allowed as well as
    * for any other reason the channel cannot be created. The LB policy then treats the failure as
@@ -55,13 +53,19 @@ public interface ChannelFactory {
    * @throws IllegalArgumentException if the key is not recognized or not allowed
    * @throws RuntimeException if the channel cannot be created for any other reason
    */
-  Channel createChannel(String channelFactoryKey);
+  ChannelLease createChannel(String channelFactoryKey);
 
-  /**
-   * Gives back a channel previously obtained from {@link #createChannel} on this same factory.
-   *
-   * <p>This releases the caller's claim on the channel. Whether the channel is actually shut
-   * down is up to the implementation, since it may still be lent out elsewhere.
-   */
-  void releaseChannel(Channel channel);
+  /** A claim on a channel returned by {@link #createChannel}. */
+  interface ChannelLease extends AutoCloseable {
+
+    /** Returns the leased channel, which must not be used once the lease is closed. */
+    Channel channel();
+
+    /**
+     * Gives up the claim on the channel. Whether the channel is then shut down is up to the
+     * factory. Closing a lease that is already closed has no effect.
+     */
+    @Override
+    void close();
+  }
 }

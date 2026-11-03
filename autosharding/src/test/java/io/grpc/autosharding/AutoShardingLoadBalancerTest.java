@@ -1498,25 +1498,36 @@ public class AutoShardingLoadBalancerTest {
     // Every createChannel() call, including the ones that throw.
     int attempts;
 
+    // Calls on each released channel that had not been cancelled when it was released.
+    final List<Integer> liveCallsAtRelease = new ArrayList<>();
+
     @Override
-    public Channel createChannel(String channelFactoryKey) {
+    public ChannelLease createChannel(String channelFactoryKey) {
       attempts++;
       if (UNKNOWN_CHANNEL_FACTORY_KEY.equals(channelFactoryKey)) {
         throw new IllegalArgumentException("unknown channel factory key");
       }
       keys.add(channelFactoryKey);
-      Channel channel = new WrappedChannel(shardingChannel);
+      WrappedChannel channel = new WrappedChannel(shardingChannel);
       created.add(channel);
-      return channel;
-    }
+      return new ChannelLease() {
+        private boolean closed;
 
-    // Calls on each released channel that had not been cancelled when it was released.
-    final List<Integer> liveCallsAtRelease = new ArrayList<>();
+        @Override
+        public Channel channel() {
+          return channel;
+        }
 
-    @Override
-    public void releaseChannel(Channel channel) {
-      released.add(channel);
-      liveCallsAtRelease.add(((WrappedChannel) channel).liveCalls);
+        @Override
+        public void close() {
+          if (closed) {
+            return;
+          }
+          closed = true;
+          released.add(channel);
+          liveCallsAtRelease.add(channel.liveCalls);
+        }
+      };
     }
 
     boolean isReleased(int index) {

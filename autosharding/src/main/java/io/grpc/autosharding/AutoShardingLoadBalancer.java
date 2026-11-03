@@ -112,16 +112,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   @Nullable private Metadata.Key<byte[]> keyHeader;
 
   /**
-   * The factory that created {@link #shardingChannel}, through which it is released. Null when
-   * the channel is a {@link LameChannel}, which no factory created.
+   * Lease on the channel to the sharding service, or a {@link LameChannel} if the factory failed
+   * to create one. Closed once no client uses the channel any more.
    */
-  @Nullable private ChannelFactory channelFactory;
-
-  /**
-   * Channel borrowed from {@link #channelFactory}, which must be given back when we are done, or
-   * a {@link LameChannel} if the factory failed to create one.
-   */
-  @Nullable private Channel shardingChannel;
+  @Nullable private ChannelFactory.ChannelLease shardingChannelLease;
 
   /**
    * The {@code autosharding_target} the current {@link #client} was created with, after {@code %s}
@@ -221,8 +215,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       return failPermanently("autosharding: no channel factory supplied to the LB policy");
     }
 
-    Channel previousChannel = shardingChannel;
-    ChannelFactory previousFactory = channelFactory;
+    ChannelFactory.ChannelLease previousLease = shardingChannelLease;
     updateShardingServiceChannel(factory, newConfig);
 
     if (config == null || !config.keyHeaderName.equals(newConfig.keyHeaderName)) {
@@ -234,14 +227,13 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     // not.
     locality = sharedLocality(endpoints);
     maybeRecreateClient(
-        shardingChannel != previousChannel,
+        shardingChannelLease != previousLease,
         resolveTarget(newConfig.autoshardingTarget, locality),
         newConfig.initialAssignmentTimeoutNanos);
 
-    // Only now that the old stream has been cancelled. Release through the factory that produced
-    // it, which is not necessarily the new one.
-    if (previousChannel != null && previousChannel != shardingChannel) {
-      releaseChannel(previousChannel, previousFactory);
+    // Only now that the old stream has been cancelled.
+    if (previousLease != null && previousLease != shardingChannelLease) {
+      previousLease.close();
     }
 
     publishPicker();
@@ -292,22 +284,22 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     }
     shutdown = true;
     shutdownClient();
-    if (shardingChannel != null) {
-      releaseChannel(shardingChannel, channelFactory);
-      shardingChannel = null;
+    if (shardingChannelLease != null) {
+      shardingChannelLease.close();
+      shardingChannelLease = null;
     }
 
     endpointMap.shutdown();
   }
 
   /**
-   * Creates a channel to the sharding service if this is the first configuration update or the
+   * Leases a channel to the sharding service if this is the first configuration update or the
    * {@code channel_factory_key} changed. A different factory under the same key changes nothing,
-   * since the key identifies the channel. Leaves {@link #shardingChannel} untouched when nothing
-   * changed, which is how the caller detects that no new channel was needed. The previous channel
-   * is not released here: the caller does that once the stream on it has been cancelled.
+   * since the key identifies the channel. Leaves {@link #shardingChannelLease} untouched when
+   * nothing changed, which is how the caller detects that no new channel was needed. The previous
+   * lease is not closed here: the caller does that once the stream on it has been cancelled.
    *
-   * <p>If the factory fails, the new channel is a {@link LameChannel} carrying the error. The
+   * <p>If the factory fails, the new lease is a {@link LameChannel} carrying the error. The
    * client then fails its stream and reports the error, so RPCs fall back if enabled and fail
    * otherwise. The key is not retried until it changes.
    */
@@ -318,11 +310,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     }
 
     try {
-      shardingChannel = factory.createChannel(newConfig.channelFactoryKey);
-      channelFactory = factory;
+      shardingChannelLease = factory.createChannel(newConfig.channelFactoryKey);
     } catch (RuntimeException e) {
       logger.log(Level.WARNING, "Failed to create a channel to the sharding service", e);
-      shardingChannel =
+      shardingChannelLease =
           new LameChannel(
               Status.UNAVAILABLE
                   .withDescription(
@@ -331,14 +322,6 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
                           + "': "
                           + e.getMessage())
                   .withCause(e));
-      channelFactory = null;
-    }
-  }
-
-  /** Gives a channel back to the factory that created it; a lame one has no such factory. */
-  private static void releaseChannel(Channel channel, @Nullable ChannelFactory factory) {
-    if (factory != null) {
-      factory.releaseChannel(channel);
     }
   }
 
@@ -368,7 +351,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
             timeService,
             backoffPolicyProvider,
             stopwatchSupplier,
-            shardingChannel,
+            shardingChannelLease.channel(),
             newTarget,
             timeoutNanos,
             new AssignmentWatcherImpl());
@@ -560,9 +543,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   /**
    * A channel whose every call fails with a fixed status. Stands in for a channel to the sharding
    * service that the {@link ChannelFactory} failed to create, so that the client reports the
-   * failure like any other error from the sharding service.
+   * failure like any other error from the sharding service. No factory created it, so it is its
+   * own lease and closing it does nothing.
    */
-  private static final class LameChannel extends Channel {
+  private static final class LameChannel extends Channel implements ChannelFactory.ChannelLease {
     private final Status error;
 
     LameChannel(Status error) {
@@ -596,5 +580,13 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     public String authority() {
       return "lame-channel";
     }
+
+    @Override
+    public Channel channel() {
+      return this;
+    }
+
+    @Override
+    public void close() {}
   }
 }
