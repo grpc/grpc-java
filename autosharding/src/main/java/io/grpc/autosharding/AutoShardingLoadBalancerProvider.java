@@ -88,10 +88,9 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
     if (keyHeaderName == null || keyHeaderName.isEmpty()) {
       return error("'keyHeaderName' is required, LB policy config=" + rawConfig);
     }
+    Metadata.Key<byte[]> keyHeader;
     try {
-      // Rejects names that are not valid header names. Doing it here means a typo surfaces as a
-      // channel error instead of an exception thrown on the synchronization context later.
-      Metadata.Key<byte[]> unused = AutoShardingPicker.createKeyHeader(keyHeaderName);
+      keyHeader = AutoShardingPicker.createKeyHeader(keyHeaderName);
     } catch (IllegalArgumentException e) {
       return error("'keyHeaderName' is not a valid header name: " + keyHeaderName);
     }
@@ -112,7 +111,7 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
         new AutoShardingLoadBalancerConfig(
             channelFactoryKey,
             autoshardingTarget,
-            keyHeaderName,
+            keyHeader,
             enableFallback != null && enableFallback,
             initialAssignmentTimeoutNanos));
   }

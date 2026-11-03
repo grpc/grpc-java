@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import io.grpc.Metadata;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -49,8 +50,8 @@ final class AutoShardingLoadBalancerConfig {
    */
   final String autoshardingTarget;
 
-  /** Name of the request header holding the application-defined sharding key. Never empty. */
-  final String keyHeaderName;
+  /** Request header holding the application-defined sharding key. */
+  final Metadata.Key<byte[]> keyHeader;
 
   /** Whether RPCs may fall back to the full set of resolved endpoints. */
   final boolean enableFallback;
@@ -63,13 +64,12 @@ final class AutoShardingLoadBalancerConfig {
   AutoShardingLoadBalancerConfig(
       String channelFactoryKey,
       String autoshardingTarget,
-      String keyHeaderName,
+      Metadata.Key<byte[]> keyHeader,
       boolean enableFallback,
       long initialAssignmentTimeoutNanos) {
     this.channelFactoryKey = checkNotNull(channelFactoryKey, "channelFactoryKey");
     this.autoshardingTarget = checkNotNull(autoshardingTarget, "autoshardingTarget");
-    this.keyHeaderName = checkNotNull(keyHeaderName, "keyHeaderName");
-    checkArgument(!keyHeaderName.isEmpty(), "keyHeaderName is empty");
+    this.keyHeader = checkNotNull(keyHeader, "keyHeader");
     checkArgument(
         initialAssignmentTimeoutNanos >= 0,
         "initialAssignmentTimeoutNanos is negative: %s",
@@ -91,7 +91,7 @@ final class AutoShardingLoadBalancerConfig {
         && initialAssignmentTimeoutNanos == that.initialAssignmentTimeoutNanos
         && channelFactoryKey.equals(that.channelFactoryKey)
         && autoshardingTarget.equals(that.autoshardingTarget)
-        && keyHeaderName.equals(that.keyHeaderName);
+        && keyHeader.equals(that.keyHeader);
   }
 
   @Override
@@ -99,7 +99,7 @@ final class AutoShardingLoadBalancerConfig {
     return Objects.hash(
         channelFactoryKey,
         autoshardingTarget,
-        keyHeaderName,
+        keyHeader,
         enableFallback,
         initialAssignmentTimeoutNanos);
   }
@@ -109,7 +109,7 @@ final class AutoShardingLoadBalancerConfig {
     return MoreObjects.toStringHelper(this)
         .add("channelFactoryKey", channelFactoryKey)
         .add("autoshardingTarget", autoshardingTarget)
-        .add("keyHeaderName", keyHeaderName)
+        .add("keyHeader", keyHeader.name())
         .add("enableFallback", enableFallback)
         .add("initialAssignmentTimeoutNanos", initialAssignmentTimeoutNanos)
         .toString();

@@ -87,7 +87,7 @@ public class AutoShardingLoadBalancerProviderTest {
 
     assertThat(config.channelFactoryKey).isEqualTo("shard-service");
     assertThat(config.autoshardingTarget).isEqualTo("my-service/%s");
-    assertThat(config.keyHeaderName).isEqualTo("x-shard-key");
+    assertThat(config.keyHeader.name()).isEqualTo("x-shard-key");
     assertThat(config.enableFallback).isTrue();
     assertThat(config.initialAssignmentTimeoutNanos)
         .isEqualTo(TimeUnit.MILLISECONDS.toNanos(5500));
@@ -109,7 +109,7 @@ public class AutoShardingLoadBalancerProviderTest {
     AutoShardingLoadBalancerConfig config =
         parseSuccessfully(configJson("\"keyHeaderName\": \"x-shard-key-bin\""));
 
-    assertThat(config.keyHeaderName).isEqualTo("x-shard-key-bin");
+    assertThat(config.keyHeader.name()).isEqualTo("x-shard-key-bin");
   }
 
   @Test
@@ -148,7 +148,7 @@ public class AutoShardingLoadBalancerProviderTest {
 
   @Test
   public void parse_malformedKeyHeaderName_isRejected() throws IOException {
-    // Reported here rather than thrown out of Metadata.Key on the synchronization context.
+    // Reported as a config error rather than thrown out of Metadata.Key.
     assertThat(parseError(configJson("\"keyHeaderName\": \"not a header\"")))
         .contains("'keyHeaderName' is not a valid header name");
   }

@@ -21,7 +21,6 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -163,17 +162,6 @@ public class AutoShardingLoadBalancerTest {
   // ---------------------------------------------------------------------------------------------
   // Configuration handling
   // ---------------------------------------------------------------------------------------------
-
-  @Test
-  public void emptyKeyHeaderName_isRejected() {
-    // There would be no header to read the routing key from. C++ rejects this at config-parse
-    // time.
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            new AutoShardingLoadBalancerConfig(
-                CHANNEL_FACTORY_KEY, TARGET, "", true, ASSIGNMENT_TIMEOUT_NANOS));
-  }
 
   @Test
   public void missingChannelFactory_fallbackEnabled_failsRpcsAnyway() {
@@ -1245,19 +1233,31 @@ public class AutoShardingLoadBalancerTest {
 
   private AutoShardingLoadBalancerConfig config(String channelFactoryKey, boolean enableFallback) {
     return new AutoShardingLoadBalancerConfig(
-        channelFactoryKey, TARGET, KEY_HEADER, enableFallback, ASSIGNMENT_TIMEOUT_NANOS);
+        channelFactoryKey,
+        TARGET,
+        AutoShardingPicker.createKeyHeader(KEY_HEADER),
+        enableFallback,
+        ASSIGNMENT_TIMEOUT_NANOS);
   }
 
   /** The default config with a different {@code autosharding_target}. */
   private AutoShardingLoadBalancerConfig retargetedConfig(String target) {
     return new AutoShardingLoadBalancerConfig(
-        CHANNEL_FACTORY_KEY, target, KEY_HEADER, true, ASSIGNMENT_TIMEOUT_NANOS);
+        CHANNEL_FACTORY_KEY,
+        target,
+        AutoShardingPicker.createKeyHeader(KEY_HEADER),
+        true,
+        ASSIGNMENT_TIMEOUT_NANOS);
   }
 
   /** The default config with a different {@code key_header_name}. */
   private AutoShardingLoadBalancerConfig configWithKeyHeader(String keyHeaderName) {
     return new AutoShardingLoadBalancerConfig(
-        CHANNEL_FACTORY_KEY, TARGET, keyHeaderName, true, ASSIGNMENT_TIMEOUT_NANOS);
+        CHANNEL_FACTORY_KEY,
+        TARGET,
+        AutoShardingPicker.createKeyHeader(keyHeaderName),
+        true,
+        ASSIGNMENT_TIMEOUT_NANOS);
   }
 
   private Attributes attributesWithChannelFactory() {

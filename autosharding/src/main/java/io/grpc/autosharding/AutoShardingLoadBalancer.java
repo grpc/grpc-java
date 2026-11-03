@@ -113,7 +113,6 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   private final EndpointMap endpointMap;
 
   @Nullable private AutoShardingLoadBalancerConfig config;
-  @Nullable private Metadata.Key<byte[]> keyHeader;
 
   /**
    * The client streaming assignments, and the lease on the channel it streams on. Null until an
@@ -214,9 +213,6 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     // Then apply it. The new client starts before the previous one is shut down, and the previous
     // channel is closed last, so no client is ever left streaming on a closed channel.
     resolverError = null;
-    if (config == null || !config.keyHeaderName.equals(newConfig.keyHeaderName)) {
-      keyHeader = AutoShardingPicker.createKeyHeader(newConfig.keyHeaderName);
-    }
     config = newConfig;
     if (channelFactoryKeyChanged || targetChanged) {
       ShardingConnection previous = shardingConnection;
@@ -488,7 +484,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       helper.updateBalancingState(
           state,
           new AutoShardingPicker(
-              sliceMap, endpointMap.toPickerEndpoints(), config.enableFallback, keyHeader));
+              sliceMap, endpointMap.toPickerEndpoints(), config.enableFallback, config.keyHeader));
     }
 
     // Nothing else will drive progress: this policy only connects in response to picks, so a
