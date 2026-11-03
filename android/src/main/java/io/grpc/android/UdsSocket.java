@@ -108,9 +108,11 @@ class UdsSocket extends Socket {
     };
   }
 
+  // Matches the kernel: SO_KEEPALIVE is a SOL_SOCKET option that getsockopt() reports as 0 (off)
+  // on an AF_UNIX socket, so this is a real value, not a stub.
   @Override
   public boolean getKeepAlive() {
-    throw new UnsupportedOperationException("Unsupported operation getKeepAlive()");
+    return false;
   }
 
   @Override
@@ -128,9 +130,11 @@ class UdsSocket extends Socket {
     return new SocketAddress() {};
   }
 
+  // Matches the kernel: SO_OOBINLINE is a SOL_SOCKET option that getsockopt() reports as 0 (off)
+  // on an AF_UNIX socket, so this is a real value, not a stub.
   @Override
   public boolean getOOBInline() {
-    throw new UnsupportedOperationException("Unsupported operation getOOBInline()");
+    return false;
   }
 
   @Override
@@ -162,9 +166,11 @@ class UdsSocket extends Socket {
     return new SocketAddress() {};
   }
 
+  // Matches the kernel: SO_REUSEADDR is a SOL_SOCKET option that getsockopt() reports as 0 (off)
+  // on an AF_UNIX socket, so this is a real value, not a stub.
   @Override
   public boolean getReuseAddress() {
-    throw new UnsupportedOperationException("Unsupported operation getReuseAddress()");
+    return false;
   }
 
   @Override
@@ -195,9 +201,12 @@ class UdsSocket extends Socket {
     return true;
   }
 
+  // IP_TOS is an IPPROTO_IP option that does not apply to AF_UNIX. Return 0 (like getTcpNoDelay()
+  // returns a synthetic true) rather than throwing SocketException, which okhttp's
+  // Utils.getSocketOptions() logs at Level.SEVERE on every channelz poll.
   @Override
   public int getTrafficClass() {
-    throw new UnsupportedOperationException("Unsupported operation getTrafficClass()");
+    return 0;
   }
 
   @Override
