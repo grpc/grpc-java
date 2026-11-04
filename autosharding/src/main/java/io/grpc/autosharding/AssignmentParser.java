@@ -124,19 +124,18 @@ final class AssignmentParser {
     checkNotNull(chunks, "chunks");
 
     ImmutableList<String> endpointNames = combineEndpointNames(chunks);
-    List<String> problems = new ArrayList<>();
-    List<Assignment.Slice> slices = combineSlices(chunks, endpointNames.size(), problems);
+    List<String> errorDetails = new ArrayList<>();
+    List<Assignment.Slice> slices = combineSlices(chunks, endpointNames.size(), errorDetails);
 
-    slices.sort(
-        (s1, s2) -> UNSIGNED_BYTES_COMPARATOR.compare(s1.getStartKey(), s2.getStartKey()));
-    slices = dropOverlaps(slices, problems);
+    slices.sort(Assignment.Slice.START_KEY_ORDER);
+    slices = dropOverlaps(slices, errorDetails);
 
     if (slices.isEmpty()) {
       return new Result(
-          null, problems.isEmpty() ? "no slice assignments received" : describe(problems));
+          null, errorDetails.isEmpty() ? "no slice assignments received" : describe(errorDetails));
     }
-    List<Assignment.Slice> filled = fillGaps(slices, problems);
-    String errorMessage = problems.isEmpty() ? null : describe(problems);
+    List<Assignment.Slice> filled = fillGaps(slices, errorDetails);
+    String errorMessage = errorDetails.isEmpty() ? null : describe(errorDetails);
     return new Result(new Assignment(filled, endpointNames), errorMessage);
   }
 
@@ -159,10 +158,10 @@ final class AssignmentParser {
    * whose key range is inverted or whose endpoint indices are out of range. Slice assignments may
    * appear in any order across chunks.
    *
-   * @param dropped collects a description of each slice that was dropped
+   * @param errorDetails collects a description of each slice that was dropped
    */
   private static List<Assignment.Slice> combineSlices(
-      List<AssignmentChunk> chunks, int endpointCount, List<String> dropped) {
+      List<AssignmentChunk> chunks, int endpointCount, List<String> errorDetails) {
     List<Assignment.Slice> slices = new ArrayList<>();
     for (AssignmentChunk chunk : chunks) {
       for (SliceAssignment sliceAssignment : chunk.getSliceAssignmentsList()) {
@@ -172,37 +171,28 @@ final class AssignmentParser {
         byte[] endKey = slice.hasEndKey() ? slice.getEndKey().toByteArray() : null;
 
         if (startKey.length > MAX_KEY_BYTES) {
-          dropped.add(
+          errorDetails.add(
               String.format(
                   "slice starting at %s has a start_key longer than %s bytes",
                   encode(startKey), MAX_KEY_BYTES));
           continue;
         }
         if (endKey != null && endKey.length > MAX_KEY_BYTES) {
-          dropped.add(
+          errorDetails.add(
               String.format(
                   "slice starting at %s has an end_key longer than %s bytes",
                   encode(startKey), MAX_KEY_BYTES));
           continue;
         }
 
-        if (endKey != null) {
-          int keyOrder = UNSIGNED_BYTES_COMPARATOR.compare(startKey, endKey);
-          if (keyOrder > 0) {
-            dropped.add(
-                String.format(
-                    "slice has start_key %s greater than end_key %s",
-                    encode(startKey), encode(endKey)));
-            continue;
-          }
-          if (keyOrder == 0) {
-            // end_key is exclusive, so [k, k) is the empty range rather than the single key k.
-            // A server wanting to assign one key sends [k, k+1), i.e. an end_key of k with a
-            // trailing 0x00. Dropping this cannot open a gap, because it covered nothing.
-            dropped.add(
-                String.format("slice [%s, %s) is empty", encode(startKey), encode(endKey)));
-            continue;
-          }
+        // end_key is exclusive, so a slice covers keys only if start_key < end_key. [k, k) is
+        // empty rather than the single key k: a server assigning one key sends an end_key of k
+        // with a trailing 0x00. A slice that covers nothing cannot leave a gap when dropped.
+        if (endKey != null && UNSIGNED_BYTES_COMPARATOR.compare(startKey, endKey) >= 0) {
+          errorDetails.add(
+              String.format(
+                  "slice [%s, %s) has start_key >= end_key", encode(startKey), encode(endKey)));
+          continue;
         }
 
         List<Integer> endpoints = new ArrayList<>(sliceAssignment.getEndpointsCount());
@@ -220,7 +210,7 @@ final class AssignmentParser {
           endpoints.add(index);
         }
         if (indexProblem != null) {
-          dropped.add(indexProblem);
+          errorDetails.add(indexProblem);
           continue;
         }
         // No endpoints means the server deliberately left the range unassigned, so it must not
@@ -232,27 +222,28 @@ final class AssignmentParser {
   }
 
   /**
-   * Returns the slices of {@code sorted} that overlap no other slice.
+   * Returns the slices of {@code slicesByStartKey} that overlap no other slice.
    *
    * <p>When slices overlap, every one of them is dropped. The server has told us two different
    * things about the same key and there is no basis for preferring either, so the keys they cover
    * become a gap.
    *
-   * @param sorted slices in ascending {@code startKey} order
-   * @param dropped collects a description of each slice that was dropped
+   * @param slicesByStartKey slices in ascending {@code startKey} order
+   * @param errorDetails collects a description of each slice that was dropped
    */
   private static List<Assignment.Slice> dropOverlaps(
-      List<Assignment.Slice> sorted, List<String> dropped) {
-    List<Assignment.Slice> kept = new ArrayList<>(sorted.size());
+      List<Assignment.Slice> slicesByStartKey, List<String> errorDetails) {
+    List<Assignment.Slice> nonOverlapping = new ArrayList<>(slicesByStartKey.size());
     int index = 0;
-    while (index < sorted.size()) {
+    while (index < slicesByStartKey.size()) {
       // Extend a run of slices for as long as the keys covered so far reach into the next one.
       // Every slice that joins overlaps some earlier member, and the first two overlap directly,
       // so a run longer than one slice consists entirely of slices that overlap something.
-      byte[] runEndKey = sorted.get(index).getEndKey();
+      byte[] runEndKey = slicesByStartKey.get(index).getEndKey();
       int end = index + 1;
-      while (end < sorted.size() && reaches(runEndKey, sorted.get(end).getStartKey())) {
-        byte[] endKey = sorted.get(end).getEndKey();
+      while (end < slicesByStartKey.size()
+          && reaches(runEndKey, slicesByStartKey.get(end).getStartKey())) {
+        byte[] endKey = slicesByStartKey.get(end).getEndKey();
         // A run that already reaches infinity cannot be extended any further.
         if (runEndKey != null
             && (endKey == null || UNSIGNED_BYTES_COMPARATOR.compare(endKey, runEndKey) > 0)) {
@@ -262,10 +253,10 @@ final class AssignmentParser {
       }
 
       if (end - index == 1) {
-        kept.add(sorted.get(index));
+        nonOverlapping.add(slicesByStartKey.get(index));
       } else {
-        for (Assignment.Slice slice : sorted.subList(index, end)) {
-          dropped.add(
+        for (Assignment.Slice slice : slicesByStartKey.subList(index, end)) {
+          errorDetails.add(
               String.format(
                   "slice [%s, %s) overlaps another slice",
                   encode(slice.getStartKey()), encode(slice.getEndKey())));
@@ -273,7 +264,7 @@ final class AssignmentParser {
       }
       index = end;
     }
-    return kept;
+    return nonOverlapping;
   }
 
   /**
@@ -289,23 +280,24 @@ final class AssignmentParser {
    * slices wherever the sorted input leaves a gap. Those slices may fall back: only a range the
    * server itself assigned no endpoints disables fallback.
    *
-   * @param problems collects a description of each gap
+   * @param slicesByStartKey slices in ascending {@code startKey} order, none overlapping
+   * @param errorDetails collects a description of each gap
    */
   private static List<Assignment.Slice> fillGaps(
-      List<Assignment.Slice> sorted, List<String> problems) {
-    List<Assignment.Slice> filled = new ArrayList<>(sorted.size() + 1);
+      List<Assignment.Slice> slicesByStartKey, List<String> errorDetails) {
+    List<Assignment.Slice> filled = new ArrayList<>(slicesByStartKey.size() + 1);
     // Exclusive upper bound of the key range covered so far; null once infinity is reached.
     byte[] cursor = EMPTY_BYTES;
-    for (Assignment.Slice slice : sorted) {
+    for (Assignment.Slice slice : slicesByStartKey) {
       if (UNSIGNED_BYTES_COMPARATOR.compare(cursor, slice.getStartKey()) < 0) {
-        problems.add(describeGap(cursor, slice.getStartKey()));
+        errorDetails.add(describeGap(cursor, slice.getStartKey()));
         filled.add(new Assignment.Slice(cursor, slice.getStartKey(), ImmutableList.of()));
       }
       filled.add(slice);
       cursor = slice.getEndKey();
     }
     if (cursor != null) {
-      problems.add(describeGap(cursor, null));
+      errorDetails.add(describeGap(cursor, null));
       filled.add(new Assignment.Slice(cursor, null, ImmutableList.of()));
     }
     return filled;
@@ -323,24 +315,24 @@ final class AssignmentParser {
    * <p>The result is sized to fit within {@link #MAX_ERROR_MESSAGE_CHARS} so that
    * {@code AutoshardingClient}'s final truncation never has to cut a description in half.
    */
-  private static String describe(List<String> dropped) {
+  private static String describe(List<String> errorDetails) {
     StringBuilder message = new StringBuilder();
     int reported = 0;
-    for (String problem : dropped) {
+    for (String detail : errorDetails) {
       int separator = reported == 0 ? 0 : SEPARATOR.length();
       // Leave room for the suffix that will be needed if this is where we stop.
-      int reserved = andMore(dropped.size() - reported - 1).length();
-      if (message.length() + separator + problem.length() + reserved
+      int reserved = andMore(errorDetails.size() - reported - 1).length();
+      if (message.length() + separator + detail.length() + reserved
           > MAX_ERROR_MESSAGE_CHARS) {
         break;
       }
       if (reported > 0) {
         message.append(SEPARATOR);
       }
-      message.append(problem);
+      message.append(detail);
       reported++;
     }
-    return message + andMore(dropped.size() - reported);
+    return message + andMore(errorDetails.size() - reported);
   }
 
   private static String andMore(int omitted) {

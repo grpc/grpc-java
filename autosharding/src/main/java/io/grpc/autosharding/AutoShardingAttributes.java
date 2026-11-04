@@ -20,26 +20,18 @@ import io.grpc.Attributes;
 import io.grpc.Internal;
 
 /**
- * Attribute keys used to inject data into the {@code autosharding_experimental} LB policy.
+ * Attributes the {@code autosharding_experimental} LB policy reads besides its configuration. Set
+ * them on the {@link io.grpc.LoadBalancer.ResolvedAddresses} given to the policy.
  *
- * <p>These keys are set on the resolver result by whoever is driving the policy: the
- * {@code cds_experimental} LB policy in xDS deployments, or the application in non-xDS ones.
- * They are internal to gRPC and carry no compatibility guarantee; the supported public API for
- * configuring this policy is added separately.
+ * <p>To substitute a locality for {@code %s} in {@code autosharding_target}, give every endpoint
+ * the same {@link io.grpc.EquivalentAddressGroup#ATTR_LOCALITY_NAME}.
  *
- * <p>The locality substituted for {@code %s} in {@code autosharding_target} is not injected here:
- * it is read from {@link io.grpc.EquivalentAddressGroup#ATTR_LOCALITY_NAME}, and used only when
- * every endpoint carries the same value.
+ * <p>Internal to gRPC, with no compatibility guarantee.
  */
 @Internal
 public final class AutoShardingAttributes {
 
-  /**
-   * The "Channel Factory" used to create a channel to the sharding service.
-   *
-   * <p>Supplied alongside the LB policy configuration, which carries only the opaque key that
-   * the factory resolves into a channel.
-   */
+  /** The {@link ChannelFactory} for the channel to the sharding service. Required. */
   public static final Attributes.Key<ChannelFactory> ATTR_CHANNEL_FACTORY =
       Attributes.Key.create("io.grpc.autosharding.channelFactory");
 

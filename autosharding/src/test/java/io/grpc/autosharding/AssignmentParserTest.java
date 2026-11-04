@@ -318,7 +318,7 @@ public class AssignmentParserTest {
 
     AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
-    assertThat(result.errorMessage).contains("greater than end_key");
+    assertThat(result.errorMessage).contains("start_key >= end_key");
     assertThat(result.assignment.getSlices()).hasSize(2);
     assertSlice(result.assignment.getSlices().get(0), "", "m", 0);
     assertSlice(result.assignment.getSlices().get(1), "m", null);
@@ -339,7 +339,7 @@ public class AssignmentParserTest {
 
     AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
-    assertThat(result.errorMessage).contains("is empty");
+    assertThat(result.errorMessage).contains("start_key >= end_key");
     // No gap appears where it was: its neighbours already met at "m".
     assertThat(result.assignment.getSlices()).hasSize(2);
     assertSlice(result.assignment.getSlices().get(0), "", "m", 0);
@@ -363,7 +363,7 @@ public class AssignmentParserTest {
 
     AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
-    assertThat(result.errorMessage).contains("is empty");
+    assertThat(result.errorMessage).contains("start_key >= end_key");
     assertThat(result.assignment.getSlices()).hasSize(3);
     assertSlice(result.assignment.getSlices().get(0), "", "a", 0);
     // ["a", "z") is one gap, not two slices meeting at "m".
@@ -390,7 +390,7 @@ public class AssignmentParserTest {
     AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
 
     // Only the keys either side of it are reported, as gaps; the slice itself is not dropped.
-    assertThat(result.errorMessage).doesNotContain("is empty");
+    assertThat(result.errorMessage).doesNotContain("start_key >= end_key");
     assertThat(result.assignment.getSlices()).hasSize(3);
     assertThat(result.assignment.getSlices().get(1).getEndpoints()).containsExactly(0);
   }
@@ -543,7 +543,7 @@ public class AssignmentParserTest {
     assertThat(result.assignment).isNull();
     // autosharding.proto: error_message "MUST NOT exceed 512 characters".
     assertThat(result.errorMessage.length()).isAtMost(512);
-    assertThat(result.errorMessage).contains("greater than end_key");
+    assertThat(result.errorMessage).contains("start_key >= end_key");
     assertThat(result.errorMessage).containsMatch("; and \\d+ more$");
   }
 

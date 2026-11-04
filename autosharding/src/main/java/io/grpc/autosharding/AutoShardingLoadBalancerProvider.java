@@ -33,8 +33,6 @@ import java.util.Map;
  */
 @Internal
 public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider {
-  private static final String POLICY_NAME = "autosharding_experimental";
-
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
     return new AutoShardingLoadBalancer(helper);
@@ -52,7 +50,7 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
 
   @Override
   public String getPolicyName() {
-    return POLICY_NAME;
+    return "autosharding_experimental";
   }
 
   @Override

@@ -21,6 +21,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.BaseEncoding;
+import com.google.common.primitives.UnsignedBytes;
+import java.util.Comparator;
 import java.util.List;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -50,6 +52,10 @@ final class Assignment {
   @Immutable
   @SuppressWarnings("Immutable") // Defensive copies are made; arrays are never mutated.
   static final class Slice {
+    /** Orders slices by start key, compared as unsigned bytes, without copying the keys. */
+    static final Comparator<Slice> START_KEY_ORDER =
+        (a, b) -> UnsignedBytes.lexicographicalComparator().compare(a.startKey, b.startKey);
+
     private final byte[] startKey;
     @Nullable private final byte[] endKey;
     private final ImmutableList<Integer> endpoints;

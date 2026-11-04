@@ -18,6 +18,7 @@ package io.grpc.autosharding;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -52,28 +53,14 @@ import javax.annotation.Nullable;
  * The {@code autosharding_experimental} load balancing policy.
  *
  * <p>This policy shards RPCs across endpoints by an application-defined key carried in a request
- * header. The mapping from key ranges to endpoints comes from an external sharding service, which
- * an {@link AutoshardingClient} streams assignments from. See gRFC A119.
- *
- * <h3>Moving parts</h3>
- *
- * <ul>
- *   <li>{@link EndpointMap} owns one lazily-created {@code pick_first} child per resolved
- *       endpoint and assigns each a dense index.
- *   <li>{@link AutoshardingClient} produces validated {@link Assignment}s, which name endpoints
- *       by hostname.
- *   <li>{@link SliceMap} is the join of the two: the assignment's key ranges with hostnames
- *       translated into endpoint indices. It is rebuilt whenever either input changes.
- *   <li>{@link AutoShardingPicker} performs the per-RPC lookup against a {@link SliceMap} and a
- *       snapshot of endpoint states. It is rebuilt on every child state update too, reusing the
- *       existing {@link SliceMap} because the endpoint indices did not move.
- * </ul>
+ * header. The mapping from key ranges to endpoints is streamed from an external sharding service.
+ * See gRFC A119.
  *
  * <h3>Startup</h3>
  *
- * <p>Each {@link AutoshardingClient} reports either valid assignments or, until it has reported
- * one, errors (including its initial assignment timer firing). Until the first report RPCs are
- * queued and the policy reports IDLE, whatever state the endpoints are in.
+ * <p>A client streaming from the sharding service reports either valid assignments or, until it
+ * has reported one, errors (including its initial assignment timer firing). Until the first
+ * report RPCs are queued and the policy reports IDLE, whatever state the endpoints are in.
  * After an error, RPCs either spread across every resolved endpoint or fail with that
  * error, depending on {@code enable_fallback}. A new client is created whenever the channel
  * factory key or the sharding target changes; whatever the previous client last reported keeps
@@ -85,7 +72,10 @@ import javax.annotation.Nullable;
  *
  * <h3>Threading model</h3>
  *
- * <p>All state lives on the {@link SynchronizationContext}.
+ * <p>Every method, and every callback from the client and from the endpoints' child policies,
+ * runs on the helper's {@link SynchronizationContext}, so the fields need no locking. Published
+ * pickers run on RPC threads; they read only immutable snapshots and hand connection requests to
+ * the synchronization context.
  */
 final class AutoShardingLoadBalancer extends LoadBalancer {
   private static final Logger logger =
@@ -110,6 +100,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   /** Identifies this client to the sharding service; stable across stream restarts. */
   private final String clientUuid;
 
+  /** One lazily-created {@code pick_first} child per resolved endpoint, each with a dense index. */
   private final EndpointMap endpointMap;
 
   @Nullable private AutoShardingLoadBalancerConfig config;
@@ -135,8 +126,9 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   @Nullable private StatusOr<Assignment> assignmentOrError;
 
   /**
-   * Join of the assignment in {@link #assignmentOrError} and {@link #endpointMap}, rebuilt
-   * whenever either changes; null only before the first update.
+   * The key ranges of the assignment in {@link #assignmentOrError}, with the hostnames it names
+   * endpoints by translated into indices into {@link #endpointMap}. Rebuilt whenever either
+   * changes; null only before the first update.
    */
   @Nullable private SliceMap sliceMap;
 
@@ -257,25 +249,27 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
           TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(failure)));
       return;
     }
-    // Endpoints from an earlier resolution stay usable, and the error is
-    // only reported when we are not already serving with them. Reporting it in that case is what
-    // makes a broken resolver visible; otherwise RPCs would fail with whatever the stale
-    // endpoints happen to be failing with, which names the wrong cause.
-    // IDLE counts as serving: it is where a lazy policy rests before traffic, and IDLE endpoints
-    // report nothing until picked, so a failing picker published then would never be replaced.
-    // CONNECTING and TRANSIENT_FAILURE endpoints do report, which restores the picker.
-    // The one addition is the wait for the sharding service: RPCs queue until a client reports
-    // an assignment or an error, so a failed refresh must not turn that queue into failures.
-    boolean queueingForAssignment = assignmentOrError == null;
-    ConnectivityState state = endpointMap.aggregateConnectivityState();
-    if (queueingForAssignment
-        || state == ConnectivityState.READY
-        || state == ConnectivityState.IDLE) {
+    if (isStillServing()) {
       logger.log(Level.FINE, "Ignoring name resolution error, still serving: {0}", error);
       return;
     }
+    // Not serving, so the resolver's error names the cause better than the endpoints' errors.
     helper.updateBalancingState(
         TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(failure)));
+  }
+
+  /**
+   * Whether RPCs are being served with the endpoints from an earlier resolution, so a resolver
+   * error can be ignored. Waiting for the sharding service counts: RPCs are queued for it, not
+   * failing. So does IDLE: IDLE endpoints report nothing until picked, so a failing picker
+   * published then would never be replaced.
+   */
+  private boolean isStillServing() {
+    if (assignmentOrError == null) {
+      return true;
+    }
+    ConnectivityState state = endpointMap.aggregateConnectivityState();
+    return state == READY || state == IDLE;
   }
 
   @Override
