@@ -164,6 +164,32 @@ public class AutoShardingLoadBalancerTest {
   // ---------------------------------------------------------------------------------------------
 
   @Test
+  public void missingConfig_failsRpcsInsteadOfThrowing() {
+    // Happens when this policy is the channel's default and there is no service config.
+    Status status = deliverWithoutConfig("a");
+
+    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no load balancing config");
+  }
+
+  @Test
+  public void missingConfig_afterValidConfig_closesTheClientAndChannel() throws Exception {
+    deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
+    deliverAssignment(1, slice("", "a"));
+    reportReady("a");
+
+    Status status = deliverWithoutConfig("a");
+    syncContext.execute(() -> childForHost("a").reportReady());
+
+    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(channelFactory.isReleased(0)).isTrue();
+    assertThat(channelFactory.liveCallsAtRelease).containsExactly(0);
+    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(pick("k").getStatus().getDescription()).contains("no load balancing config");
+  }
+
+  @Test
   public void missingChannelFactory_fallbackEnabled_failsRpcsAnyway() {
     Status status = deliverWithoutChannelFactory(config(CHANNEL_FACTORY_KEY, true), "a");
 
@@ -1283,6 +1309,14 @@ public class AutoShardingLoadBalancerTest {
             .setAddresses(endpoints(hostnames))
             .setAttributes(Attributes.EMPTY)
             .setLoadBalancingPolicyConfig(config)
+            .build());
+  }
+
+  private Status deliverWithoutConfig(String... hostnames) {
+    return acceptAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(endpoints(hostnames))
+            .setAttributes(attributesWithChannelFactory())
             .build());
   }
 

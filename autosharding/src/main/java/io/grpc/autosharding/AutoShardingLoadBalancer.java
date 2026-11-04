@@ -79,9 +79,9 @@ import javax.annotation.Nullable;
  * factory key or the sharding target changes; whatever the previous client last reported keeps
  * being used until the new one reports, so a change of sharding service does not interrupt
  * traffic. A failure to create the channel is handled like an error from the client. An update
- * with no endpoints or no channel factory is rejected instead: the client and its channel are
- * closed, and RPCs fail until an update is accepted, after which they queue for the new client
- * as at startup.
+ * with no config, no endpoints or no channel factory is rejected instead: the client and its
+ * channel are closed, and RPCs fail until an update is accepted, after which they queue for the
+ * new client as at startup.
  *
  * <h3>Threading model</h3>
  *
@@ -180,13 +180,16 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     if (shutdown) {
       return Status.OK;
     }
-    AutoShardingLoadBalancerConfig newConfig =
-        (AutoShardingLoadBalancerConfig)
-            checkNotNull(
-                resolvedAddresses.getLoadBalancingPolicyConfig(), "missing autosharding config");
+    // Null when this policy is the channel's default and there is no service config.
+    Object rawConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (rawConfig == null) {
+      return rejectUpdate("autosharding: no load balancing config");
+    }
+    AutoShardingLoadBalancerConfig newConfig = (AutoShardingLoadBalancerConfig) rawConfig;
 
-    // The endpoints are always applied. When the set is empty this tears the children down, so
-    // that in-flight picks stop resolving to endpoints the resolver has retracted.
+    // The endpoints are applied even when a check below rejects the update. When the set is empty
+    // this tears the children down, so that in-flight picks stop resolving to endpoints the
+    // resolver has retracted.
     List<EquivalentAddressGroup> endpoints = resolvedAddresses.getAddresses();
     endpointMap.updateEndpoints(endpoints, resolvedAddresses.getAttributes());
 
