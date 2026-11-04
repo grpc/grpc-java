@@ -28,14 +28,12 @@ import com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.ClientCallStreamObserver;
-import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ClientResponseObserver;
 import java.util.ArrayList;
 import java.util.List;
@@ -88,7 +86,7 @@ final class AutoshardingClient {
   private final Stopwatch retryStopwatch;
   private final AssignmentWatcher watcher;
   private final String clientUuid;
-  private final Channel channel;
+  private final AutoshardingServiceGrpc.AutoshardingServiceStub stub;
   private final String target;
   private final long initialAssignmentTimeoutNanos;
 
@@ -144,7 +142,10 @@ final class AutoshardingClient {
     this.timerService = checkNotNull(timerService, "timerService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.retryStopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
-    this.channel = checkNotNull(channel, "channel");
+    // wait_for_ready keeps the stream pending through transient connectivity failures instead
+    // of failing it, which recovers faster than applying backoff around stream creation.
+    this.stub =
+        AutoshardingServiceGrpc.newStub(checkNotNull(channel, "channel")).withWaitForReady();
     this.target = checkNotNull(target, "target");
     this.initialAssignmentTimeoutNanos = initialAssignmentTimeoutNanos;
     this.watcher = checkNotNull(watcher, "watcher");
@@ -272,10 +273,12 @@ final class AutoshardingClient {
         syncContext.schedule(this::startStream, delayNanos, TimeUnit.NANOSECONDS, timerService);
   }
 
-  /** A single {@code WatchShardingAssignment} stream. */
-  private final class AutoshardingStream
-      implements ClientResponseObserver<
-          WatchShardingAssignmentRequest, WatchShardingAssignmentResponse> {
+  /**
+   * A single {@code WatchShardingAssignment} stream. Everything here runs on the sync context:
+   * the stream's events arrive on gRPC threads at {@link ResponseObserver}, which hands each one
+   * over.
+   */
+  private final class AutoshardingStream {
 
     /**
      * Chunks received since the last {@code AssignmentMetadata}. A chunk's slices reference
@@ -285,9 +288,9 @@ final class AutoshardingClient {
     private final List<AssignmentChunk> bufferedChunks = new ArrayList<>();
 
     /**
-     * The sending half of the stream. {@link ClientCalls} invokes {@link #beforeStart} before it
-     * starts the call and before it returns, so this is set before {@link #start} can send and
-     * before this stream is reachable by anything else.
+     * The sending half of the stream. Set by {@link ResponseObserver#beforeStart}, which the stub
+     * invokes before it starts the call and before it returns, so this is set before
+     * {@link #start} can send and before this stream is reachable by anything else.
      */
     private ClientCallStreamObserver<WatchShardingAssignmentRequest> requestStream;
 
@@ -301,20 +304,8 @@ final class AutoshardingClient {
     private boolean receivedGoodAssignment;
     private boolean closed;
 
-    @Override
-    public void beforeStart(
-        ClientCallStreamObserver<WatchShardingAssignmentRequest> requestStream) {
-      this.requestStream = requestStream;
-    }
-
     void start() {
-      // wait_for_ready keeps the stream pending through transient connectivity failures instead
-      // of failing it, which recovers faster than applying backoff around stream creation.
-      ClientCalls.asyncBidiStreamingCall(
-          channel.newCall(
-              AutoshardingServiceGrpc.getWatchShardingAssignmentMethod(),
-              CallOptions.DEFAULT.withWaitForReady()),
-          this);
+      stub.watchShardingAssignment(new ResponseObserver());
       // The call is started inside the above, so the config cannot go out from beforeStart().
       sendInitialClientConfig();
     }
@@ -329,24 +320,6 @@ final class AutoshardingClient {
                       .setLatestGeneration(latestGeneration))
               .build();
       requestStream.onNext(request);
-    }
-
-    @Override
-    public void onNext(WatchShardingAssignmentResponse response) {
-      syncContext.execute(() -> handleResponse(response));
-    }
-
-    @Override
-    public void onError(Throwable t) {
-      syncContext.execute(() -> handleStreamClosed(Status.fromThrowable(t)));
-    }
-
-    @Override
-    public void onCompleted() {
-      syncContext.execute(
-          () ->
-              handleStreamClosed(
-                  Status.UNAVAILABLE.withDescription("autosharding stream closed by server")));
     }
 
     private void handleResponse(WatchShardingAssignmentResponse response) {
@@ -462,6 +435,36 @@ final class AutoshardingClient {
       closed = true;
       bufferedChunks.clear();
       requestStream.cancel(status.getDescription(), status.getCause());
+    }
+
+    /** Receives the stream's events on gRPC threads and hands each one to the sync context. */
+    private final class ResponseObserver
+        implements ClientResponseObserver<
+            WatchShardingAssignmentRequest, WatchShardingAssignmentResponse> {
+      @Override
+      public void beforeStart(
+          ClientCallStreamObserver<WatchShardingAssignmentRequest> requestStream) {
+        // Called from inside start(), so still on the sync context.
+        AutoshardingStream.this.requestStream = requestStream;
+      }
+
+      @Override
+      public void onNext(WatchShardingAssignmentResponse response) {
+        syncContext.execute(() -> handleResponse(response));
+      }
+
+      @Override
+      public void onError(Throwable t) {
+        syncContext.execute(() -> handleStreamClosed(Status.fromThrowable(t)));
+      }
+
+      @Override
+      public void onCompleted() {
+        syncContext.execute(
+            () ->
+                handleStreamClosed(
+                    Status.UNAVAILABLE.withDescription("autosharding stream closed by server")));
+      }
     }
   }
 

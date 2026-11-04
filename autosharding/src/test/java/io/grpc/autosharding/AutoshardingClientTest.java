@@ -29,7 +29,12 @@ import com.google.cloud.autosharding.v1.SliceAssignment;
 import com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest;
 import com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse;
 import com.google.protobuf.ByteString;
+import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
+import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -107,6 +112,29 @@ public class AutoshardingClientTest {
     assertThat(request.getInitialClientConfig().getTarget()).isEqualTo(TARGET);
     assertThat(request.getInitialClientConfig().getClientUuid()).isEqualTo(CLIENT_UUID);
     assertThat(request.getInitialClientConfig().getLatestGeneration()).isEqualTo(0);
+  }
+
+  @Test
+  public void start_opensTheStreamWaitForReady() throws Exception {
+    List<CallOptions> callOptions = new ArrayList<>();
+    Channel recordingChannel =
+        ClientInterceptors.intercept(
+            channel,
+            new ClientInterceptor() {
+              @Override
+              public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                  MethodDescriptor<ReqT, RespT> method, CallOptions options, Channel next) {
+                callOptions.add(options);
+                return next.newCall(method, options);
+              }
+            });
+
+    start(newClient(recordingChannel, TARGET));
+    takeRequest();
+
+    // A transient connectivity failure then leaves the stream pending instead of failing it.
+    assertThat(callOptions).hasSize(1);
+    assertThat(callOptions.get(0).isWaitForReady()).isTrue();
   }
 
   @Test
