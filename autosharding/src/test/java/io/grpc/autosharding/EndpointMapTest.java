@@ -435,6 +435,26 @@ public class EndpointMapTest {
     assertThat(childProvider.children).hasSize(childrenBefore);
   }
 
+  @Test
+  public void maybeWakeUpIdleEndpoint_aggregateIdle_doesNothing() {
+    setUpStates(IDLE, IDLE);
+
+    endpointMap.maybeWakeUpIdleEndpoint();
+
+    assertThat(childProvider.children).isEmpty();
+  }
+
+  @Test
+  public void maybeWakeUpIdleEndpoint_aggregateReady_doesNothing() {
+    setUpStates(READY, IDLE);
+    int childrenBefore = childProvider.children.size();
+
+    endpointMap.maybeWakeUpIdleEndpoint();
+
+    assertThat(childProvider.children).hasSize(childrenBefore);
+    assertThat(stateAt(1)).isEqualTo(IDLE);
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Shutdown
   // ---------------------------------------------------------------------------------------------

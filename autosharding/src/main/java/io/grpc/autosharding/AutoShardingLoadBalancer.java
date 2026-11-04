@@ -17,7 +17,6 @@
 package io.grpc.autosharding;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
@@ -281,7 +280,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
 
   @Override
   public void requestConnection() {
-    endpointMap.maybeWakeUpIdleEndpoint();
+    // Nothing to do: picks connect the endpoint they choose, and child and resolver updates wake
+    // one when needed.
   }
 
   @Override
@@ -486,23 +486,14 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
           new FixedResultPicker(PickResult.withError(assignmentOrError.getStatus())));
       return;
     }
-    ConnectivityState state = endpointMap.aggregateConnectivityState();
     helper.updateBalancingState(
-        state,
+        endpointMap.aggregateConnectivityState(),
         new AutoShardingPicker(
             sliceMap,
             endpointMap.toPickerEndpoints(),
             config.isFallbackEnabled(),
             config.getKeyHeader()));
-
-    // Nothing else will drive progress: this policy only connects in response to picks, so a
-    // CONNECTING or TRANSIENT_FAILURE aggregate could otherwise stick with no attempt in flight.
-    // The woken endpoint reports CONNECTING synchronously, re-entering publishPicker() once to
-    // publish the fresher picker; that pass finds an endpoint CONNECTING and wakes no one else.
-    // An all-IDLE aggregate is left alone, which is what keeps the policy lazy.
-    if (state == CONNECTING || state == TRANSIENT_FAILURE) {
-      endpointMap.maybeWakeUpIdleEndpoint();
-    }
+    endpointMap.maybeWakeUpIdleEndpoint();
   }
 
   @VisibleForTesting

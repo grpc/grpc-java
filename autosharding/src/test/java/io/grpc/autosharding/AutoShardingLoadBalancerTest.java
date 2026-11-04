@@ -1094,12 +1094,15 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void requestConnection_wakesUpAnIdleEndpoint() {
+  public void requestConnection_connectsNothing() throws Exception {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b");
 
     syncContext.execute(loadBalancer::requestConnection);
+    deliverAssignment(1, slice("", "a"));
+    syncContext.execute(loadBalancer::requestConnection);
 
-    assertThat(childProvider.children).hasSize(1);
+    // Connections are made by picks, and by the wake-up on child and resolver updates.
+    assertThat(childProvider.children).isEmpty();
   }
 
   @Test

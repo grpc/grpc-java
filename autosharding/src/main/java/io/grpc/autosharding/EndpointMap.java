@@ -272,15 +272,22 @@ final class EndpointMap {
   }
 
   /**
-   * Starts connecting on one IDLE endpoint, unless some endpoint is already CONNECTING or none
-   * is IDLE.
+   * Starts connecting on one IDLE endpoint if the aggregated state is CONNECTING or
+   * TRANSIENT_FAILURE and no endpoint is already CONNECTING; otherwise does nothing, so it can be
+   * called after every child state update and resolver update.
    *
-   * <p>Because this policy only connects in response to picks, an aggregated state of CONNECTING
-   * or TRANSIENT_FAILURE could otherwise persist with nothing in flight to resolve it. gRFC A119
-   * therefore has the policy nudge a single endpoint after every child state update and resolver
-   * update. Which endpoint is chosen does not matter; this picks the lowest-indexed IDLE one.
+   * <p>Because this policy only connects in response to picks, such an aggregated state could
+   * otherwise persist with nothing in flight to resolve it, so gRFC A119 has the policy nudge a
+   * single endpoint. An IDLE or READY aggregate is left alone, which keeps the policy lazy. Which
+   * endpoint is chosen does not matter; this picks the lowest-indexed IDLE one. It usually
+   * reports CONNECTING before this returns, so a call made from the resulting child state update
+   * wakes no one else.
    */
   void maybeWakeUpIdleEndpoint() {
+    ConnectivityState aggregate = aggregateConnectivityState();
+    if (aggregate != CONNECTING && aggregate != TRANSIENT_FAILURE) {
+      return;
+    }
     EndpointHolder firstIdle = null;
     for (EndpointHolder holder : holders) {
       if (holder.state == CONNECTING) {
