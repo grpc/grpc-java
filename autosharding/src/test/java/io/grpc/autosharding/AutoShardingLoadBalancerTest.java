@@ -391,13 +391,14 @@ public class AutoShardingLoadBalancerTest {
     reportReady("a");
 
     // The previous client was closed with the endpoints, and its assignment dropped.
-    assertThat(currentState).isEqualTo(READY);
+    assertThat(currentState).isEqualTo(IDLE);
     PickResult queued = pick("k");
     assertThat(queued.getStatus().isOk()).isTrue();
     assertThat(queued.getSubchannel()).isNull();
 
     deliverAssignment(1, slice("", "a"));
 
+    assertThat(currentState).isEqualTo(READY);
     assertThat(pickedHost(pick("k"))).isEqualTo("a");
   }
 
@@ -683,8 +684,8 @@ public class AutoShardingLoadBalancerTest {
   public void beforeFirstAssignment_queuesRpcs() {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b");
 
-    // The policy connects lazily, so it starts IDLE rather than CONNECTING. That also keeps a
-    // parent priority policy from failing over while the sharding service is still answering.
+    // Unlike CONNECTING, IDLE keeps a parent priority policy from failing over while the
+    // sharding service is still answering.
     assertThat(currentState).isEqualTo(IDLE);
     PickResult result = pick("anything");
     assertThat(result.getSubchannel()).isNull();
@@ -692,40 +693,38 @@ public class AutoShardingLoadBalancerTest {
   }
 
   @Test
-  public void beforeFirstAssignment_childStateChangesDoNotUnqueueRpcs() {
+  public void beforeFirstAssignment_endpointReady_staysIdleAndKeepsQueuing() {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a");
     activate("a");
     reportReady("a");
 
-    // The reported state follows the endpoints, but RPCs stay queued rather than being routed
-    // anywhere arbitrary while the sharding service has not answered.
-    assertThat(currentState).isEqualTo(READY);
+    // A READY state with a picker that only queues would misdescribe the policy.
+    assertThat(currentState).isEqualTo(IDLE);
     assertThat(pick("k").getSubchannel()).isNull();
   }
 
   @Test
-  public void beforeFirstAssignment_endpointsFailing_reportsTransientFailureButKeepsQueuing() {
+  public void beforeFirstAssignment_endpointsFailing_staysIdleAndKeepsQueuing() {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b");
 
     reportTransientFailure("a");
     reportTransientFailure("b");
 
-    assertThat(currentState).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(currentState).isEqualTo(IDLE);
     assertThat(pick("k").getSubchannel()).isNull();
     assertThat(pick("k").getStatus().isOk()).isTrue();
   }
 
   @Test
-  public void beforeFirstAssignment_endpointInTransientFailure_stillWakesUpAnIdleEndpoint() {
+  public void beforeFirstAssignment_endpointInTransientFailure_wakesNoOtherEndpoint() {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b", "c");
 
     reportTransientFailure("a");
 
-    // RPCs stay queued, but the endpoint aggregate is CONNECTING with nothing connecting, so
-    // one IDLE endpoint is nudged exactly as it would be outside the wait.
-    assertThat(currentState).isEqualTo(CONNECTING);
+    // The policy reports IDLE, not TRANSIENT_FAILURE, so there is nothing to recover from yet.
+    assertThat(currentState).isEqualTo(IDLE);
     assertThat(pick("k").getSubchannel()).isNull();
-    assertThat(childForHost("b").requestConnectionCount).isEqualTo(1);
+    assertThat(activatedHostnames()).containsExactly("a");
   }
 
   @Test
@@ -1208,16 +1207,17 @@ public class AutoShardingLoadBalancerTest {
   @Test
   public void nameResolutionError_whileAwaitingInitialAssignment_keepsQueueing() {
     deliverAddresses(config(CHANNEL_FACTORY_KEY, true), "a", "b");
-    // Not READY, so only the initial assignment wait can be holding these RPCs.
+    // The endpoints are neither READY nor IDLE, so only the initial assignment wait can be
+    // holding these RPCs.
     reportTransientFailure("a");
-    assertThat(currentState).isEqualTo(CONNECTING);
+    assertThat(currentState).isEqualTo(IDLE);
 
     syncContext.execute(
         () -> loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("boom")));
 
     // gRFC A119 holds RPCs until the initial assignment timer fires; a failed refresh of
     // endpoints we already have must not cut that short.
-    assertThat(currentState).isEqualTo(CONNECTING);
+    assertThat(currentState).isEqualTo(IDLE);
     assertThat(pick("k").getStatus().isOk()).isTrue();
     assertThat(pick("k").getSubchannel()).isNull();
   }

@@ -18,6 +18,7 @@ package io.grpc.autosharding;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -73,7 +74,7 @@ import javax.annotation.Nullable;
  *
  * <p>Each {@link AutoshardingClient} reports either valid assignments or, until it has reported
  * one, errors (including its initial assignment timer firing). Until the first report RPCs are
- * queued, while the reported connectivity state still follows the endpoints, starting at IDLE.
+ * queued and the policy reports IDLE, whatever state the endpoints are in.
  * After an error, RPCs either spread across every resolved endpoint or fail with that
  * error, depending on {@code enable_fallback}. A new client is created whenever the channel
  * factory key or the sharding target changes; whatever the previous client last reported keeps
@@ -471,27 +472,28 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     if (shutdown || config == null || resolverError != null) {
       return;
     }
-    ConnectivityState state = endpointMap.aggregateConnectivityState();
     if (assignmentOrError == null) {
-      // RPCs are queued, but the state still follows the endpoints, so the policy starts IDLE
-      // like any lazily-connecting one. Reporting CONNECTING instead would keep a parent
-      // priority policy's failover timer running while the sharding service answers.
-      helper.updateBalancingState(state, ASSIGNMENT_PENDING_PICKER);
-    } else if (!assignmentOrError.hasValue() && !config.isFallbackEnabled()) {
+      // RPCs are queued until a client reports, so the state is IDLE whatever the endpoints
+      // report. Reporting CONNECTING instead would keep a parent priority policy's failover
+      // timer running while the sharding service answers.
+      helper.updateBalancingState(IDLE, ASSIGNMENT_PENDING_PICKER);
+      return;
+    }
+    if (!assignmentOrError.hasValue() && !config.isFallbackEnabled()) {
       // No endpoint can be picked, so there is nothing to connect for either.
       helper.updateBalancingState(
           TRANSIENT_FAILURE,
           new FixedResultPicker(PickResult.withError(assignmentOrError.getStatus())));
       return;
-    } else {
-      helper.updateBalancingState(
-          state,
-          new AutoShardingPicker(
-              sliceMap,
-              endpointMap.toPickerEndpoints(),
-              config.isFallbackEnabled(),
-              config.getKeyHeader()));
     }
+    ConnectivityState state = endpointMap.aggregateConnectivityState();
+    helper.updateBalancingState(
+        state,
+        new AutoShardingPicker(
+            sliceMap,
+            endpointMap.toPickerEndpoints(),
+            config.isFallbackEnabled(),
+            config.getKeyHeader()));
 
     // Nothing else will drive progress: this policy only connects in response to picks, so a
     // CONNECTING or TRANSIENT_FAILURE aggregate could otherwise stick with no attempt in flight.
