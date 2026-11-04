@@ -205,8 +205,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     // rejected one, both are new.
     boolean channelFactoryKeyChanged =
         shardingConnection == null
-            || !config.channelFactoryKey.equals(newConfig.channelFactoryKey);
-    String target = resolveTarget(newConfig.autoshardingTarget, sharedLocality(endpoints));
+            || !config.getChannelFactoryKey().equals(newConfig.getChannelFactoryKey());
+    String target = resolveTarget(newConfig.getAutoshardingTarget(), sharedLocality(endpoints));
     boolean targetChanged =
         shardingConnection == null || !target.equals(shardingConnection.client.getTarget());
 
@@ -218,10 +218,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       ShardingConnection previous = shardingConnection;
       ChannelFactory.ChannelLease channelLease =
           channelFactoryKeyChanged
-              ? leaseChannel(factory, newConfig.channelFactoryKey)
+              ? leaseChannel(factory, newConfig.getChannelFactoryKey())
               : previous.channelLease;
       AutoshardingClient client =
-          startClient(channelLease.channel(), target, newConfig.initialAssignmentTimeoutNanos);
+          startClient(channelLease.channel(), target, newConfig.getInitialAssignmentTimeoutNanos());
       shardingConnection = new ShardingConnection(channelLease, client);
       if (previous != null) {
         previous.client.shutdown();
@@ -406,7 +406,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       logger.log(
           Level.WARNING,
           "No assignment from the sharding service; proceeding {0} fallback: {1}",
-          new Object[] {config != null && config.enableFallback ? "with" : "without", error});
+          new Object[] {config != null && config.isFallbackEnabled() ? "with" : "without", error});
       assignmentOrError = StatusOr.fromStatus(error);
       rebuildSliceMapAndPublish();
     }
@@ -474,7 +474,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       // like any lazily-connecting one. Reporting CONNECTING instead would keep a parent
       // priority policy's failover timer running while the sharding service answers.
       helper.updateBalancingState(state, ASSIGNMENT_PENDING_PICKER);
-    } else if (!assignmentOrError.hasValue() && !config.enableFallback) {
+    } else if (!assignmentOrError.hasValue() && !config.isFallbackEnabled()) {
       // No endpoint can be picked, so there is nothing to connect for either.
       helper.updateBalancingState(
           TRANSIENT_FAILURE,
@@ -484,7 +484,10 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
       helper.updateBalancingState(
           state,
           new AutoShardingPicker(
-              sliceMap, endpointMap.toPickerEndpoints(), config.enableFallback, config.keyHeader));
+              sliceMap,
+              endpointMap.toPickerEndpoints(),
+              config.isFallbackEnabled(),
+              config.getKeyHeader()));
     }
 
     // Nothing else will drive progress: this policy only connects in response to picks, so a

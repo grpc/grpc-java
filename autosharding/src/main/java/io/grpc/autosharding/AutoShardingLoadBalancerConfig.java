@@ -35,11 +35,11 @@ import java.util.concurrent.TimeUnit;
  */
 final class AutoShardingLoadBalancerConfig {
 
-  /** Default for {@link #initialAssignmentTimeoutNanos} when the field is unset. */
+  /** Default for {@link #getInitialAssignmentTimeoutNanos} when the field is unset. */
   static final long DEFAULT_INITIAL_ASSIGNMENT_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(60);
 
   /** Opaque key passed to the "Channel Factory" to reach the sharding service. */
-  final String channelFactoryKey;
+  private final String channelFactoryKey;
 
   /**
    * Identifies the assignments this client should receive.
@@ -48,18 +48,18 @@ final class AutoShardingLoadBalancerConfig {
    * before sending it to the sharding service, or with the empty string when no locality is
    * available.
    */
-  final String autoshardingTarget;
+  private final String autoshardingTarget;
 
   /** Request header holding the application-defined sharding key. */
-  final Metadata.Key<byte[]> keyHeader;
+  private final Metadata.Key<byte[]> keyHeader;
 
   /** Whether RPCs may fall back to the full set of resolved endpoints. */
-  final boolean enableFallback;
+  private final boolean enableFallback;
 
   /**
    * How long each new client waits for its first assignment before reporting an error.
    */
-  final long initialAssignmentTimeoutNanos;
+  private final long initialAssignmentTimeoutNanos;
 
   AutoShardingLoadBalancerConfig(
       String channelFactoryKey,
@@ -76,6 +76,26 @@ final class AutoShardingLoadBalancerConfig {
         initialAssignmentTimeoutNanos);
     this.enableFallback = enableFallback;
     this.initialAssignmentTimeoutNanos = initialAssignmentTimeoutNanos;
+  }
+
+  String getChannelFactoryKey() {
+    return channelFactoryKey;
+  }
+
+  String getAutoshardingTarget() {
+    return autoshardingTarget;
+  }
+
+  Metadata.Key<byte[]> getKeyHeader() {
+    return keyHeader;
+  }
+
+  boolean isFallbackEnabled() {
+    return enableFallback;
+  }
+
+  long getInitialAssignmentTimeoutNanos() {
+    return initialAssignmentTimeoutNanos;
   }
 
   @Override

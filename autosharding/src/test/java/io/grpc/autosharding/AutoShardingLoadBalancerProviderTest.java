@@ -85,11 +85,11 @@ public class AutoShardingLoadBalancerProviderTest {
                 + "\"initialAssignmentTimeout\": \"5.5s\""
                 + "}");
 
-    assertThat(config.channelFactoryKey).isEqualTo("shard-service");
-    assertThat(config.autoshardingTarget).isEqualTo("my-service/%s");
-    assertThat(config.keyHeader.name()).isEqualTo("x-shard-key");
-    assertThat(config.enableFallback).isTrue();
-    assertThat(config.initialAssignmentTimeoutNanos)
+    assertThat(config.getChannelFactoryKey()).isEqualTo("shard-service");
+    assertThat(config.getAutoshardingTarget()).isEqualTo("my-service/%s");
+    assertThat(config.getKeyHeader().name()).isEqualTo("x-shard-key");
+    assertThat(config.isFallbackEnabled()).isTrue();
+    assertThat(config.getInitialAssignmentTimeoutNanos())
         .isEqualTo(TimeUnit.MILLISECONDS.toNanos(5500));
   }
 
@@ -98,10 +98,10 @@ public class AutoShardingLoadBalancerProviderTest {
     AutoShardingLoadBalancerConfig config =
         parseSuccessfully(configJson("\"keyHeaderName\": \"x-shard-key\""));
 
-    assertThat(config.enableFallback).isFalse();
-    assertThat(config.initialAssignmentTimeoutNanos)
+    assertThat(config.isFallbackEnabled()).isFalse();
+    assertThat(config.getInitialAssignmentTimeoutNanos())
         .isEqualTo(AutoShardingLoadBalancerConfig.DEFAULT_INITIAL_ASSIGNMENT_TIMEOUT_NANOS);
-    assertThat(config.initialAssignmentTimeoutNanos).isEqualTo(TimeUnit.SECONDS.toNanos(60));
+    assertThat(config.getInitialAssignmentTimeoutNanos()).isEqualTo(TimeUnit.SECONDS.toNanos(60));
   }
 
   @Test
@@ -109,7 +109,7 @@ public class AutoShardingLoadBalancerProviderTest {
     AutoShardingLoadBalancerConfig config =
         parseSuccessfully(configJson("\"keyHeaderName\": \"x-shard-key-bin\""));
 
-    assertThat(config.keyHeader.name()).isEqualTo("x-shard-key-bin");
+    assertThat(config.getKeyHeader().name()).isEqualTo("x-shard-key-bin");
   }
 
   @Test
@@ -161,7 +161,7 @@ public class AutoShardingLoadBalancerProviderTest {
         parseSuccessfully(
             configJson("\"keyHeaderName\": \"x-shard-key\", \"initialAssignmentTimeout\": \"0s\""));
 
-    assertThat(config.initialAssignmentTimeoutNanos).isEqualTo(0);
+    assertThat(config.getInitialAssignmentTimeoutNanos()).isEqualTo(0);
   }
 
   @Test
