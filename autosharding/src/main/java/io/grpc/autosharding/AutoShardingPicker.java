@@ -158,7 +158,9 @@ final class AutoShardingPicker extends SubchannelPicker {
 
   @Override
   public PickResult pickSubchannel(PickSubchannelArgs args) {
-    byte[] key = args.getHeaders().get(keyHeader);
+    // The first value if the header was sent more than once; get() would return the last.
+    Iterable<byte[]> keys = args.getHeaders().getAll(keyHeader);
+    byte[] key = keys == null ? null : keys.iterator().next();
     if (key == null) {
       // wait-for-ready RPCs keep waiting for a picker
       // that can route them, and the others fail.

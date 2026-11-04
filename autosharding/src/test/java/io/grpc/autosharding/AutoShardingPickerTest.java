@@ -271,6 +271,33 @@ public class AutoShardingPickerTest {
   }
 
   @Test
+  public void pick_keyHeaderRepeated_routesByTheFirstValue() {
+    PickResult fromEndpoint0 = PickResult.withError(Status.UNAVAILABLE.withDescription("ep0"));
+    PickResult fromEndpoint1 = PickResult.withError(Status.UNAVAILABLE.withDescription("ep1"));
+    PickerEndpoint ep0 = new PickerEndpoint(
+        ConnectivityState.READY, new FakePicker(fromEndpoint0), NOOP_EXIT_IDLER);
+    PickerEndpoint ep1 = new PickerEndpoint(
+        ConnectivityState.READY, new FakePicker(fromEndpoint1), NOOP_EXIT_IDLER);
+    SliceEntry s0 = new SliceEntry(
+        "".getBytes(StandardCharsets.UTF_8), Collections.singletonList(0));
+    SliceEntry s1 = new SliceEntry(
+        "m".getBytes(StandardCharsets.UTF_8), Collections.singletonList(1));
+    AutoShardingPicker picker = new AutoShardingPicker(
+        new SliceMap(Arrays.asList(s0, s1), Arrays.asList(0, 1)),
+        Arrays.asList(ep0, ep1),
+        false,
+        AutoShardingPicker.createKeyHeader("x-slice-key"));
+
+    Metadata headers = new Metadata();
+    Metadata.Key<String> key = Metadata.Key.of("x-slice-key", Metadata.ASCII_STRING_MARSHALLER);
+    headers.put(key, "a");
+    headers.put(key, "z");
+
+    // The first value routes: "a" falls in the first slice, "z" in the second.
+    assertThat(picker.pickSubchannel(createArgs(headers))).isSameInstanceAs(fromEndpoint0);
+  }
+
+  @Test
   public void pick_missingKeyHeader_failsWithoutConnecting() {
     AtomicInteger connectCalls = new AtomicInteger(0);
     PickerEndpoint ep0 = new PickerEndpoint(
