@@ -156,8 +156,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       if (addresses.isEmpty()) {
         Status status = Status.UNAVAILABLE
             .withDescription("No usable endpoint from cluster: " + clusterName);
-        delegate.handleNameResolutionError(status);
-        return status;
+        return fail(status);
       }
       Object gracefulConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
           lbRegistry.getProvider(PRIORITY_POLICY_NAME),
@@ -223,6 +222,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   @CheckReturnValue // don't forget to return up the stack after the fail call
   private Status fail(Status error) {
     delegate.shutdown();
+    delegate = new GracefulSwitchLoadBalancer(cdsLbHelper);
     addBackendServicePickDetailsLabel = false;
     helper.updateBalancingState(
         TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
