@@ -584,11 +584,13 @@ public class AssignmentParserTest {
 
   @Test
   public void parse_startKeyLongerThan512Bytes_isDropped() {
+    @SuppressWarnings("InlineMeInliner") // String.repeat() requires Java 11
+    String tooLongKey = Strings.repeat("m", 513);
     AssignmentChunk chunk =
         AssignmentChunk.newBuilder()
             .addEndpoints(endpoint("host-a"))
             .addSliceAssignments(sliceAssignment("", "m", 0))
-            .addSliceAssignments(sliceAssignment(Strings.repeat("m", 513), null, 0))
+            .addSliceAssignments(sliceAssignment(tooLongKey, null, 0))
             .build();
 
     AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
@@ -601,10 +603,12 @@ public class AssignmentParserTest {
 
   @Test
   public void parse_endKeyLongerThan512Bytes_isDropped() {
+    @SuppressWarnings("InlineMeInliner") // String.repeat() requires Java 11
+    String tooLongKey = Strings.repeat("m", 513);
     AssignmentChunk chunk =
         AssignmentChunk.newBuilder()
             .addEndpoints(endpoint("host-a"))
-            .addSliceAssignments(sliceAssignment("", Strings.repeat("m", 513), 0))
+            .addSliceAssignments(sliceAssignment("", tooLongKey, 0))
             .build();
 
     AssignmentParser.Result result = AssignmentParser.parse(ImmutableList.of(chunk));
@@ -615,6 +619,7 @@ public class AssignmentParserTest {
 
   @Test
   public void parse_keysOf512Bytes_areKept() {
+    @SuppressWarnings("InlineMeInliner") // String.repeat() requires Java 11
     String key = Strings.repeat("m", 512);
     AssignmentChunk chunk =
         AssignmentChunk.newBuilder()
