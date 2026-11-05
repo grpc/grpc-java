@@ -22410,6 +22410,113 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  public void unaryCall_afterHalfClose_isUpstreamReadyReturnsFalse() throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          responseObserver.onNext("Hello " + request);
+          responseObserver.onCompleted();
+        }))
+        .build());
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .directExecutor()
+        .build().start());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> rawProxyCall =
+        interceptor.interceptCall(
+            METHOD_SAY_HELLO,
+            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+            dataPlaneChannel);
+    assertThat(rawProxyCall)
+        .isInstanceOf(ExternalProcessorClientInterceptor.DataPlaneClientCall.class);
+    ExternalProcessorClientInterceptor.DataPlaneClientCall<String, String> dataPlaneCall =
+        (ExternalProcessorClientInterceptor.DataPlaneClientCall<String, String>) rawProxyCall;
+
+    // Prior to half-close, isUpstreamReady() returns true for unary calls
+    assertThat(dataPlaneCall.isUpstreamReady()).isTrue();
+
+    final CountDownLatch clientDoneLatch = new CountDownLatch(1);
+    dataPlaneCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        clientDoneLatch.countDown();
+      }
+    }, new Metadata());
+
+    dataPlaneCall.request(1);
+    dataPlaneCall.sendMessage("ping");
+    dataPlaneCall.halfClose();
+
+    assertThat(clientDoneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // After the unary call has been half-closed, isUpstreamReady() must return false
+    assertThat(dataPlaneCall.isUpstreamReady()).isFalse();
+
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   public void unaryCall_whenUpstreamNotReady_messageAndHalfCloseForwardedImmediately()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();

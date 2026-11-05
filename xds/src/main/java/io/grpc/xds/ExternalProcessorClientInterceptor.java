@@ -273,7 +273,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
    * Handles the bidirectional stream with the External Processor.
    * Buffers the actual RPC start until the Ext Proc header response is received.
    */
-  private static class DataPlaneClientCall<ReqT, RespT>
+  static class DataPlaneClientCall<ReqT, RespT>
       extends SimpleForwardingClientCall<ReqT, RespT> {
 
     private final ExternalProcessorGrpc.ExternalProcessorStub stub;
@@ -934,7 +934,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       return observer != null && observer.isReady();
     }
 
-    private boolean isUpstreamReady() {
+    boolean isUpstreamReady() {
+      if (requestSideClosed.get()) {
+        return false;
+      }
       return method.getType().clientSendsOneMessage() || super.isReady();
     }
 
