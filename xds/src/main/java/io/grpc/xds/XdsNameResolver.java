@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.xds.client.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -1294,11 +1295,8 @@ final class XdsNameResolver extends NameResolver {
           ClientCall<InputStream, ?> rawCall,
           MethodDescriptor<ReqT, ?> method,
           ReqT message) {
+        checkState(!cancelCalled, "call was cancelled");
         if (aborted) {
-          return;
-        }
-        if (cancelCalled) {
-          rawCall.sendMessage(null);
           return;
         }
         ByteString byteString;
@@ -1331,13 +1329,13 @@ final class XdsNameResolver extends NameResolver {
 
       @Override
       public void cancel(@Nullable String message, @Nullable Throwable cause) {
-        aborted = false;
         cancelCalled = true;
         delegate().cancel(message, cause);
       }
 
       @Override
       public void halfClose() {
+        checkState(!cancelCalled, "call was cancelled");
         if (aborted) {
           return;
         }

@@ -997,30 +997,30 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @SuppressWarnings("unchecked")
     @Override
     public void sendMessage(ReqT message) {
+      checkState(!cancelCalled.get(), "call was cancelled");
       if (aborted.get()) {
         return;
       }
-      checkState(!cancelCalled.get(), "call was cancelled");
       if (requestSideClosed.get()) {
         // External processor already closed the request stream. Discard further messages.
         return;
       }
 
       if (passThroughMode.get()) {
-        super.sendMessage(message);
+        proceedWithSendMessage(message);
         return;
       }
 
       synchronized (streamLock) {
         if (passThroughMode.get()) {
-          super.sendMessage(message);
+          proceedWithSendMessage(message);
           return;
         }
 
         ExtProcStreamState state = extProcStreamState.get();
         if (state.isDraining() || state.isCompleted()) {
           if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
-            super.sendMessage(message);
+            proceedWithSendMessage(message);
             return;
           }
           try {
@@ -1033,7 +1033,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
 
         if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
-          super.sendMessage(message);
+          proceedWithSendMessage(message);
           return;
         }
 
@@ -1048,7 +1048,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     .build())
                 .build());
             bodyMessageSentToExtProc.set(true);
-            super.sendMessage((ReqT) new KnownLengthInputStream(bodyByteString));
+            proceedWithSendMessage((ReqT) new KnownLengthInputStream(bodyByteString));
           } else {
             if (downstreamToSidestreamWindow <= 0 || !pendingRequestBodyMessages.isEmpty()) {
               pendingRequestBodyMessages.add(bodyByteString);
@@ -1082,12 +1082,23 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         sendRequestBodyToExtProc(body);
       }
       if (pendingRequestBodyMessages.isEmpty() && pendingHalfClose.compareAndSet(true, false)) {
-        halfClose();
+        internalHalfClose();
       }
     }
 
+    private boolean isCancelledOrAborted() {
+      return cancelCalled.get() || aborted.get();
+    }
+
+    private void proceedWithSendMessage(ReqT message) {
+      if (isCancelledOrAborted()) {
+        return;
+      }
+      super.sendMessage(message);
+    }
+
     private void proceedWithHalfClose() {
-      if (aborted.get()) {
+      if (isCancelledOrAborted()) {
         return;
       }
       if (clientHalfCloseStartNanos > 0) {
@@ -1100,10 +1111,14 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void halfClose() {
-      if (aborted.get()) {
+      checkState(!cancelCalled.get(), "call was cancelled");
+      internalHalfClose();
+    }
+
+    private void internalHalfClose() {
+      if (isCancelledOrAborted()) {
         return;
       }
-      checkState(!cancelCalled.get(), "call was cancelled");
       if (appHalfClosed.compareAndSet(false, true)) {
         clientHalfCloseStartNanos = System.nanoTime();
       }
@@ -1173,17 +1188,14 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     void cancelDownstream(@Nullable String message, @Nullable Throwable cause) {
-      if (!cancelCalled.get()) {
-        aborted.set(true);
-      }
+      aborted.set(true);
       delayedCall.cancel(message, cause);
     }
 
     @Override
     public void cancel(@Nullable String message, @Nullable Throwable cause) {
-      cancelCalled.set(true);
-      aborted.set(false);
       synchronized (streamLock) {
+        cancelCalled.set(true);
         if (markExtProcStreamFailed(extProcStreamState)) {
           if (extProcClientCallRequestObserver != null) {
             extProcClientCallRequestObserver.onError(
@@ -1195,7 +1207,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           }
         }
       }
-      cancelDownstream(message, cause);
+      delayedCall.cancel(message, cause);
     }
 
     @SuppressWarnings("unchecked")
@@ -1220,7 +1232,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               }
             }
             if (sendImmediately) {
-              super.sendMessage((ReqT) new KnownLengthInputStream(body));
+              proceedWithSendMessage((ReqT) new KnownLengthInputStream(body));
               trySendAccumulatedWindowUpdates();
             }
           }
@@ -1338,7 +1350,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (body == null) {
           break;
         }
-        super.sendMessage((ReqT) new KnownLengthInputStream(body));
+        proceedWithSendMessage((ReqT) new KnownLengthInputStream(body));
         trySendAccumulatedWindowUpdates();
         if (triggerHalfClose) {
           if (requestSideClosed.compareAndSet(false, true)) {
@@ -1421,9 +1433,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
 
         if (isMutated) {
-          super.sendMessage((ReqT) new KnownLengthInputStream((ByteString) msg));
+          proceedWithSendMessage((ReqT) new KnownLengthInputStream((ByteString) msg));
         } else {
-          super.sendMessage((ReqT) msg);
+          proceedWithSendMessage((ReqT) msg);
         }
       }
     }
