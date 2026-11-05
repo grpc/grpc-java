@@ -397,6 +397,10 @@ public final class Http2 implements Variant {
     @Override public synchronized void ackSettings(io.grpc.okhttp.internal.framed.Settings peerSettings) throws IOException {
       if (closed) throw new IOException("closed");
       this.maxFrameSize = peerSettings.getMaxFrameSize(maxFrameSize);
+      int headerTableSize = peerSettings.getHeaderTableSize();
+      if (headerTableSize >= 0) {
+        hpackWriter.resizeHeaderTable(headerTableSize);
+      }
       int length = 0;
       byte type = TYPE_SETTINGS;
       byte flags = FLAG_ACK;

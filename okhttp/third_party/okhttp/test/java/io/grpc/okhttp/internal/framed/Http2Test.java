@@ -26,8 +26,10 @@ import static org.mockito.Mockito.verify;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 import okio.Buffer;
 import okio.BufferedSink;
+import okio.ByteString;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -73,6 +75,46 @@ public class Http2Test {
 
     verify(mockHandler).data(eq(false), eq(STREAM_ID), eq(bufferIn), eq(2037 - 126), eq(2037));
     assertEquals(2037 - 125, bufferIn.size());
+  }
+
+  @Test
+  public void writerAckSettingsResizesHpackWriter() throws IOException {
+    Buffer sink = new Buffer();
+    Http2.Writer writer = new Http2.Writer(sink, true);
+
+    // Peer sends SETTINGS_HEADER_TABLE_SIZE = 2048
+    Settings peerSettings = new Settings();
+    peerSettings.set(Settings.HEADER_TABLE_SIZE, 0, 2048);
+
+    writer.ackSettings(peerSettings);
+
+    // Verify ACK frame is written (9 bytes)
+    ByteString expectedAck = ByteString.decodeHex("000000040100000000");
+    assertEquals(expectedAck, sink.readByteString());
+
+    // Write headers to trigger dynamic table size update
+    List<Header> headers = Arrays.asList(new Header("foo", "bar"));
+    writer.headers(STREAM_ID, headers);
+
+    // Read back the HEADERS frame and verify it has the dynamic table size update
+    Buffer buffer = sink;
+    int length = ((buffer.readByte() & 0xff) << 16)
+        | ((buffer.readByte() & 0xff) << 8)
+        | (buffer.readByte() & 0xff);
+    int type = buffer.readByte() & 0xff;
+    int flags = buffer.readByte() & 0xff;
+    int streamId = buffer.readInt() & 0x7fffffff;
+
+    assertEquals(Http2.TYPE_HEADERS, type);
+    assertEquals(12, length);
+    assertEquals(Http2.FLAG_END_HEADERS, flags);
+    assertEquals(STREAM_ID, streamId);
+
+    // Verify first bytes of payload are the dynamic table size update (2048)
+    // In HPACK, table size 2048 update is 0x3F, 0xE1, 0x0F
+    assertEquals(0x3F, buffer.readByte() & 0xff);
+    assertEquals(0xE1, buffer.readByte() & 0xff);
+    assertEquals(0x0F, buffer.readByte() & 0xff);
   }
 
   private Buffer createData(int flag, int length, int paddingLength) throws IOException {
