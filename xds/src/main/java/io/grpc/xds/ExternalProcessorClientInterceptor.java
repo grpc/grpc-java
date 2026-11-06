@@ -1218,15 +1218,15 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               == ProcessingMode.HeaderSendMode.DEFAULT;
 
 
-      if (dataPlaneClientCall.responseDraining.get() && sendResponseHeaders) {
-        this.savedHeaders = headers;
-        return;
-      }
-
       if (dataPlaneClientCall.responseDrainComplete.get() 
           || dataPlaneClientCall.getExtProcStreamState().get().isCompleted() 
           || !sendResponseHeaders) {
         proceedWithHeaders(headers);
+        return;
+      }
+
+      if (dataPlaneClientCall.responseDraining.get()) {
+        this.savedHeaders = headers;
         return;
       }
 
@@ -1407,7 +1407,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     void unblockAfterStreamComplete() {
       proceedWithHeaders();
       proceedWithSavedMessages();
+      dataPlaneClientCall.responseDraining.set(false);
       dataPlaneClientCall.drainPendingDrainingMessages();
+      dataPlaneClientCall.requestDraining.set(false);
       onReadyNotify();
       proceedWithClose();
     }
