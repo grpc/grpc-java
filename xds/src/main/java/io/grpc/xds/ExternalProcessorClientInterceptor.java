@@ -512,32 +512,28 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               }
             }
 
-            if (response.getRequestDrainRequests()) {
-              if (!requestEosSent.get()) {
-                if (requestDraining.compareAndSet(false, true)) {
-                  activateCall();
-                  sendToExtProc(ProcessingRequest.newBuilder()
-                      .setRequestBody(HttpBody.newBuilder()
-                          .setDrainComplete(true)
-                          .build())
-                      .build());
-                }
-              } else {
-                requestDrainComplete.set(true);
+            if (response.getRequestDrainRequests()
+                && currentProcessingMode.getRequestBodyMode()
+                    == ProcessingMode.BodySendMode.GRPC) {
+              if (!requestEosSent.get() && requestDraining.compareAndSet(false, true)) {
+                activateCall();
+                sendToExtProc(ProcessingRequest.newBuilder()
+                    .setRequestBody(HttpBody.newBuilder()
+                        .setDrainComplete(true)
+                        .build())
+                    .build());
               }
             }
-            if (response.getRequestDrainResponses()) {
-              if (!responseTrailersSent.get()) {
-                if (responseDraining.compareAndSet(false, true)) {
-                  activateCall();
-                  sendToExtProc(ProcessingRequest.newBuilder()
-                      .setResponseBody(HttpBody.newBuilder()
-                          .setDrainComplete(true)
-                          .build())
-                      .build());
-                }
-              } else {
-                responseDrainComplete.set(true);
+            if (response.getRequestDrainResponses()
+                && currentProcessingMode.getResponseBodyMode()
+                    == ProcessingMode.BodySendMode.GRPC) {
+              if (!responseTrailersSent.get() && responseDraining.compareAndSet(false, true)) {
+                activateCall();
+                sendToExtProc(ProcessingRequest.newBuilder()
+                    .setResponseBody(HttpBody.newBuilder()
+                        .setDrainComplete(true)
+                        .build())
+                    .build());
               }
             }
 
@@ -642,10 +638,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
                     && !responseDrainComplete.get()
                     && !responseTrailersSent.get();
-            boolean drained =
-                (requestDrainComplete.get() || responseDrainComplete.get())
-                    && !requestDrainRequired
-                    && !responseDrainRequired;
+            boolean drained = !requestDrainRequired && !responseDrainRequired;
             if (config.getObservabilityMode() || drained) {
               if (markExtProcStreamCompleted(extProcStreamState)) {
                 synchronized (streamLock) {
