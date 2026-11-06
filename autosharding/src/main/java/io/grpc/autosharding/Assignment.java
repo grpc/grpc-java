@@ -48,11 +48,14 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 final class Assignment {
 
-  /** A single contiguous key range and the endpoints assigned to it. */
+  /**
+   * A single contiguous key range and the endpoints assigned to it. Its key arrays are shared
+   * rather than copied, and must not be modified.
+   */
   @Immutable
-  @SuppressWarnings("Immutable") // Defensive copies are made; arrays are never mutated.
+  @SuppressWarnings("Immutable") // The key arrays are never modified.
   static final class Slice {
-    /** Orders slices by start key, compared as unsigned bytes, without copying the keys. */
+    /** Orders slices by start key, compared as unsigned bytes. */
     static final Comparator<Slice> START_KEY_ORDER =
         (a, b) -> UnsignedBytes.lexicographicalComparator().compare(a.startKey, b.startKey);
 
@@ -84,19 +87,19 @@ final class Assignment {
         @Nullable byte[] endKey,
         List<Integer> endpoints,
         boolean fallbackDisabled) {
-      this.startKey = checkNotNull(startKey, "startKey").clone();
-      this.endKey = endKey == null ? null : endKey.clone();
+      this.startKey = checkNotNull(startKey, "startKey");
+      this.endKey = endKey;
       this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
       this.fallbackDisabled = fallbackDisabled;
     }
 
     byte[] getStartKey() {
-      return startKey.clone();
+      return startKey;
     }
 
     @Nullable
     byte[] getEndKey() {
-      return endKey == null ? null : endKey.clone();
+      return endKey;
     }
 
     ImmutableList<Integer> getEndpoints() {

@@ -227,7 +227,6 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
     }
     // The slice map indexes into the endpoints, so it is rebuilt with them.
     sliceMap = buildSliceMap();
-
     publishPicker();
     return Status.OK;
   }

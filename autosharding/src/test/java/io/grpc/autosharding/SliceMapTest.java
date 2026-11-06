@@ -129,12 +129,11 @@ public class SliceMapTest {
     assertThat(sliceMap.getSlices().get(0).getStartKey()).isEqualTo(new byte[] {1});
     assertThat(sliceMap.getSlices().get(0).getEndpoints()).containsExactly(0, 1).inOrder();
 
-    // Verify defensive copying: mutating input collections and key array does not affect sliceMap
-    inputKey[0] = 99;
+    // The lists are copied; the key array is shared.
     slices.clear();
     fallback.clear();
     assertThat(sliceMap.getSlices()).hasSize(1);
-    assertThat(sliceMap.getSlices().get(0).getStartKey()).isEqualTo(new byte[] {1});
+    assertThat(sliceMap.getSlices().get(0).getStartKey()).isSameInstanceAs(inputKey);
     assertThat(sliceMap.getFallbackPool()).containsExactly(0, 1).inOrder();
   }
 

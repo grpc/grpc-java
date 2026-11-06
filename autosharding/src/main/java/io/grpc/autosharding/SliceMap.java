@@ -52,7 +52,8 @@ import javax.annotation.Nullable;
 final class SliceMap {
 
   /**
-   * Represents a single key-range slice mapping to endpoint indices in the picker.
+   * Represents a single key-range slice mapping to endpoint indices in the picker. Its start key
+   * array is shared rather than copied, and must not be modified.
    */
   static final class SliceEntry {
     private final byte[] startKey;
@@ -76,7 +77,7 @@ final class SliceMap {
      *     when the server assigned the slice no endpoints
      */
     SliceEntry(byte[] startKey, List<Integer> endpoints, boolean fallbackDisabled) {
-      this.startKey = checkNotNull(startKey, "startKey").clone();
+      this.startKey = checkNotNull(startKey, "startKey");
       this.endpoints = ImmutableList.copyOf(checkNotNull(endpoints, "endpoints"));
       this.fallbackDisabled = fallbackDisabled;
     }

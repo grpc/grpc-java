@@ -669,17 +669,14 @@ public class AssignmentParserTest {
   }
 
   @Test
-  public void slice_mutatingReturnedKeys_doesNotAffectTheSlice() {
-    Assignment.Slice slice =
-        new Assignment.Slice(
-            "a".getBytes(StandardCharsets.UTF_8),
-            "m".getBytes(StandardCharsets.UTF_8),
-            ImmutableList.of());
+  public void slice_sharesItsKeyArrays() {
+    byte[] startKey = "a".getBytes(StandardCharsets.UTF_8);
+    byte[] endKey = "m".getBytes(StandardCharsets.UTF_8);
 
-    slice.getStartKey()[0] = 'x';
-    slice.getEndKey()[0] = 'y';
+    Assignment.Slice slice = new Assignment.Slice(startKey, endKey, ImmutableList.of());
 
-    assertSlice(slice, "a", "m");
+    assertThat(slice.getStartKey()).isSameInstanceAs(startKey);
+    assertThat(slice.getEndKey()).isSameInstanceAs(endKey);
   }
 
   /** Parses chunks whose only problem is gaps, which are filled and reported but accepted. */
