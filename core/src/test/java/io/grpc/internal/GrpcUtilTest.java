@@ -203,6 +203,12 @@ public class GrpcUtilTest {
   }
 
   @Test
+  public void authorityFromHostAndPort_succeedsOnHostStartingWithDigit() {
+    String actual = GrpcUtil.authorityFromHostAndPort("otlp.1234-k8s-namespace", 4317);
+    assertEquals("otlp.1234-k8s-namespace:4317", actual);
+  }
+
+  @Test
   public void checkAuthority_succeedsOnHostAndPort() {
     String actual = GrpcUtil.checkAuthority("valid:1234");
 

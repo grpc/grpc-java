@@ -70,6 +70,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
@@ -79,6 +80,20 @@ import javax.annotation.concurrent.Immutable;
 public final class GrpcUtil {
 
   private static final Logger log = Logger.getLogger(GrpcUtil.class.getName());
+
+  private static final Pattern VALID_DNS_HOST_PATTERN =
+      Pattern.compile("^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?"
+          + "(\\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$");
+
+  static boolean isValidHost(String host) {
+    if (host == null || host.isEmpty()) {
+      return false;
+    }
+    if (host.startsWith("[") && host.endsWith("]")) {
+      return true;
+    }
+    return VALID_DNS_HOST_PATTERN.matcher(host).matches();
+  }
 
   private static final Set<Status.Code> INAPPROPRIATE_CONTROL_PLANE_STATUS
       = Collections.unmodifiableSet(EnumSet.of(
@@ -547,7 +562,19 @@ public final class GrpcUtil {
     try {
       return new URI(null, null, host, port, null, null, null).getAuthority();
     } catch (URISyntaxException ex) {
-      throw new IllegalArgumentException("Invalid host or port: " + host + " " + port, ex);
+      // JDK-8188305: java.net.URI rejects valid RFC 1123 hostnames whose last label starts with
+      // a digit (e.g. otlp.1234-k8s-namespace). Fall back to manual combination and checkAuthority.
+      if (!isValidHost(host)) {
+        throw new IllegalArgumentException("Invalid host or port: " + host + " " + port, ex);
+      }
+      String formattedHost =
+          (host.contains(":") && !host.startsWith("[")) ? "[" + host + "]" : host;
+      String authority = formattedHost + ":" + port;
+      try {
+        return checkAuthority(authority);
+      } catch (IllegalArgumentException e) {
+        throw new IllegalArgumentException("Invalid host or port: " + host + " " + port, ex);
+      }
     }
   }
 
