@@ -55,6 +55,14 @@ public final class AuthorizationUtilTest {
     assertThat(status.getDescription()).endsWith("not authorized");
   }
 
+  @Test
+  public void altsAuthorizationCheck_ignoresCase() throws Exception {
+    Status status =
+        AuthorizationUtil.clientAuthorizationCheck(
+            new FakeServerCall("alice"), Lists.newArrayList("ALICE", "Bob"));
+    assertThat(status.getCode()).isEqualTo(Status.Code.OK);
+  }
+
   private static class FakeServerCall extends ServerCall<String, String> {
     final Attributes attrs;
 
