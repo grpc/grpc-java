@@ -310,7 +310,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         new AtomicReference<>(DataPlaneCallState.IDLE);
     final AtomicReference<ExtProcStreamState> extProcStreamState =
         new AtomicReference<>(ExtProcStreamState.ACTIVE);
-    final AtomicBoolean passThroughMode = new AtomicBoolean(false);
+    final AtomicBoolean outboundPassThroughMode = new AtomicBoolean(false);
     final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
     final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
     final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
@@ -812,7 +812,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public boolean isReady() {
-      if (passThroughMode.get()) {
+      if (outboundPassThroughMode.get()) {
         return super.isReady();
       }
       if (extProcStreamState.get().isCompleted()) {
@@ -830,7 +830,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void request(int numMessages) {
-      if (passThroughMode.get() || extProcStreamState.get().isCompleted()) {
+      if (responseDrainComplete.get() || extProcStreamState.get().isCompleted()) {
         super.request(numMessages);
         return;
       }
@@ -857,13 +857,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      if (passThroughMode.get()) {
+      if (outboundPassThroughMode.get()) {
         super.sendMessage(message);
         return;
       }
 
       synchronized (streamLock) {
-        if (passThroughMode.get()) {
+        if (outboundPassThroughMode.get()) {
           super.sendMessage(message);
           return;
         }
@@ -920,7 +920,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @Override
     public void halfClose() {
       clientHalfCloseStartNanos = System.nanoTime();
-      if (passThroughMode.get()) {
+      if (outboundPassThroughMode.get()) {
         if (requestSideClosed.compareAndSet(false, true)) {
           proceedWithHalfClose();
         }
@@ -928,7 +928,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
 
       synchronized (streamLock) {
-        if (passThroughMode.get()) {
+        if (outboundPassThroughMode.get()) {
           if (requestSideClosed.compareAndSet(false, true)) {
             proceedWithHalfClose();
           }
@@ -1071,7 +1071,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         while ((msg = pendingDrainingMessages.poll()) != null) {
           super.sendMessage(msg);
         }
-        passThroughMode.set(true);
+        outboundPassThroughMode.set(true);
         if (pendingHalfClose.get()) {
           if (requestSideClosed.compareAndSet(false, true)) {
             proceedWithHalfClose();
@@ -1144,10 +1144,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     ProcessingMode getCurrentProcessingMode() {
       return currentProcessingMode;
-    }
-
-    AtomicBoolean getPassThroughMode() {
-      return passThroughMode;
     }
 
     ExternalProcessorFilterConfig getConfig() {
@@ -1227,7 +1223,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      if (dataPlaneClientCall.getPassThroughMode().get() 
+      if (dataPlaneClientCall.responseDrainComplete.get() 
           || dataPlaneClientCall.getExtProcStreamState().get().isCompleted() 
           || !sendResponseHeaders) {
         proceedWithHeaders(headers);
@@ -1268,11 +1264,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           }
           return;
         }
-      }
-
-      if (dataPlaneClientCall.getPassThroughMode().get()) {
-        dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
-        return;
       }
 
       if (dataPlaneClientCall.getExtProcStreamState().get().isCompleted()
@@ -1319,7 +1310,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
         return;
       }
-      if (dataPlaneClientCall.getPassThroughMode().get()) {
+      if (extProcStreamState.isCompleted()) {
         if (markDataPlaneCallClosed(dataPlaneClientCall.dataPlaneCallState)) {
           proceedWithClose(status, trailers);
         }
