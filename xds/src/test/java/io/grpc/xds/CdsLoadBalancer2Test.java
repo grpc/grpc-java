@@ -349,7 +349,7 @@ public class CdsLoadBalancer2Test {
             new XdsConfig.XdsClusterConfig.EndpointConfig(endpointConfig.getEndpoint()))))
         .build();
 
-    Status status = loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(Collections.emptyList())
         .setAttributes(Attributes.newBuilder()
             .set(XdsAttributes.XDS_CONFIG, strippedConfig)
@@ -358,8 +358,12 @@ public class CdsLoadBalancer2Test {
         .setLoadBalancingPolicyConfig(new CdsConfig(CLUSTER))
         .build());
 
-    assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(status.getDescription()).isEqualTo("No usable endpoint from cluster: " + CLUSTER);
+    // An empty address list fails the cluster via the picker (see CdsLoadBalancer2.fail()).
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertPickerStatus(pickerCaptor.getValue(), Status.UNAVAILABLE
+        .withDescription("No usable endpoint from cluster: " + CLUSTER));
+    assertThat(childBalancers).isEmpty();
   }
 
   private static ClusterLoadAssignment edsWithLeds(String collectionName) {
