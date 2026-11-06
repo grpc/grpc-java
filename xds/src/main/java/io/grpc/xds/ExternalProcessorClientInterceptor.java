@@ -730,7 +730,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void drainPendingRequests() {
-      if (!isResponseSidecarReady()) {
+      if (!isResponseSidecarCompletedOrReady()) {
         return;
       }
       int toRequest = pendingRequests.getAndSet(0);
@@ -778,9 +778,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       wrappedListener.onReadyNotify();
     }
 
-    private boolean isRequestSidecarReady() {
+    private boolean isRequestSidecarCompletedOrReady() {
       ExtProcStreamState state = extProcStreamState.get();
-      if (state.isCompleted()) {
+      // requestDraining being false only means it is not currently draining; if draining in this
+      // direction has already completed, the sidecar will not be used again for requests.
+      if (state.isCompleted() || requestDrainComplete.get()) {
         return true;
       }
       if (requestDraining.get()) {
@@ -792,9 +794,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
-    private boolean isResponseSidecarReady() {
+    private boolean isResponseSidecarCompletedOrReady() {
       ExtProcStreamState state = extProcStreamState.get();
-      if (state.isCompleted()) {
+      // responseDraining being false only means it is not currently draining; if draining in this
+      // direction has already completed, the sidecar will not be used again for responses.
+      if (state.isCompleted() || responseDrainComplete.get()) {
         return true;
       }
       if (responseDraining.get()) {
@@ -817,7 +821,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (dataPlaneCallState.get() == DataPlaneCallState.IDLE && !config.getObservabilityMode()) {
         return false;
       }
-      boolean sidecarReady = isRequestSidecarReady();
+      boolean sidecarReady = isRequestSidecarCompletedOrReady();
       if (config.getObservabilityMode()) {
         return super.isReady() && sidecarReady;
       }
@@ -839,7 +843,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         pendingRequests.addAndGet(numMessages);
         return;
       }
-      if (!isResponseSidecarReady()) {
+      if (!isResponseSidecarCompletedOrReady()) {
         pendingRequests.addAndGet(numMessages);
         return;
       }
@@ -1077,20 +1081,24 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void handleRequestDrainComplete() {
-      if (requestDraining.compareAndSet(true, false)) {
-        requestDrainComplete.set(true);
-        drainPendingDrainingMessages();
-        if (wrappedListener != null) {
-          wrappedListener.onReadyNotify();
+      synchronized (streamLock) {
+        if (!requestDraining.get()) {
+          return;
         }
+        drainPendingDrainingMessages();
+        requestDrainComplete.set(true);
+        requestDraining.set(false);
+      }
+      if (wrappedListener != null) {
+        wrappedListener.onReadyNotify();
       }
     }
 
     private void handleResponseDrainComplete() {
-      if (responseDraining.compareAndSet(true, false)) {
-        responseDrainComplete.set(true);
-        wrappedListener.unblockAfterResponseDrain();
+      if (!responseDraining.get()) {
+        return;
       }
+      wrappedListener.unblockAfterResponseDrain();
     }
 
     private void handleFailOpen(DataPlaneListener listener) {
@@ -1415,10 +1423,17 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     void unblockAfterResponseDrain() {
       synchronized (savedMessages) {
-        inboundPassThrough = true;
+        if (!dataPlaneClientCall.responseDraining.get()) {
+          return;
+        }
+        if (savedHeaders != null) {
+          proceedWithHeaders(savedHeaders);
+          savedHeaders = null;
+        }
+        proceedWithSavedMessages();
+        dataPlaneClientCall.responseDrainComplete.set(true);
+        dataPlaneClientCall.responseDraining.set(false);
       }
-      proceedWithHeaders();
-      proceedWithSavedMessages();
       dataPlaneClientCall.drainPendingRequests();
       proceedWithClose();
     }
