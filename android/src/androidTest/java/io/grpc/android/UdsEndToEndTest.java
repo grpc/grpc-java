@@ -17,11 +17,21 @@
 package io.grpc.android;
 
 import static com.google.common.truth.Truth.assertThat;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertThrows;
 
+import android.content.Context;
+import android.net.LocalSocket;
+import android.net.LocalSocketAddress;
 import android.net.LocalSocketAddress.Namespace;
+import android.os.Process;
+import android.system.Os;
+import android.system.OsConstants;
+import android.system.StructStat;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import com.google.common.io.Files;
 import io.grpc.CallOptions;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
@@ -47,6 +57,7 @@ import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import java.io.File;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
@@ -72,18 +83,33 @@ public final class UdsEndToEndTest {
           .setResponseMarshaller(StringMarshaller.INSTANCE)
           .build();
 
-  private static final ServerServiceDefinition ECHO_SERVICE =
-      ServerServiceDefinition.builder("test.Echo")
-          .addMethod(
-              ECHO_METHOD,
-              ServerCalls.asyncUnaryCall(
-                  (String request, StreamObserver<String> responseObserver) -> {
-                    responseObserver.onNext("echo: " + request);
-                    responseObserver.onCompleted();
-                  }))
-          .build();
+  private static final ServerServiceDefinition ECHO_SERVICE = echoService("echo");
+
+  private static ServerServiceDefinition echoService(String prefix) {
+    return ServerServiceDefinition.builder("test.Echo")
+        .addMethod(
+            ECHO_METHOD,
+            ServerCalls.asyncUnaryCall(
+                (String request, StreamObserver<String> responseObserver) -> {
+                  responseObserver.onNext(prefix + ": " + request);
+                  responseObserver.onCompleted();
+                }))
+        .build();
+  }
 
   @Rule public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+
+  private final Context appContext = ApplicationProvider.getApplicationContext();
+
+  @Test
+  public void unaryRpc_filesystemSocket_echoesRequest() throws Exception {
+    File socketFile = newSocketFile();
+    Server server = startFileServer(socketFile);
+    ManagedChannel channel = newFileChannel(socketFile);
+
+    assertThat(server.getListenSockets()).containsExactly(UdsSocketAddress.forFile(socketFile));
+    assertThat(echo(channel, "hello")).isEqualTo("echo: hello");
+  }
 
   @Test
   public void getListenSockets_returnsAbstractListenAddress() throws Exception {
@@ -91,6 +117,30 @@ public final class UdsEndToEndTest {
     Server server = startAbstractServer(name);
 
     assertThat(server.getListenSockets()).containsExactly(UdsSocketAddress.forAbstractName(name));
+  }
+
+  @Test
+  public void filesystemSocket_isOwnedByThisUidWithMode0600InPrivateDir() throws Exception {
+    // Single-uid proxy for kernel access control: connect() requires write on the socket (0600) and
+    // search on every ancestor, and replacing the socket requires write on files/ (not
+    // world-writable). files/ itself is 0771 on API 24/26/33, so the 0700 app data dir is what
+    // blocks traversal by other uids.
+    File socketFile = newSocketFile();
+    startFileServer(socketFile);
+
+    StructStat socketStat = Os.stat(socketFile.getAbsolutePath());
+    assertThat(OsConstants.S_ISSOCK(socketStat.st_mode)).isTrue();
+    assertThat(Integer.toOctalString(socketStat.st_mode & 0777)).isEqualTo("600");
+    assertThat(socketStat.st_uid).isEqualTo(Process.myUid());
+    StructStat filesDirStat = Os.stat(socketFile.getParent());
+    assertThat(filesDirStat.st_uid).isEqualTo(Process.myUid());
+    assertThat(filesDirStat.st_mode & OsConstants.S_IWOTH).isEqualTo(0);
+
+    // Platform-assumption canary: installd creates the app data dir with mode 0700 only when
+    // targetSdkVersion >= 24 (0751 for older targets).
+    StructStat dataDirStat = Os.stat(appContext.getDataDir().getPath());
+    assertThat(dataDirStat.st_uid).isEqualTo(Process.myUid());
+    assertThat(Integer.toOctalString(dataDirStat.st_mode & 0777)).isEqualTo("700");
   }
 
   @Test
@@ -131,6 +181,17 @@ public final class UdsEndToEndTest {
                 /* maxPageSize= */ 2);
     assertThat(serverSockets.sockets).hasSize(2);
     assertThat(serverSockets.end).isTrue();
+  }
+
+  @Test
+  public void shutdown_unblocksAcceptAndUnlinksFilesystemSocket() throws Exception {
+    File socketFile = newSocketFile();
+    Server server = startFileServer(socketFile);
+    assertThat(echo(newFileChannel(socketFile), "hi")).isEqualTo("echo: hi");
+
+    server.shutdown();
+    assertThat(server.awaitTermination(10, SECONDS)).isTrue();
+    assertThat(socketFile.exists()).isFalse();
   }
 
   @Test
@@ -180,6 +241,68 @@ public final class UdsEndToEndTest {
 
     Server duplicate = grpcCleanup.register(newAbstractServerBuilder(name).build());
     assertThrows(IOException.class, duplicate::start);
+  }
+
+  @Test
+  public void start_staleSocketFileAtSocketPath_isReplaced() throws Exception {
+    // Simulates the socket file left behind when a previous process was killed without cleanup:
+    // bind a LocalSocket at the path and close it, which does not unlink the file.
+    File staleFile = newSocketFile();
+    LocalSocket stale = new LocalSocket();
+    stale.bind(new LocalSocketAddress(staleFile.getAbsolutePath(), Namespace.FILESYSTEM));
+    stale.close();
+    assertThat(OsConstants.S_ISSOCK(Os.stat(staleFile.getAbsolutePath()).st_mode)).isTrue();
+
+    startFileServer(staleFile);
+    assertThat(echo(newFileChannel(staleFile), "hi")).isEqualTo("echo: hi");
+  }
+
+  @Test
+  public void start_regularFileAtSocketPath_failsAndLeavesFileIntact() throws Exception {
+    File dataFile = newSocketFile();
+    Files.asCharSink(dataFile, UTF_8).write("precious");
+
+    Server server = grpcCleanup.register(newFileServerBuilder(dataFile).build());
+    IOException e = assertThrows(IOException.class, server::start);
+
+    assertThat(e).hasMessageThat().contains("non-socket");
+    assertThat(Files.asCharSource(dataFile, UTF_8).read()).isEqualTo("precious");
+  }
+
+  @Test
+  public void start_symlinkToSocketAtSocketPath_failsAndLeavesSymlinkIntact() throws Exception {
+    // Point the symlink at a live socket so that stat() (following symlinks) would see S_IFSOCK
+    // and let bind() unlink the symlink, whereas lstat() sees S_IFLNK and refuses.
+    File targetSocket = newSocketFile();
+    startFileServer(targetSocket);
+    File symlink = newSocketFile();
+    Os.symlink(targetSocket.getAbsolutePath(), symlink.getAbsolutePath());
+
+    Server server = grpcCleanup.register(newFileServerBuilder(symlink).build());
+    IOException e = assertThrows(IOException.class, server::start);
+
+    assertThat(e).hasMessageThat().contains("non-socket");
+    assertThat(OsConstants.S_ISLNK(Os.lstat(symlink.getAbsolutePath()).st_mode)).isTrue();
+    assertThat(echo(newFileChannel(targetSocket), "hi")).isEqualTo("echo: hi");
+  }
+
+  @Test
+  public void start_socketPathAlreadyBound_newServerTakesOverPath() throws Exception {
+    File socketFile = newSocketFile();
+    Server first = startFileServer(socketFile, echoService("first"));
+    ManagedChannel connectedToFirst = newFileChannel(socketFile);
+    assertThat(echo(connectedToFirst, "hi")).isEqualTo("first: hi");
+
+    // Android's LocalSocket.bind() replaces the existing socket file rather than failing.
+    startFileServer(socketFile, echoService("second"));
+
+    assertThat(echo(connectedToFirst, "hi")).isEqualTo("first: hi");
+    assertThat(echo(newFileChannel(socketFile), "hi")).isEqualTo("second: hi");
+
+    first.shutdown();
+    assertThat(first.awaitTermination(10, SECONDS)).isTrue();
+    assertThat(socketFile.exists()).isTrue();
+    assertThat(echo(newFileChannel(socketFile), "again")).isEqualTo("second: again");
   }
 
   @Test
@@ -254,13 +377,32 @@ public final class UdsEndToEndTest {
     };
   }
 
+  private static ServerBuilder<?> newFileServerBuilder(File socketFile) {
+    return UdsServerBuilder.forPath(socketFile.getAbsolutePath(), Namespace.FILESYSTEM);
+  }
+
   private static ServerBuilder<?> newAbstractServerBuilder(String name) {
     return UdsServerBuilder.forPath(name, Namespace.ABSTRACT);
+  }
+
+  private Server startFileServer(File socketFile) throws IOException {
+    return startFileServer(socketFile, ECHO_SERVICE);
+  }
+
+  private Server startFileServer(File socketFile, ServerServiceDefinition service)
+      throws IOException {
+    Server server = newFileServerBuilder(socketFile).addService(service).build();
+    return grpcCleanup.register(server.start());
   }
 
   private Server startAbstractServer(String name) throws IOException {
     Server server = newAbstractServerBuilder(name).addService(ECHO_SERVICE).build();
     return grpcCleanup.register(server.start());
+  }
+
+  private ManagedChannel newFileChannel(File socketFile) {
+    return grpcCleanup.register(
+        UdsChannelBuilder.forPath(socketFile.getAbsolutePath(), Namespace.FILESYSTEM).build());
   }
 
   private ManagedChannel newAbstractChannel(String name) {
@@ -270,6 +412,10 @@ public final class UdsEndToEndTest {
   private static String echo(ManagedChannel channel, String request) {
     return ClientCalls.blockingUnaryCall(
         channel, ECHO_METHOD, CallOptions.DEFAULT.withDeadlineAfter(10, SECONDS), request);
+  }
+
+  private File newSocketFile() {
+    return new File(appContext.getFilesDir(), "uds-test-" + UUID.randomUUID());
   }
 
   private static String newAbstractName() {

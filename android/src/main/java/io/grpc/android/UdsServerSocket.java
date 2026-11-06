@@ -73,7 +73,18 @@ final class UdsServerSocket extends ServerSocket {
       throw new IllegalArgumentException(
           "Unsupported address type " + (endpoint == null ? null : endpoint.getClass().getName()));
     }
-    listening = UdsAbstractListeningSocket.bindAndListen((UdsSocketAddress) endpoint);
+    listening = bindAndListen((UdsSocketAddress) endpoint);
+  }
+
+  private static UdsListeningSocket bindAndListen(UdsSocketAddress address) throws IOException {
+    switch (address.getNamespace()) {
+      case ABSTRACT:
+        return UdsAbstractListeningSocket.bindAndListen(address);
+      case FILESYSTEM:
+        return UdsFilesystemListeningSocket.bindAndListen(address);
+      default:
+        throw new AssertionError("Unexpected namespace: " + address.getNamespace());
+    }
   }
 
   @Override

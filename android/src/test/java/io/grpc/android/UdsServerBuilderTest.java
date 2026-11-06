@@ -41,13 +41,11 @@ public final class UdsServerBuilderTest {
   }
 
   @Test
-  public void forPath_filesystemNamespace_throws() {
-    IllegalArgumentException e =
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> UdsServerBuilder.forPath("/data/data/app/files/s.sock", Namespace.FILESYSTEM));
+  public void forPath_filesystem_buildsServer() {
+    Server server =
+        UdsServerBuilder.forPath("/data/data/app/files/s.sock", Namespace.FILESYSTEM).build();
 
-    assertThat(e).hasMessageThat().contains("FILESYSTEM");
+    assertThat(server).isNotNull();
   }
 
   @Test

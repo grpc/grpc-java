@@ -20,11 +20,14 @@ import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertThrows;
 
+import android.content.Context;
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
 import android.net.LocalSocketAddress.Namespace;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -224,6 +227,31 @@ public final class UdsServerSocketTest {
 
     assertThat(socket.getLocalSocketAddress()).isEqualTo(address);
     assertThat(socket.isBound()).isTrue();
+  }
+
+  @Test
+  public void bind_filesystemAddress_acceptsConnectionAndUnlinksOnClose() throws Exception {
+    Context appContext = ApplicationProvider.getApplicationContext();
+    File socketFile = new File(appContext.getFilesDir(), "uds-socket-test-" + UUID.randomUUID());
+    UdsSocketAddress address = UdsSocketAddress.forFile(socketFile);
+    UdsServerSocket serverSocket = register(new UdsServerSocket());
+    serverSocket.bind(address);
+
+    LocalSocket client = register(new LocalSocket());
+    client.connect(new LocalSocketAddress(socketFile.getAbsolutePath(), Namespace.FILESYSTEM));
+    Socket accepted = register(serverSocket.accept());
+    assertThat(accepted.getLocalSocketAddress()).isEqualTo(address);
+
+    serverSocket.close();
+    assertThat(socketFile.exists()).isFalse();
+  }
+
+  @Test
+  public void abstractListeningSocket_filesystemAddress_throwsIllegalArgumentException() {
+    UdsSocketAddress address = UdsSocketAddress.forFile(new File("/data/data/app/files/s.sock"));
+
+    assertThrows(
+        IllegalArgumentException.class, () -> UdsAbstractListeningSocket.bindAndListen(address));
   }
 
   private <T extends Closeable> T register(T closeable) {

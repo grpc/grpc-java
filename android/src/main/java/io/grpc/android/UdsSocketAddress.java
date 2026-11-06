@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import android.net.LocalSocketAddress;
 import android.net.LocalSocketAddress.Namespace;
+import java.io.File;
 import java.net.SocketAddress;
 
 /**
@@ -37,6 +38,15 @@ final class UdsSocketAddress extends SocketAddress {
   private UdsSocketAddress(String name, Namespace namespace) {
     this.name = checkNotNull(name, "name");
     this.namespace = checkNotNull(namespace, "namespace");
+  }
+
+  /**
+   * Resolves {@code socketFile} with {@link File#getAbsolutePath()} in {@link
+   * Namespace#FILESYSTEM}.
+   */
+  static UdsSocketAddress forFile(File socketFile) {
+    return new UdsSocketAddress(
+        checkNotNull(socketFile, "socketFile").getAbsolutePath(), Namespace.FILESYSTEM);
   }
 
   /** Wraps {@code name} (without the leading NUL byte) in {@link Namespace#ABSTRACT}. */
