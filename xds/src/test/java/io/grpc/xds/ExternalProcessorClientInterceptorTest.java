@@ -7671,7 +7671,22 @@ public class ExternalProcessorClientInterceptorTest {
               new Thread(() -> {
                 synchronized (responseObserver) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
-                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .setRequestHeaders(HeadersResponse.newBuilder()
+                          .setResponse(CommonResponse.newBuilder()
+                              .setHeaderMutation(HeaderMutation.newBuilder()
+                                  .addSetHeaders(
+                                      io.envoyproxy.envoy.config.core.v3.HeaderValueOption
+                                          .newBuilder()
+                                          .setHeader(
+                                              io.envoyproxy.envoy.config.core.v3.HeaderValue
+                                                  .newBuilder()
+                                                  .setKey("x-mutated")
+                                                  .setValue("true")
+                                                  .build())
+                                          .build())
+                                  .build())
+                              .build())
+                          .build())
                       .setRequestDrainRequests(true)
                       .build());
                 }
@@ -7708,34 +7723,44 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
+    final AtomicReference<Metadata> capturedHeaders = new AtomicReference<>();
     final List<String> dataPlaneReceivedMessages =
         new java.util.concurrent.CopyOnWriteArrayList<>();
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
-    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
-        .addMethod(METHOD_CLIENT_STREAMING, ServerCalls.asyncClientStreamingCall(
-            new ServerCalls.ClientStreamingMethod<String, String>() {
-              @Override
-              public StreamObserver<String> invoke(StreamObserver<String> responseObserver) {
-                return new StreamObserver<String>() {
+    dataPlaneServiceRegistry.addService(ServerInterceptors.intercept(
+        ServerServiceDefinition.builder("test.TestService")
+            .addMethod(METHOD_CLIENT_STREAMING, ServerCalls.asyncClientStreamingCall(
+                new ServerCalls.ClientStreamingMethod<String, String>() {
                   @Override
-                  public void onNext(String value) {
-                    dataPlaneReceivedMessages.add(value);
-                  }
+                  public StreamObserver<String> invoke(StreamObserver<String> responseObserver) {
+                    return new StreamObserver<String>() {
+                      @Override
+                      public void onNext(String value) {
+                        dataPlaneReceivedMessages.add(value);
+                      }
 
-                  @Override
-                  public void onError(Throwable t) {
-                  }
+                      @Override
+                      public void onError(Throwable t) {
+                      }
 
-                  @Override
-                  public void onCompleted() {
-                    responseObserver.onNext("Direct Response");
-                    responseObserver.onCompleted();
-                    dataPlaneLatch.countDown();
+                      @Override
+                      public void onCompleted() {
+                        responseObserver.onNext("Direct Response");
+                        responseObserver.onCompleted();
+                        dataPlaneLatch.countDown();
+                      }
+                    };
                   }
-                };
-              }
-            }))
-        .build());
+                }))
+            .build(),
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+            capturedHeaders.set(headers);
+            return next.startCall(call, headers);
+          }
+        }));
 
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
@@ -7800,6 +7825,9 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(dataPlaneReceivedMessages).containsExactly(
         "App Message During Drain"
     ).inOrder();
+    Metadata.Key<String> mutatedKey =
+        Metadata.Key.of("x-mutated", Metadata.ASCII_STRING_MARSHALLER);
+    assertThat(capturedHeaders.get().get(mutatedKey)).isEqualTo("true");
     
     assertThat(appLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appReceivedMessage.get()).isEqualTo("Direct Response");

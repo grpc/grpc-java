@@ -489,26 +489,40 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               }
               expectedResponseResponse = null;
             } else if (response.hasRequestBody()) {
-              if (!isDrainComplete(response.getRequestBody())) {
-                EventType expected = expectedRequestResponse;
-                if (expected == EventType.REQUEST_HEADERS) {
-                  internalOnError(Status.UNAVAILABLE
-                      .withDescription(
-                          "Protocol error: received request_body before request_headers response.")
-                      .asRuntimeException());
-                  return;
-                }
+              if (!isDrainComplete(response.getRequestBody())
+                  && expectedRequestResponse == EventType.REQUEST_HEADERS) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received request_body before request_headers response.")
+                    .asRuntimeException());
+                return;
               }
             } else if (response.hasResponseBody()) {
-              if (!isDrainComplete(response.getResponseBody())) {
-                EventType expected = expectedResponseResponse;
-                if (expected == EventType.RESPONSE_HEADERS) {
+              if (!isDrainComplete(response.getResponseBody())
+                  && expectedResponseResponse == EventType.RESPONSE_HEADERS) {
+                internalOnError(Status.UNAVAILABLE
+                    .withDescription(
+                        "Protocol error: received response_body before headers response.")
+                    .asRuntimeException());
+                return;
+              }
+            }
+
+            // 1. Client Headers
+            if (response.hasRequestHeaders()) {
+              if (response.getRequestHeaders().hasResponse()) {
+                if (response.getRequestHeaders().getResponse().getStatus()
+                    == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
                   internalOnError(Status.UNAVAILABLE
-                      .withDescription(
-                          "Protocol error: received response_body before headers response.")
+                      .withDescription("CONTINUE_AND_REPLACE is not supported")
                       .asRuntimeException());
                   return;
                 }
+                applyHeaderMutations(
+                    requestHeaders,
+                    response.getRequestHeaders().getResponse().getHeaderMutation(),
+                    mutationFilter,
+                    mutator);
               }
             }
 
@@ -537,26 +551,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               }
             }
 
-            // 1. Client Headers
             if (response.hasRequestHeaders()) {
-              if (response.getRequestHeaders().hasResponse()) {
-                if (response.getRequestHeaders().getResponse().getStatus()
-                    == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
-                  internalOnError(Status.UNAVAILABLE
-                      .withDescription("CONTINUE_AND_REPLACE is not supported")
-                      .asRuntimeException());
-                  return;
-                }
-                applyHeaderMutations(
-                    requestHeaders,
-                    response.getRequestHeaders().getResponse().getHeaderMutation(),
-                    mutationFilter,
-                    mutator);
-              }
               activateCall();
             }
+
             // 2. Client Message (Request Body)
-            else if (response.hasRequestBody()) {
+            if (response.hasRequestBody()) {
               if (validateCompressionSupport(response.getRequestBody())) {
                 handleRequestBodyResponse(response.getRequestBody());
               }
