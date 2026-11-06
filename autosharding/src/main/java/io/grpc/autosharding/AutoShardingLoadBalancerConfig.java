@@ -44,9 +44,9 @@ final class AutoShardingLoadBalancerConfig {
   /**
    * Identifies the assignments this client should receive.
    *
-   * <p>May contain a single {@code %s} token, which the LB policy replaces with the locality
-   * before sending it to the sharding service, or with the empty string when no locality is
-   * available.
+   * <p>May contain a single {@code %s} token. Before sending the target to the sharding service,
+   * the LB policy replaces it with the {@link io.grpc.EquivalentAddressGroup#ATTR_LOCALITY_NAME}
+   * that all endpoints share, or with the empty string when they don't share one.
    */
   private final String autoshardingTarget;
 

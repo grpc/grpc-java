@@ -20,18 +20,13 @@ import io.grpc.Attributes;
 import io.grpc.Internal;
 
 /**
- * Attributes the {@code autosharding_experimental} LB policy reads besides its configuration. Set
- * them on the {@link io.grpc.LoadBalancer.ResolvedAddresses} given to the policy.
- *
- * <p>To substitute a locality for {@code %s} in {@code autosharding_target}, give every endpoint
- * the same {@link io.grpc.EquivalentAddressGroup#ATTR_LOCALITY_NAME}.
- *
- * <p>Internal to gRPC, with no compatibility guarantee.
+ * Attributes that the parent of the {@code autosharding_experimental} LB policy sets on the
+ * {@link io.grpc.LoadBalancer.ResolvedAddresses} given to the policy.
  */
 @Internal
 public final class AutoShardingAttributes {
 
-  /** The {@link ChannelFactory} for the channel to the sharding service. Required. */
+  /** The {@link ChannelFactory} for the channel to the sharding service. */
   public static final Attributes.Key<ChannelFactory> ATTR_CHANNEL_FACTORY =
       Attributes.Key.create("io.grpc.autosharding.channelFactory");
 
