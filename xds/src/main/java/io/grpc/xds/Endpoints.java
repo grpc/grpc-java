@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
@@ -26,16 +27,41 @@ import com.google.common.net.InetAddresses;
 import io.grpc.EquivalentAddressGroup;
 import java.net.InetSocketAddress;
 import java.util.List;
+import javax.annotation.Nullable;
 
 /** Locality and endpoint level load balancing configurations. */
 final class Endpoints {
   private Endpoints() {}
 
+  /**
+   * Represents a list of endpoints, either inlined in an EDS resource or fetched separately as an
+   * {@code LbEndpointCollection} resource (gRFC A95).
+   */
+  @AutoValue
+  abstract static class LbEndpointCollection {
+    abstract ImmutableList<LbEndpoint> endpoints();
+
+    static LbEndpointCollection create(List<LbEndpoint> endpoints) {
+      return new AutoValue_Endpoints_LbEndpointCollection(ImmutableList.copyOf(endpoints));
+    }
+  }
+
   /** Represents a group of endpoints belong to a single locality. */
   @AutoValue
   abstract static class LocalityLbEndpoints {
-    // Endpoints to be load balanced.
-    abstract ImmutableList<LbEndpoint> endpoints();
+    /**
+     * The endpoints for this locality, inlined in the EDS resource. Exactly one of this and {@link
+     * #lbEndpointCollectionName()} is non-null.
+     */
+    @Nullable
+    abstract LbEndpointCollection endpointCollection();
+
+    /**
+     * The name of the {@code LbEndpointCollection} resource to fetch for this locality (gRFC A95).
+     * Exactly one of this and {@link #endpointCollection()} is non-null.
+     */
+    @Nullable
+    abstract String lbEndpointCollectionName();
 
     // Locality's weight for inter-locality load balancing. Guaranteed to be greater than 0.
     abstract int localityWeight();
@@ -45,11 +71,30 @@ final class Endpoints {
 
     abstract ImmutableMap<String, Object> localityMetadata();
 
+    /** Creates a locality whose endpoints are inlined in the EDS resource. */
     static LocalityLbEndpoints create(List<LbEndpoint> endpoints, int localityWeight,
         int priority, ImmutableMap<String, Object> localityMetadata) {
+      return create(
+          LbEndpointCollection.create(endpoints), null, localityWeight, priority, localityMetadata);
+    }
+
+    private static LocalityLbEndpoints create(@Nullable LbEndpointCollection endpointCollection,
+        @Nullable String lbEndpointCollectionName, int localityWeight, int priority,
+        ImmutableMap<String, Object> localityMetadata) {
       checkArgument(localityWeight > 0, "localityWeight must be greater than 0");
+      checkArgument((endpointCollection == null) != (lbEndpointCollectionName == null),
+          "exactly one of endpointCollection and lbEndpointCollectionName must be set");
       return new AutoValue_Endpoints_LocalityLbEndpoints(
-          ImmutableList.copyOf(endpoints), localityWeight, priority, localityMetadata);
+          endpointCollection, lbEndpointCollectionName, localityWeight, priority,
+          localityMetadata);
+    }
+
+    /** Creates a locality whose endpoints are fetched via a separate LEDS resource. */
+    static LocalityLbEndpoints createForCollectionName(String lbEndpointCollectionName,
+        int localityWeight, int priority, ImmutableMap<String, Object> localityMetadata) {
+      return create(
+          null, checkNotNull(lbEndpointCollectionName, "lbEndpointCollectionName"), localityWeight,
+          priority, localityMetadata);
     }
   }
 

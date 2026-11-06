@@ -56,6 +56,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       "envoy.lb.does_not_support_overprovisioning";
   @VisibleForTesting
   public static final String CLIENT_FEATURE_RESOURCE_IN_SOTW = "xds.config.resource-in-sotw";
+  @VisibleForTesting
+  public static final String CLIENT_FEATURE_LB_ENDPOINT_COLLECTION =
+      "xds.endpoint.supports_lb_endpoint_collection";
 
   // Server features.
   private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
@@ -176,6 +179,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_RESOURCE_IN_SOTW);
+    if (enableEndpointFallback) {
+      nodeBuilder.addClientFeatures(CLIENT_FEATURE_LB_ENDPOINT_COLLECTION);
+    }
     builder.node(nodeBuilder.build());
 
     Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawData, "certificate_providers");
