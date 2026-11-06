@@ -66,6 +66,24 @@ public abstract class CallCredentials {
   }
 
   /**
+   * Determines whether the security level of the transport is higher than or equal to the minimum
+   * security level required to transfer these {@link CallCredentials}.
+   *
+   * <p>It is intended to be called from {@link #applyRequestMetadata} before sending any individual
+   * RPC. The credentials should not be sent if this method returns {@code false}. More details can
+   * be found in <a
+   * href="https://github.com/grpc/proposal/blob/master/L62-core-call-credential-security-level.md">
+   * gRFC L62</a>.
+   *
+   * @param requestInfo request-related information
+   * @param minSecurity minimum security level required by these {@code CallCredentials}
+   */
+  protected static final boolean allowedSecurityLevel(
+      RequestInfo requestInfo, SecurityLevel minSecurity) {
+    return requestInfo.getSecurityLevel().compareTo(minSecurity) >= 0;
+  }
+
+  /**
    * The outlet of the produced headers. Not thread-safe.
    *
    * <p>Exactly one of its methods must be called to make the RPC proceed.

@@ -68,6 +68,7 @@ import io.netty.channel.DefaultChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
@@ -331,6 +332,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream().transportState().setId(STREAM_ID);
     stream().transportState().transportHeadersReceived(grpcResponseHeaders(), false);
     stream.halfClose();
+    when(http2Stream.state()).thenReturn(Http2Stream.State.HALF_CLOSED_LOCAL);
     stream().transportState().transportHeadersReceived(grpcResponseTrailers(Status.OK), true);
     verify(writeQueue, never()).enqueue(isA(CancelClientStreamCommand.class), eq(true));
   }

@@ -73,6 +73,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
@@ -257,6 +258,9 @@ public class RlsLoadBalancerTest {
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
+    }
     SubchannelPicker picker = pickerCaptor.getValue();
     // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(searchSubchannelArgs);

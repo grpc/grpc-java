@@ -236,6 +236,46 @@ public class RetriableStreamTest {
   }
 
   @Test
+  public void cancelDuringStartBeforeRegistration() {
+    assertCancelDuringStart(retriableStream);
+  }
+
+  @Test
+  public void hedging_cancelBeforeRegistration() {
+    assertCancelDuringStart(hedgingStream);
+  }
+
+  @Test
+  public void transparentRetry_cancelBeforeRegistration() {
+    RetriableStream<String> stream = new RecordedRetriableStream(
+        method, new Metadata(), channelBufferUsed, PER_RPC_BUFFER_LIMIT, CHANNEL_BUFFER_LIMIT,
+        MoreExecutors.directExecutor(), fakeClock.getScheduledExecutorService(), null, null, null);
+    assertCancelDuringStart(stream);
+  }
+
+  private void assertCancelDuringStart(RetriableStream<String> stream) {
+    Status reason = Status.CANCELLED.withDescription("cancel before registration");
+    List<RetriableStream<String>> registeredStreams = new ArrayList<>();
+    doAnswer(invocation -> {
+      stream.cancel(reason);
+      registeredStreams.add(stream);
+      return null;
+    }).when(retriableStreamRecorder).prestart();
+    doAnswer(invocation -> {
+      registeredStreams.remove(stream);
+      return null;
+    }).when(retriableStreamRecorder).postCommit();
+
+    stream.start(masterListener);
+
+    assertThat(registeredStreams).isEmpty();
+    verify(retriableStreamRecorder).prestart();
+    verify(retriableStreamRecorder, times(2)).postCommit();
+    verify(masterListener).closed(same(reason), same(PROCESSED), any(Metadata.class));
+    verify(retriableStreamRecorder, never()).newSubstream(anyInt());
+  }
+
+  @Test
   public void retry_everythingDrained() {
     ClientStream mockStream1 = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);

@@ -47,6 +47,7 @@ import javax.annotation.Nullable;
  */
 final class SingleMessageClientStream implements ClientStream {
 
+  private final BinderClientTransport transport;
   private final Inbound.ClientInbound inbound;
   private final Outbound.ClientOutbound outbound;
   private final Attributes attributes;
@@ -55,7 +56,11 @@ final class SingleMessageClientStream implements ClientStream {
   @Nullable private Deadline pendingDeadline;
 
   SingleMessageClientStream(
-      Inbound.ClientInbound inbound, Outbound.ClientOutbound outbound, Attributes attributes) {
+      BinderClientTransport transport,
+      Inbound.ClientInbound inbound,
+      Outbound.ClientOutbound outbound,
+      Attributes attributes) {
+    this.transport = transport;
     this.inbound = inbound;
     this.outbound = outbound;
     this.attributes = attributes;
@@ -63,8 +68,8 @@ final class SingleMessageClientStream implements ClientStream {
 
   @Override
   public void start(ClientStreamListener listener) {
-    synchronized (inbound) {
-      inbound.init(outbound, listener);
+    if (!transport.startStream(inbound, outbound, listener)) {
+      return; // Already closed as MISCARRIED and 'listener' has been told.
     }
     if (outbound.isReady()) {
       listener.onReady();
@@ -114,7 +119,7 @@ final class SingleMessageClientStream implements ClientStream {
   @Override
   public void cancel(Status status) {
     synchronized (inbound) {
-      inbound.closeOnCancel(status);
+      inbound.cancel(status);
     }
   }
 

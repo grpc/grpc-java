@@ -125,6 +125,24 @@ interface Filter extends Closeable {
   }
 
   /**
+   * Returns true if this filter requires access to the request message payloads for the given
+   * configuration.
+   */
+  default boolean requiresRequestPayloadAccess(
+      FilterConfig config, @Nullable FilterConfig overrideConfig) {
+    return false;
+  }
+
+  /**
+   * Returns true if this filter requires access to the response message payloads for the given
+   * configuration.
+   */
+  default boolean requiresResponsePayloadAccess(
+      FilterConfig config, @Nullable FilterConfig overrideConfig) {
+    return false;
+  }
+
+  /**
    * Releases filter resources like shared resources and remote connections.
    *
    * <p>See {@link Provider#newInstance()} for details on filter instance creation.

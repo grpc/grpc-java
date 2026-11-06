@@ -114,6 +114,28 @@ public class ServiceConfigUtilTest {
     }
   }
 
+  @Test
+  public void getThrottlePolicy_failOnMissingMaxTokens() throws Exception {
+    String serviceConfig = "{\"retryThrottling\" : {\"tokenRatio\" : 0.1}}";
+    try {
+      ServiceConfigUtil.getThrottlePolicy(checkObject(JsonParser.parse(serviceConfig)));
+      fail("Should throw");
+    } catch (Exception e) {
+      assertThat(e).hasMessageThat().contains("maxTokens cannot be empty");
+    }
+  }
+
+  @Test
+  public void getThrottlePolicy_failOnMissingTokenRatio() throws Exception {
+    String serviceConfig = "{\"retryThrottling\" : {\"maxTokens\" : 10}}";
+    try {
+      ServiceConfigUtil.getThrottlePolicy(checkObject(JsonParser.parse(serviceConfig)));
+      fail("Should throw");
+    } catch (Exception e) {
+      assertThat(e).hasMessageThat().contains("tokenRatio cannot be empty");
+    }
+  }
+
   @SuppressWarnings("unchecked")
   private static List<Map<String, ?>> checkObjectList(Object o) {
     return (List<Map<String, ?>>) o;

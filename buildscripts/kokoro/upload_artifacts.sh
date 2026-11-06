@@ -51,13 +51,13 @@ find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-osx-aarch_64.
 
 
 mkdir -p ~/.config/
-gsutil cp gs://grpc-testing-secrets/sonatype_credentials/sonatype-upload ~/.config/sonatype-upload
+gcloud storage cp gs://grpc-testing-secrets/sonatype_credentials/sonatype-upload ~/.config/sonatype-upload
 
 mkdir -p ~/java_signing/
-gsutil cp -r gs://grpc-testing-secrets/java_signing/ ~/
+gcloud storage cp -r gs://grpc-testing-secrets/java_signing/ ~/
 gpg --batch  --import ~/java_signing/grpc-java-team-sonatype.asc
 
-gsutil cat gs://grpc-testing-secrets/dockerhub_credentials/grpcpackages.password \
+gcloud storage cat gs://grpc-testing-secrets/dockerhub_credentials/grpcpackages.password \
   | docker login --username grpcpackages --password-stdin
 
 # gpg commands changed between v1 and v2 are different.

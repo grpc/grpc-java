@@ -293,7 +293,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     binder = binderDecorator.decorate(binder);
     this.outgoingBinder = binder;
     try {
-      binder.getDelegate().linkToDeath(this, 0);
+      binder.linkToDeath(this, 0);
       return true;
     } catch (RemoteException re) {
       return false;
@@ -367,7 +367,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   private final void sendShutdownTransaction() {
     if (outgoingBinder != null) {
       try {
-        outgoingBinder.getDelegate().unlinkToDeath(this, 0);
+        outgoingBinder.unlinkToDeath(this, 0);
       } catch (NoSuchElementException e) {
         // Ignore.
       }
@@ -396,24 +396,37 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     }
   }
 
-  protected void unregisterInbound(Inbound<?, ?> inbound) {
-    unregisterCall(inbound.callId);
+  /**
+   * Removes {@code inbound} from the set of ongoing calls, if it's there.
+   *
+   * @return true iff {@code inbound} was registered (and now isn't)
+   */
+  protected boolean unregisterInbound(Inbound<?, ?> inbound) {
+    return unregisterCall(inbound.callId);
   }
 
-  final void unregisterCall(int callId) {
+  /**
+   * Removes the call identified by {@code callId} from the set of ongoing calls, if it's there.
+   *
+   * @return true iff {@code callId} was registered (and now isn't)
+   */
+  final boolean unregisterCall(int callId) {
     boolean removed = (ongoingCalls.remove(callId) != null);
     if (removed && ongoingCalls.isEmpty()) {
-      // Possibly shutdown (not synchronously, since inbound is held).
+      // If inState(SHUTDOWN), we'd need to terminate (as the last call to finish). But we can't
+      // even check our state safely right now because inbound/outbound is held. Instead, do the
+      // check later on a clean stack.
       scheduledExecutorService.execute(
           () -> {
             synchronized (this) {
               if (inState(TransportState.SHUTDOWN)) {
-                // No more ongoing calls, and we're shutdown. Finish the shutdown.
-                shutdownInternal(shutdownStatus, true);
+                // Don't forceTerminate because ongoingCalls may no longer be empty.
+                shutdownInternal(shutdownStatus, /* forceTerminate= */ false);
               }
             }
           });
     }
+    return removed;
   }
 
   final void sendTransaction(int callId, ParcelHolder parcel) throws StatusException {

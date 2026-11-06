@@ -84,6 +84,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
+import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Error;
@@ -135,7 +136,10 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private KeepAliveManager mockKeepAliveManager = null;
   private List<String> setKeepaliveManagerFor = ImmutableList.of("cancelShouldSucceed",
       "sendFrameShouldSucceed", "channelShutdownShouldCancelBufferedStreams",
-      "createIncrementsIdsForActualAndBufferdStreams", "dataPingAckIsRecognized");
+      "createIncrementsIdsForActualAndBufferdStreams", "dataPingAckIsRecognized",
+      "headersWithoutTransportStateShouldBeIgnored", "trailersWithoutTransportStateShouldBeIgnored",
+      "dataWithoutTransportStateShouldBeConsumed",
+      "dataEndStreamWithoutTransportStateShouldBeConsumed");
   private Runnable tooManyPingsRunnable = new Runnable() {
     @Override public void run() {}
   };
@@ -370,6 +374,87 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         = enqueue(new SendGrpcFrameCommand(streamTransportState, content(), true));
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
+  }
+
+  @Test
+  public void headersWithoutTransportStateShouldBeIgnored() throws Exception {
+    headersWithoutTransportState(false);
+  }
+
+  @Test
+  public void trailersWithoutTransportStateShouldBeIgnored() throws Exception {
+    headersWithoutTransportState(true);
+  }
+
+  private void headersWithoutTransportState(boolean endStream) throws Exception {
+    createStream();
+    int streamWithoutTransportState = STREAM_ID + 2;
+    Http2Stream http2Stream = connection().local().createStream(streamWithoutTransportState, true);
+    Http2Headers headers = new DefaultHttp2Headers();
+    if (endStream) {
+      http2Stream.headersReceived(false);
+      headers.set("grpc-status", "0");
+    } else {
+      headers.status(STATUS_OK).set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
+    }
+    ChannelHandlerContext frameContext = newMockContext();
+    new DefaultHttp2FrameWriter().writeHeaders(
+        frameContext, streamWithoutTransportState, headers, 0, endStream, newPromise());
+
+    ByteBuf frame = captureWrite(frameContext);
+    channelRead(frame);
+
+    assertEquals(0, frame.refCnt());
+    assertNull(lifecycleManager.getShutdownStatus());
+    assertTrue(channel().isOpen());
+    verify(mockKeepAliveManager).onDataReceived();
+    verify(streamListener, never()).closed(any(Status.class), any(RpcProgress.class),
+        any(Metadata.class));
+    verify(streamListener, never()).headersRead(any(Metadata.class));
+
+    channelRead(headersFrame(STREAM_ID, new DefaultHttp2Headers().status(STATUS_OK)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)));
+    verify(streamListener).headersRead(any(Metadata.class));
+  }
+
+  @Test
+  public void dataWithoutTransportStateShouldBeConsumed() throws Exception {
+    dataWithoutTransportState(false);
+  }
+
+  @Test
+  public void dataEndStreamWithoutTransportStateShouldBeConsumed() throws Exception {
+    dataWithoutTransportState(true);
+  }
+
+  private void dataWithoutTransportState(boolean endStream) throws Exception {
+    createStream();
+    int streamWithoutTransportState = STREAM_ID + 2;
+    Http2Stream http2Stream = connection().local().createStream(streamWithoutTransportState, true);
+    http2Stream.headersReceived(false);
+    Http2LocalFlowController flowController = connection().local().flowController();
+    ChannelHandlerContext frameContext = newMockContext();
+    ByteBuf data = content();
+    new DefaultHttp2FrameWriter().writeData(
+        frameContext, streamWithoutTransportState, data, 5, endStream, newPromise());
+
+    ByteBuf frame = captureWrite(frameContext);
+    channelRead(frame);
+
+    assertEquals(0, frame.refCnt());
+    assertEquals(0, data.refCnt());
+    assertNull(lifecycleManager.getShutdownStatus());
+    assertTrue(channel().isOpen());
+    assertEquals(0, flowController.unconsumedBytes(http2Stream));
+    assertEquals(0, flowController.unconsumedBytes(connection().connectionStream()));
+    verify(mockKeepAliveManager).onDataReceived();
+    verify(streamListener, never()).closed(any(Status.class), any(RpcProgress.class),
+        any(Metadata.class));
+    verify(streamListener, never()).messagesAvailable(any(StreamListener.MessageProducer.class));
+
+    channelRead(headersFrame(STREAM_ID, new DefaultHttp2Headers().status(STATUS_OK)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)));
+    verify(streamListener).headersRead(any(Metadata.class));
   }
 
   @Test

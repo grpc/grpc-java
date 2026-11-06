@@ -64,7 +64,9 @@ import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.SocketAddress;
+import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -544,6 +546,36 @@ public class DnsNameResolverTest {
         "Unable to resolve host addr.fake");
     assertThat(ac.getValue().getAddressesOrError().getStatus().getCause())
         .isInstanceOf(IOException.class);
+  }
+
+  @Test
+  public void resolve_proxySelectorThrowsIllegalArgumentException() throws Exception {
+    IllegalArgumentException cause =
+        new IllegalArgumentException("port out of range: 899858473");
+    ProxySelector proxySelector = mock(ProxySelector.class);
+    when(proxySelector.select(any(URI.class))).thenThrow(cause);
+    ProxyDetectorImpl.AuthenticationProvider authenticator =
+        mock(ProxyDetectorImpl.AuthenticationProvider.class);
+    ProxyDetector proxyDetector = new ProxyDetectorImpl(() -> proxySelector, authenticator);
+    RetryingNameResolver resolver = newResolver(
+        "addr.fake:1234", 443, proxyDetector, Stopwatch.createUnstarted());
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    dnsResolver.setAddressResolver(mockAddressResolver);
+
+    resolver.start(mockListener);
+    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
+
+    verify(mockListener).onResult2(resultCaptor.capture());
+    verifyNoMoreInteractions(mockListener);
+    Status status = resultCaptor.getValue().getAddressesOrError().getStatus();
+    assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(status.getDescription()).isEqualTo("Unable to resolve host addr.fake");
+    assertThat(status.getCause()).isInstanceOf(IOException.class);
+    assertThat(status.getCause().getMessage()).isEqualTo("Failed when selecting a proxy");
+    assertSame(cause, status.getCause().getCause());
+    verify(proxySelector).select(any(URI.class));
+    verifyNoMoreInteractions(mockAddressResolver, authenticator);
   }
 
   // Load balancer rejects the empty addresses.

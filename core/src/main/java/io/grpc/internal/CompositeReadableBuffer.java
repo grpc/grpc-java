@@ -123,8 +123,9 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
       b.close();
     }
 
-    // Wrap and enqueue the single compacted buffer back at the tail
-    ReadableBuffer singleBuffer = ReadableBuffers.wrap(coalescedBytes);
+    // Wrap and enqueue the single compacted buffer back at the tail. Wrap it as a ByteBuffer,
+    // since wrap(byte[]) doesn't support getByteBuffer() and would disable it for the composite.
+    ReadableBuffer singleBuffer = ReadableBuffers.wrap(ByteBuffer.wrap(coalescedBytes));
     readableBuffers.add(singleBuffer);
 
     // Note: The global `readableBytes` remains perfectly synced since we

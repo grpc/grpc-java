@@ -156,7 +156,7 @@ fi
 # Update the statuses with the deltas
 
 set +x
-gsutil cp gs://grpc-testing-secrets/github_credentials/oauth_token.txt ~/
+gcloud storage cp gs://grpc-testing-secrets/github_credentials/oauth_token.txt ~/
 
 desc="New DEX reference count: $(printf "%'d" "$new_dex_count") (delta: $(printf "%'d" "$dex_count_delta"))"
 echo "Setting status: $desc"

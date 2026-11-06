@@ -46,6 +46,7 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
 import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -66,6 +67,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
   private CallTracer serverCallTracer;
+  // The application's close() and the transport's closed() may race; only the first is counted.
+  private final AtomicBoolean callEndReported = new AtomicBoolean();
 
   // state
   private volatile boolean cancelled;
@@ -93,6 +96,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public void request(int numMessages) {
     try (TaskCloseable ignore = PerfMark.traceTask("ServerCall.request")) {
       PerfMark.attachTag(tag);
+      if (method.getType().clientSendsOneMessage() && numMessages == 1) {
+        numMessages = 2;
+      }
       stream.request(numMessages);
     }
   }
@@ -226,7 +232,13 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
       stream.close(status, trailers);
     } finally {
-      serverCallTracer.reportCallEnded(status.isOk());
+      reportCallEnded(status.isOk());
+    }
+  }
+
+  private void reportCallEnded(boolean success) {
+    if (callEndReported.compareAndSet(false, true)) {
+      serverCallTracer.reportCallEnded(success);
     }
   }
 
@@ -284,7 +296,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         : Status.INTERNAL.withCause(internalError)
             .withDescription("Internal error so cancelling stream.");
     stream.cancel(status);
-    serverCallTracer.reportCallEnded(false); // error so always false
+    reportCallEnded(false); // error so always false
   }
 
   /**
@@ -296,6 +308,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     private final ServerCallImpl<ReqT, ?> call;
     private final ServerCall.Listener<ReqT> listener;
     private final Context.CancellableContext context;
+    private InputStream delayedMessage;
 
     public ServerStreamListenerImpl(
         ServerCallImpl<ReqT, ?> call, ServerCall.Listener<ReqT> listener,
@@ -338,13 +351,27 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       InputStream message;
       try {
         while ((message = producer.next()) != null) {
-          try {
-            listener.onMessage(call.method.parseRequest(message));
-          } catch (Throwable t) {
-            GrpcUtil.closeQuietly(message);
-            throw t;
+          // TODO: Consider forcing this check to be done in the transport (MessageDeframer)
+          // https://github.com/grpc/grpc-java/pull/13004/changes#r3939373996
+          if (call.method.getType().clientSendsOneMessage()) {
+            if (delayedMessage != null) {
+              GrpcUtil.closeQuietly(message);
+              call.stream.cancel(Status.INTERNAL.withDescription("Too many requests"));
+              GrpcUtil.closeQuietly(delayedMessage);
+              delayedMessage = null;
+              call.cancelled = true;
+              return;
+            }
+            delayedMessage = message;
+          } else {
+            try {
+              listener.onMessage(call.method.parseRequest(message));
+            } catch (Throwable t) {
+              GrpcUtil.closeQuietly(message);
+              throw t;
+            }
+            message.close();
           }
-          message.close();
         }
       } catch (Throwable t) {
         GrpcUtil.closeQuietly(producer);
@@ -361,6 +388,19 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           return;
         }
 
+        if (delayedMessage != null) {
+          InputStream message = delayedMessage;
+          delayedMessage = null;
+          try {
+            listener.onMessage(call.method.parseRequest(message));
+          } catch (Throwable t) {
+            GrpcUtil.closeQuietly(message);
+            Throwables.throwIfUnchecked(t);
+            throw new RuntimeException(t);
+          }
+          GrpcUtil.closeQuietly(message);
+        }
+
         listener.onHalfClose();
       }
     }
@@ -374,12 +414,17 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     }
 
     private void closedInternal(Status status) {
+      if (delayedMessage != null) {
+        GrpcUtil.closeQuietly(delayedMessage);
+        delayedMessage = null;
+      }
       Throwable cancelCause = null;
       try {
         if (status.isOk()) {
           listener.onComplete();
         } else {
           call.cancelled = true;
+          call.reportCallEnded(false);
           listener.onCancel();
           // The status will not have a cause in all failure scenarios, but we want to make sure
           // we always cancel the context with one to keep the context cancelled state consistent.

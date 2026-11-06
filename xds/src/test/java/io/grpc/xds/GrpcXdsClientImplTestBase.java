@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.StatusMatcher.statusHasCode;
+import static io.grpc.xds.XdsEndpointResource.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -47,6 +48,9 @@ import com.google.protobuf.StringValue;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.OutlierDetection;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
@@ -4066,6 +4070,215 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, updatedClusterLoadAssignment, VERSION_2,
         TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+  }
+
+  @Test
+  public void edsDuplicateEndpointAcrossLocalities_retainsLastGoodResource() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
+    call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
+    call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(edsResourceWatcher).onResourceChanged(edsUpdateCaptor.capture());
+    EdsUpdate lastGoodUpdate = edsUpdateCaptor.getValue().getValue();
+
+    Any invalidAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+        ImmutableList.of(
+            mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host1"), 1, 0),
+            mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                mf.buildLbEndpoint("172.44.2.2", 8000, "unhealthy", 2, "host2"), 1, 0)),
+        ImmutableList.of()));
+    List<String> errors = ImmutableList.of("EDS response ClusterLoadAssignment '" + EDS_RESOURCE
+        + "' validation error: ClusterLoadAssignment has duplicate endpoint address: "
+        + "/172.44.2.2:8000");
+    call.sendResponse(EDS, invalidAssignment, VERSION_2, "0001");
+    call.verifyRequestNack(EDS, EDS_RESOURCE, VERSION_1, "0001", NODE, errors);
+    verifyResourceMetadataNacked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
+        TIME_INCREMENT, VERSION_2, TIME_INCREMENT * 2, errors, true);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(edsResourceWatcher).onAmbientError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription()).contains(errors.get(0));
+    verifyNoMoreInteractions(edsResourceWatcher);
+
+    // A new watcher still receives the last accepted resource.
+    @SuppressWarnings("unchecked")
+    ResourceWatcher<EdsUpdate> watcher = mock(ResourceWatcher.class);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, watcher);
+    verify(watcher).onResourceChanged(StatusOr.fromValue(lastGoodUpdate));
+    verify(watcher).onAmbientError(statusCaptor.getValue());
+
+    call.sendResponse(EDS, invalidAssignment, VERSION_3, "0002");
+    call.verifyRequestNack(EDS, EDS_RESOURCE, VERSION_1, "0002", NODE, errors);
+    verifyResourceMetadataNacked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
+        TIME_INCREMENT, VERSION_3, TIME_INCREMENT * 3, errors, true);
+    verify(edsResourceWatcher, times(2)).onAmbientError(any());
+    verify(watcher, times(2)).onAmbientError(any());
+    verifyNoMoreInteractions(edsResourceWatcher, watcher);
+
+    Any validAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+        ImmutableList.of(mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+            mf.buildLbEndpoint("172.44.2.2", 8001, "healthy", 1, "host2"), 1, 0)),
+        ImmutableList.of()));
+    call.sendResponse(EDS, validAssignment, "45", "0003");
+    call.verifyRequest(EDS, EDS_RESOURCE, "45", "0003", NODE);
+    verifyResourceMetadataAcked(EDS, EDS_RESOURCE, validAssignment, "45", TIME_INCREMENT * 4);
+    verify(edsResourceWatcher, times(2)).onResourceChanged(edsUpdateCaptor.capture());
+    assertThat(edsUpdateCaptor.getValue().getValue()).isNotEqualTo(lastGoodUpdate);
+    verify(watcher).onResourceChanged(edsUpdateCaptor.getValue());
+  }
+
+  @Test
+  public void edsDuplicateEndpointOnColdStart() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
+    Any invalidAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+        ImmutableList.of(
+            mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host1"), 1, 0),
+            mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host2"), 1, 0)),
+        ImmutableList.of()));
+    call.sendResponse(EDS, invalidAssignment, VERSION_1, "0000");
+    call.verifyRequestNack(EDS, EDS_RESOURCE, "", "0000", NODE,
+        ImmutableList.of("EDS response ClusterLoadAssignment '" + EDS_RESOURCE
+            + "' validation error: ClusterLoadAssignment has duplicate endpoint address:"));
+    verify(edsResourceWatcher).onResourceChanged(edsUpdateCaptor.capture());
+    assertThat(edsUpdateCaptor.getValue().hasValue()).isFalse();
+
+    call.sendResponse(EDS, testClusterLoadAssignment, VERSION_2, "0001");
+    call.verifyRequest(EDS, EDS_RESOURCE, VERSION_2, "0001", NODE);
+    verify(edsResourceWatcher, times(2)).onResourceChanged(edsUpdateCaptor.capture());
+    assertThat(edsUpdateCaptor.getValue().hasValue()).isTrue();
+    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue().getValue());
+  }
+
+  @Test
+  public void edsDuplicateEndpointWithinLocality() {
+    verifyEdsDuplicateEndpoint(ImmutableList.of(
+        mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            ImmutableList.of(
+                mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host1"),
+                mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host2")), 1, 0)));
+  }
+
+  @Test
+  public void edsDuplicateEndpointAcrossPriorities() {
+    verifyEdsDuplicateEndpoint(ImmutableList.of(
+        mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host1"), 1, 0),
+        mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+            mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host2"), 1, 1)));
+  }
+
+  @Test
+  public void edsDuplicateEndpointInOverwrittenLocality() {
+    // The second entry overwrites the first in the locality-keyed output map.
+    verifyEdsDuplicateEndpoint(ImmutableList.of(
+        mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host1"), 1, 0),
+        mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            mf.buildLbEndpoint("172.44.2.3", 8000, "healthy", 1, "host2"), 1, 1),
+        mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+            mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host3"), 1, 0)));
+  }
+
+  @Test
+  public void edsDuplicateEndpointWithEquivalentIpv6Addresses() {
+    verifyEdsDuplicateEndpoint(ImmutableList.of(
+        mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            mf.buildLbEndpoint("2001:db8::1", 8000, "healthy", 1, "host1"), 1, 0),
+        mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+            mf.buildLbEndpoint("2001:0db8:0:0:0:0:0:1", 8000, "healthy", 1, "host2"), 1, 0)));
+  }
+
+  @Test
+  public void edsDuplicateEndpointInAdditionalAddresses() {
+    String originalDualStackProp =
+        System.setProperty(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, "false");
+    try {
+      io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint endpoint =
+          (io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint)
+              mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host1");
+      Message dualStackEndpoint = endpoint.toBuilder()
+          .setEndpoint(endpoint.getEndpoint().toBuilder()
+              .addAdditionalAddresses(Endpoint.AdditionalAddress.newBuilder()
+                  .setAddress(Address.newBuilder().setSocketAddress(SocketAddress.newBuilder()
+                      .setAddress("2001:db8::1").setPortValue(8000)))))
+          .build();
+      Any assignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+          ImmutableList.of(
+              mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                  dualStackEndpoint, 1, 0),
+              mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                  mf.buildLbEndpoint("2001:db8::1", 8000, "healthy", 1, "host2"), 1, 0)),
+          ImmutableList.of()));
+      DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+          edsResourceWatcher);
+      call.sendResponse(EDS, assignment, VERSION_1, "0000");
+      call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
+
+      System.setProperty(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, "true");
+      call.sendResponse(EDS, assignment, VERSION_2, "0001");
+      List<String> errors = ImmutableList.of("EDS response ClusterLoadAssignment '" + EDS_RESOURCE
+          + "' validation error: ClusterLoadAssignment has duplicate endpoint address:");
+      call.verifyRequestNack(EDS, EDS_RESOURCE, VERSION_1, "0001", NODE, errors);
+      verifyResourceMetadataNacked(EDS, EDS_RESOURCE, assignment, VERSION_1, TIME_INCREMENT,
+          VERSION_2, TIME_INCREMENT * 2, errors, true);
+      verify(edsResourceWatcher).onResourceChanged(edsUpdateCaptor.capture());
+      assertThat(edsUpdateCaptor.getValue().hasValue()).isTrue();
+    } finally {
+      if (originalDualStackProp == null) {
+        System.clearProperty(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS);
+      } else {
+        System.setProperty(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, originalDualStackProp);
+      }
+    }
+  }
+
+  private void verifyEdsDuplicateEndpoint(List<Message> localities) {
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
+    Any assignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE, localities,
+        ImmutableList.of()));
+    call.sendResponse(EDS, assignment, VERSION_1, "0000");
+    call.verifyRequestNack(EDS, EDS_RESOURCE, "", "0000", NODE,
+        ImmutableList.of("EDS response ClusterLoadAssignment '" + EDS_RESOURCE
+            + "' validation error: ClusterLoadAssignment has duplicate endpoint address:"));
+    verify(edsResourceWatcher).onResourceChanged(edsUpdateCaptor.capture());
+    assertThat(edsUpdateCaptor.getValue().hasValue()).isFalse();
+  }
+
+  @Test
+  public void edsEndpointsWithSameIpAndDifferentPorts() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
+    Any assignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+        ImmutableList.of(
+            mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 1, "host1"), 1, 0),
+            mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                mf.buildLbEndpoint("172.44.2.2", 8001, "healthy", 1, "host2"), 1, 0)),
+        ImmutableList.of()));
+    call.sendResponse(EDS, assignment, VERSION_1, "0000");
+    call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(edsResourceWatcher).onResourceChanged(edsUpdateCaptor.capture());
+    assertThat(edsUpdateCaptor.getValue().getValue().localityLbEndpointsMap).hasSize(2);
+  }
+
+  @Test
+  public void edsDuplicateEndpointInZeroWeightLocalityIgnored() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
+    Any assignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+        ImmutableList.of(lbEndpointHealthy,
+            mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                mf.buildLbEndpoint("192.168.0.1", 8080, "healthy", 1, "host2"), 0, 0)),
+        ImmutableList.of()));
+    call.sendResponse(EDS, assignment, VERSION_1, "0000");
+    call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(edsResourceWatcher).onResourceChanged(edsUpdateCaptor.capture());
+    assertThat(edsUpdateCaptor.getValue().getValue().localityLbEndpointsMap).hasSize(1);
   }
 
   @Test

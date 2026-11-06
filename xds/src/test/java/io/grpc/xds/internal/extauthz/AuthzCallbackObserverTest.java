@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -57,7 +56,6 @@ import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.extauthz.ExtAuthzTestHelper.CapturingListener;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.headermutations.HeaderMutationFilter;
-import io.grpc.xds.internal.headermutations.HeaderMutations;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -585,50 +583,6 @@ public class AuthzCallbackObserverTest {
     assertThat(capturedBackendMessage).isEqualTo(request);
   }
 
-  @Test
-  public void deny_withMissingStatus_failsCallWithInternal() {
-    CheckResponseHandler mockHandler = mock(CheckResponseHandler.class);
-    AuthzResponse fakeAuthzResponse = new AuthzResponse() {
-      @Override
-      public Decision decision() {
-        return Decision.DENY;
-      }
-
-      @Override
-      public Optional<Status> status() {
-        return Optional.empty();
-      }
-
-      @Override
-      public HeaderMutations requestHeaderMutations() {
-        return HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
-      }
-
-      @Override
-      public HeaderMutations responseHeaderMutations() {
-        return HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
-      }
-    };
-    when(mockHandler.handleResponse(any())).thenReturn(fakeAuthzResponse);
-
-    TestDelayedCall<SimpleRequest, SimpleResponse> delayedCall =
-        new TestDelayedCall<>(MoreExecutors.directExecutor(), scheduler, null);
-    Context.CancellableContext authzCtx = Context.current().withCancellation();
-    AuthzCallbackObserver<SimpleRequest, SimpleResponse> observer =
-        new AuthzCallbackObserver<>(
-            delayedCall, channel,
-            SimpleServiceGrpc.getUnaryRpcMethod(),
-            CallOptions.DEFAULT,
-            MoreExecutors.directExecutor(),
-            mockHandler, failClosedConfig(), authzCtx);
-    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
-    delayedCall.start(listener, new Metadata());
-    delayedCall.request(1);
-
-    observer.onNext(CheckResponse.getDefaultInstance());
-
-    assertThat(listener.getCloseStatus().getCode()).isEqualTo(Status.Code.INTERNAL);
-  }
 
   @Test
   public void allow_whenDelayedCallCancelledInFlight_setCallReturnsNull() {

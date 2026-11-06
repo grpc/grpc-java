@@ -22,15 +22,20 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Any;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.MetricRecorder;
@@ -589,6 +594,112 @@ public class XdsClientFallbackTest {
 
     verify(cdsWatcher, timeout(5000)).onResourceChanged(any());
     assertThat(getLrsServerInfo("localhost:" + fallbackServer.getServer().getPort())).isNull();
+  }
+
+  @Test
+  public void concurrentResponsesOnMainAndFallback_shutsDownFallbackWithoutNpe() {
+    @SuppressWarnings("unchecked")
+    XdsTransportFactory.StreamingCall<DiscoveryRequest, DiscoveryResponse> mainCall1 =
+        mock(XdsTransportFactory.StreamingCall.class);
+    @SuppressWarnings("unchecked")
+    XdsTransportFactory.StreamingCall<DiscoveryRequest, DiscoveryResponse> mainCall2 =
+        mock(XdsTransportFactory.StreamingCall.class);
+    @SuppressWarnings("unchecked")
+    XdsTransportFactory.StreamingCall<DiscoveryRequest, DiscoveryResponse> fallbackCall =
+        mock(XdsTransportFactory.StreamingCall.class);
+    when(mainCall1.isReady()).thenReturn(true);
+    when(mainCall2.isReady()).thenReturn(true);
+    when(fallbackCall.isReady()).thenReturn(true);
+
+    XdsTransportFactory.XdsTransport mainTransport = mock(XdsTransportFactory.XdsTransport.class);
+    XdsTransportFactory.XdsTransport fallbackTransport =
+        mock(XdsTransportFactory.XdsTransport.class);
+    when(mainTransport.<DiscoveryRequest, DiscoveryResponse>createStreamingCall(
+            any(), any(), any()))
+        .thenReturn(mainCall1)
+        .thenReturn(mainCall2);
+    when(fallbackTransport.<DiscoveryRequest, DiscoveryResponse>createStreamingCall(
+            any(), any(), any()))
+        .thenReturn(fallbackCall);
+
+    XdsTransportFactory customTransportFactory =
+        serverInfo ->
+            serverInfo.target().equals("main-uri") ? mainTransport : fallbackTransport;
+
+    XdsClientImpl client =
+        CommonBootstrapperTestUtils.createXdsClient(
+            Arrays.asList("main-uri", "fallback-uri"),
+            customTransportFactory,
+            fakeClock,
+            new ExponentialBackoffPolicy.Provider(),
+            MessagePrinter.INSTANCE,
+            xdsClientMetricReporter);
+
+    client.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<XdsTransportFactory.EventHandler<DiscoveryResponse>> mainHandler1Captor =
+        ArgumentCaptor.forClass(XdsTransportFactory.EventHandler.class);
+    verify(mainCall1).start(mainHandler1Captor.capture());
+
+    // Fail main's initial ADS stream before any response, activating fallback.
+    mainHandler1Captor.getValue().onStatusReceived(Status.UNAVAILABLE);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<XdsTransportFactory.EventHandler<DiscoveryResponse>> fallbackHandlerCaptor =
+        ArgumentCaptor.forClass(XdsTransportFactory.EventHandler.class);
+    verify(fallbackCall).start(fallbackHandlerCaptor.capture());
+    fallbackHandlerCaptor.getValue().onReady();
+
+    // Advance clock so main's retry timer fires and opens a second ADS stream while fallback's
+    // stream is also open.
+    fakeClock.forwardTime(2, TimeUnit.SECONDS);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<XdsTransportFactory.EventHandler<DiscoveryResponse>> mainHandler2Captor =
+        ArgumentCaptor.forClass(XdsTransportFactory.EventHandler.class);
+    verify(mainCall2).start(mainHandler2Captor.capture());
+
+    DiscoveryResponse mainResponse =
+        DiscoveryResponse.newBuilder()
+            .setTypeUrl(ADS_TYPE_URL_LDS)
+            .setVersionInfo("1")
+            .setNonce("nonce-main")
+            .addResources(Any.pack(ControlPlaneRule.buildClientListener(MAIN_SERVER, RDS_NAME)))
+            .build();
+    DiscoveryResponse fallbackResponse =
+        DiscoveryResponse.newBuilder()
+            .setTypeUrl(ADS_TYPE_URL_LDS)
+            .setVersionInfo("1")
+            .setNonce("nonce-fallback")
+            .addResources(
+                Any.pack(ControlPlaneRule.buildClientListener(MAIN_SERVER, FALLBACK_RDS_NAME)))
+            .build();
+
+    // When mainCall2 sends its initial DiscoveryRequest (inside XdsClientImpl's syncContext),
+    // enqueue onRecvMessage for both main and fallback before syncContext finishes draining.
+    // Main's first response runs shutdownLowerPriorityCpcs(mainCpc), and fallback's already-queued
+    // onRecvMessage runs immediately after in the same drain loop.
+    doAnswer(
+            invocation -> {
+              mainHandler2Captor.getValue().onRecvMessage(mainResponse);
+              fallbackHandlerCaptor.getValue().onRecvMessage(fallbackResponse);
+              return null;
+            })
+        .doNothing()
+        .when(mainCall2)
+        .sendMessage(any());
+
+    mainHandler2Captor.getValue().onReady();
+
+    verify(ldsWatcher, timeout(5000))
+        .onResourceChanged(
+            StatusOr.fromValue(LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
+    verify(fallbackCall).sendError(any());
+    verify(fallbackTransport).shutdown();
+    verify(fallbackCall, times(1)).sendMessage(any());
+
+    client.shutdown();
   }
 
   /**

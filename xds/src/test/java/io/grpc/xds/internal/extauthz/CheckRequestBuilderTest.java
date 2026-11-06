@@ -22,18 +22,22 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.HeaderMap;
+import io.envoyproxy.envoy.config.core.v3.HeaderValue;
 import io.envoyproxy.envoy.service.auth.v3.AttributeContext;
 import io.envoyproxy.envoy.service.auth.v3.CheckRequest;
 import io.grpc.Attributes;
+import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.xds.client.ConfiguredChannelCredentials;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.extauthz.ExtAuthzTestHelper.TestServerCall;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
@@ -133,8 +137,8 @@ public class CheckRequestBuilderTest {
 
     AttributeContext.HttpRequest http = attrContext.getRequest().getHttp();
     assertThat(http.getHeaderMap().getHeadersList()).containsExactly(
-        io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder().setKey("allowed-header")
-            .setRawValue(com.google.protobuf.ByteString.copyFromUtf8("v1")).build());
+        HeaderValue.newBuilder().setKey("allowed-header")
+            .setRawValue(ByteString.copyFromUtf8("v1")).build());
   }
 
   @Test
@@ -185,10 +189,10 @@ public class CheckRequestBuilderTest {
     assertThat(http.getPath()).isEqualTo("/" + methodDescriptor.getFullMethodName());
 
     assertThat(http.getHeaderMap().getHeadersList()).containsExactly(
-        io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder().setKey("some-header")
-            .setRawValue(com.google.protobuf.ByteString.copyFromUtf8("v1")).build(),
-        io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder().setKey("bin-header-bin")
-            .setRawValue(com.google.protobuf.ByteString.copyFromUtf8("AQID")).build());
+        HeaderValue.newBuilder().setKey("some-header")
+            .setRawValue(ByteString.copyFromUtf8("v1")).build(),
+        HeaderValue.newBuilder().setKey("bin-header-bin")
+            .setRawValue(ByteString.copyFromUtf8("AQID")).build());
   }
 
   @Test
@@ -437,15 +441,15 @@ public class CheckRequestBuilderTest {
         builderWithConfig.buildRequest(methodDescriptor, headers, requestTime);
 
     HeaderMap headerMap = request.getAttributes().getRequest().getHttp().getHeaderMap();
-    assertThat(headerMap.getHeadersList()).hasSize(4);
-    assertThat(headerMap.getHeadersList().get(0).getKey()).isEqualTo("x-custom-bin");
-    assertThat(headerMap.getHeadersList().get(0).getRawValue().toStringUtf8()).isEqualTo("AQI");
-    assertThat(headerMap.getHeadersList().get(1).getKey()).isEqualTo("x-custom-bin");
-    assertThat(headerMap.getHeadersList().get(1).getRawValue().toStringUtf8()).isEqualTo("AwQ");
-    assertThat(headerMap.getHeadersList().get(2).getKey()).isEqualTo("x-custom");
-    assertThat(headerMap.getHeadersList().get(2).getRawValue().toStringUtf8()).isEqualTo("value1");
-    assertThat(headerMap.getHeadersList().get(3).getKey()).isEqualTo("x-custom");
-    assertThat(headerMap.getHeadersList().get(3).getRawValue().toStringUtf8()).isEqualTo("value2");
+    assertThat(headerMap.getHeadersList()).containsExactly(
+        HeaderValue.newBuilder().setKey("x-custom-bin")
+            .setRawValue(ByteString.copyFromUtf8("AQI")).build(),
+        HeaderValue.newBuilder().setKey("x-custom-bin")
+            .setRawValue(ByteString.copyFromUtf8("AwQ")).build(),
+        HeaderValue.newBuilder().setKey("x-custom")
+            .setRawValue(ByteString.copyFromUtf8("value1")).build(),
+        HeaderValue.newBuilder().setKey("x-custom")
+            .setRawValue(ByteString.copyFromUtf8("value2")).build());
   }
 
   private ExtAuthzConfig buildExtAuthzConfig() {
@@ -458,9 +462,9 @@ public class CheckRequestBuilderTest {
       boolean includePeerCertificate) {
     GrpcServiceConfig.GoogleGrpcConfig googleGrpc = GrpcServiceConfig.GoogleGrpcConfig.builder()
         .target("test-cluster")
-        .configuredChannelCredentials(io.grpc.xds.client.ConfiguredChannelCredentials.create(
-            mock(io.grpc.ChannelCredentials.class),
-            mock(io.grpc.xds.client.ConfiguredChannelCredentials.ChannelCredsConfig.class)))
+        .configuredChannelCredentials(ConfiguredChannelCredentials.create(
+            mock(ChannelCredentials.class),
+            mock(ConfiguredChannelCredentials.ChannelCredsConfig.class)))
         .build();
 
     GrpcServiceConfig dummyServiceConfig = GrpcServiceConfig.builder()
@@ -477,7 +481,7 @@ public class CheckRequestBuilderTest {
         .failureModeAllowHeaderAdd(false)
         .denyAtDisable(false)
         .filterEnabled(Matchers.FractionMatcher.create(100, 100))
-        .statusOnError(io.grpc.Status.INTERNAL)
+        .statusOnError(Status.INTERNAL)
         .build();
   }
 }

@@ -134,6 +134,31 @@ public class ExternalProcessorFilter implements Filter {
         extProcFilterConfig, cachedChannelManager, scheduler, context);
   }
 
+  @Override
+  public boolean requiresRequestPayloadAccess(
+      FilterConfig filterConfig, @Nullable FilterConfig overrideConfig) {
+    ProcessingMode mode = getProcessingMode(filterConfig, overrideConfig);
+    return mode.getRequestBodyMode() != ProcessingMode.BodySendMode.NONE;
+  }
+
+  @Override
+  public boolean requiresResponsePayloadAccess(
+      FilterConfig filterConfig, @Nullable FilterConfig overrideConfig) {
+    ProcessingMode mode = getProcessingMode(filterConfig, overrideConfig);
+    return mode.getResponseBodyMode() != ProcessingMode.BodySendMode.NONE;
+  }
+
+  private static ProcessingMode getProcessingMode(
+      FilterConfig filterConfig, @Nullable FilterConfig overrideConfig) {
+    ExternalProcessorFilterConfig extProcFilterConfig =
+        (ExternalProcessorFilterConfig) filterConfig;
+    if (overrideConfig != null) {
+      extProcFilterConfig = mergeConfigs(extProcFilterConfig,
+          (ExternalProcessorFilterOverrideConfig) overrideConfig);
+    }
+    return extProcFilterConfig.getExternalProcessor().getProcessingMode();
+  }
+
   private static ExternalProcessorFilterConfig mergeConfigs(
       ExternalProcessorFilterConfig extProcFilterConfig,
       ExternalProcessorFilterOverrideConfig extProcFilterConfigOverride) {

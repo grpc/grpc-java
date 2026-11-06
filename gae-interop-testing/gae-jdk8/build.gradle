@@ -24,7 +24,7 @@ plugins {
     id "war"
 
     id "ru.vyarus.animalsniffer"
-    id 'com.google.cloud.tools.appengine'
+    id 'com.google.cloud.tools.appengine-appenginewebxml'
 }
 
 description = 'gRPC: gae interop testing (jdk8)'
@@ -102,7 +102,7 @@ String getGaeProject() {
 }
 
 String getService(java.nio.file.Path projectPath) {
-    Node xml = new XmlParser().parse(projectPath.resolve("src/main/webapp/WEB-INF/appengine-web.xml").toFile())
+    Node xml = new groovy.xml.XmlParser().parse(projectPath.resolve("src/main/webapp/WEB-INF/appengine-web.xml").toFile())
     if (xml.service.isEmpty()) {
         return "default"
     } else {

@@ -55,6 +55,9 @@ public final class ExternalProcessorUtil {
    * Reads an InputStream into a ByteString.
    */
   public static ByteString outboundStreamToByteString(InputStream message) throws IOException {
+    if (message instanceof KnownLengthInputStream) {
+      return ((KnownLengthInputStream) message).getByteString();
+    }
     if (message instanceof Drainable) {
       int size = message.available();
       ByteString.Output output =

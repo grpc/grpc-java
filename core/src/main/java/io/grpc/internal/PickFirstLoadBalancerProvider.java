@@ -37,7 +37,7 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   private static final String SHUFFLE_ADDRESS_LIST_KEY = "shuffleAddressList";
 
   static boolean enableNewPickFirst =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST", false);
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST", true);
 
   public static boolean isEnabledHappyEyeballs() {
 

@@ -91,7 +91,7 @@ public class TomcatTransportTest extends AbstractTransportTest {
         Context ctx = tomcatServer.addContext(MYAPP, new File("build/tmp").getAbsolutePath());
         Tomcat.addServlet(ctx, "TomcatTransportTest", grpcServlet)
             .setAsyncSupported(true);
-        ctx.addServletMappingDecoded("/*", "TomcatTransportTest");
+        ctx.addServletMapping("/*", "TomcatTransportTest");
         tomcatServer.getConnector().addUpgradeProtocol(new Http2Protocol());
         // Workaround for https://github.com/grpc/grpc-java/issues/12540
         // Prevent premature OutputBuffer recycling by disabling facade recycling.

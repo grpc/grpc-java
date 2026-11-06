@@ -29,6 +29,7 @@ import static io.grpc.binder.internal.BinderTransport.WIRE_FORMAT_VERSION;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -62,6 +63,7 @@ import io.grpc.binder.internal.OneWayBinderProxies.*;
 import io.grpc.binder.internal.SettableAsyncSecurityPolicy.AuthRequest;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientStream;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientStreamListenerBase;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
@@ -78,6 +80,7 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -418,6 +421,41 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
         serverListener.takeListenerOrFail(TIMEOUT_MS, MILLISECONDS);
     serverTransportListener.waitForTermination(TIMEOUT_MS, MILLISECONDS);
     assertThat(serverTransportListener.isTerminated()).isTrue();
+  }
+
+  @Test
+  public void shutdownNowBetweenNewStreamAndStart_closesStreamAsMiscarried() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+
+    ClientStream stream =
+        client.newStream(methodDescriptor, new Metadata(), CallOptions.DEFAULT, tracers);
+
+    Status shutdownReason = Status.UNAVAILABLE.withDescription("shutdownNow() before start()");
+    client.shutdownNow(shutdownReason);
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
+    // An unstarted stream doesn't count as "in use".
+    verify(mockClientTransportListener, never()).transportInUse(anyBoolean());
+
+    AtomicReference<RpcProgress> closedProgress = new AtomicReference<>();
+    ClientStreamListenerBase clientStreamListener =
+        new ClientStreamListenerBase() {
+          @Override
+          public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
+            closedProgress.set(rpcProgress);
+            super.closed(status, rpcProgress, trailers);
+          }
+        };
+    stream.start(clientStreamListener);
+
+    assertThat(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .isSameInstanceAs(shutdownReason);
+    assertThat(clientStreamListener.awaitTrailers(TIMEOUT_MS, MILLISECONDS)).isNotNull();
+    assertThat(closedProgress.get()).isEqualTo(RpcProgress.MISCARRIED);
+    assertThat(clientStreamTracer1.await(TIMEOUT_MS, MILLISECONDS)).isTrue();
+    assertThat(clientStreamTracer1.getStatus()).isSameInstanceAs(shutdownReason);
+    assertThat(clientStreamTracer1.getOutboundHeaders()).isFalse();
   }
 
   @Test
