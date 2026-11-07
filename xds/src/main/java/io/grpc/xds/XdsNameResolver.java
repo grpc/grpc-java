@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.xds.client.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -1283,35 +1284,43 @@ final class XdsNameResolver extends NameResolver {
       };
     }
 
-    private static <ReqT> void sendSerializedMessage(
-        ClientCall<InputStream, ?> rawCall,
-        MethodDescriptor<ReqT, ?> method,
-        ReqT message) {
-      ByteString byteString;
-      try {
-        InputStream stream = method.getRequestMarshaller().stream(message);
-        try {
-          byteString = ExternalProcessorUtil.outboundStreamToByteString(stream);
-        } finally {
-          try {
-            stream.close();
-          } catch (IOException ignored) {
-            // ignore
-          }
-        }
-      } catch (IOException | RuntimeException e) {
-        rawCall.cancel("Failed to read message for raw message interceptor", e);
-        return;
-      } catch (Error e) {
-        rawCall.cancel("Client sendMessage() failed with Error", e);
-        throw e;
-      }
-      rawCall.sendMessage(new KnownLengthInputStream(byteString));
-    }
-
     private abstract static class PartialForwardingClientCall<ReqT, RespT>
         extends ClientCall<ReqT, RespT> {
+      private boolean aborted;
+      private boolean cancelCalled;
+
       protected abstract ClientCall<?, ?> delegate();
+
+      protected void sendSerializedMessage(
+          ClientCall<InputStream, ?> rawCall,
+          MethodDescriptor<ReqT, ?> method,
+          ReqT message) {
+        checkState(!cancelCalled, "call was cancelled");
+        if (aborted) {
+          return;
+        }
+        ByteString byteString;
+        try {
+          InputStream stream = method.getRequestMarshaller().stream(message);
+          try {
+            byteString = ExternalProcessorUtil.outboundStreamToByteString(stream);
+          } finally {
+            try {
+              stream.close();
+            } catch (IOException ignored) {
+              // ignore
+            }
+          }
+        } catch (IOException | RuntimeException e) {
+          aborted = true;
+          rawCall.cancel("Failed to read message for raw message interceptor", e);
+          return;
+        } catch (Error e) {
+          rawCall.cancel("Client sendMessage() failed with Error", e);
+          throw e;
+        }
+        rawCall.sendMessage(new KnownLengthInputStream(byteString));
+      }
 
       @Override
       public void request(int numMessages) {
@@ -1320,11 +1329,16 @@ final class XdsNameResolver extends NameResolver {
 
       @Override
       public void cancel(@Nullable String message, @Nullable Throwable cause) {
+        cancelCalled = true;
         delegate().cancel(message, cause);
       }
 
       @Override
       public void halfClose() {
+        checkState(!cancelCalled, "call was cancelled");
+        if (aborted) {
+          return;
+        }
         delegate().halfClose();
       }
 
