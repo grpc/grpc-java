@@ -477,22 +477,41 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         if (delegateFactory != null) {
           ClientStreamTracer delegateTracer = delegateFactory.newClientStreamTracer(info, headers);
           return new ForwardingClientStreamTracer() {
+            private volatile boolean cancelled;
+
             @Override
             protected ClientStreamTracer delegate() {
               return delegateTracer;
             }
 
             @Override
+            public void cancelled(Status status) {
+              cancelled = true;
+              delegate().cancelled(status);
+            }
+
+            @Override
             public void streamClosed(Status status) {
-              tracker.incrementCallCount(status.isOk());
+              if (!cancelled) {
+                tracker.incrementCallCount(status.isOk());
+              }
               delegate().streamClosed(status);
             }
           };
         } else {
           return new ClientStreamTracer() {
+            private volatile boolean cancelled;
+
+            @Override
+            public void cancelled(Status status) {
+              cancelled = true;
+            }
+
             @Override
             public void streamClosed(Status status) {
-              tracker.incrementCallCount(status.isOk());
+              if (!cancelled) {
+                tracker.incrementCallCount(status.isOk());
+              }
             }
           };
         }

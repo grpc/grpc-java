@@ -251,6 +251,8 @@ public abstract class AbstractClientStream extends AbstractStream
       }
     }
 
+
+
     private void setFullStreamDecompression(boolean fullStreamDecompression) {
       this.fullStreamDecompression = fullStreamDecompression;
     }
@@ -391,16 +393,16 @@ public abstract class AbstractClientStream extends AbstractStream
      * method must be called from the transport thread.
      *
      * @param status the new status to set
-     * @param stopDelivery if {@code true}, interrupts any further delivery of inbound messages that
+     * @param cancelled if {@code true}, interrupts any further delivery of inbound messages that
      *        may already be queued up in the deframer. If {@code false}, the listener will be
      *        notified immediately after all currently completed messages in the deframer have been
      *        delivered to the application.
      * @param trailers new instance of {@code Trailers}, either empty or those returned by the
      *        server
      */
-    public final void transportReportStatus(final Status status, boolean stopDelivery,
+    public final void transportReportStatus(final Status status, boolean cancelled,
         final Metadata trailers) {
-      transportReportStatus(status, RpcProgress.PROCESSED, stopDelivery, trailers);
+      transportReportStatus(status, RpcProgress.PROCESSED, cancelled, trailers);
     }
 
     /**
@@ -411,7 +413,7 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param rpcProgress RPC progress that the
      *        {@link ClientStreamListener#closed(Status, RpcProgress, Metadata)}
      *        will receive
-     * @param stopDelivery if {@code true}, interrupts any further delivery of inbound messages that
+     * @param cancelled if {@code true}, interrupts any further delivery of inbound messages that
      *        may already be queued up in the deframer and overrides any previously queued status.
      *        If {@code false}, the listener will be notified immediately after all currently
      *        completed messages in the deframer have been delivered to the application.
@@ -421,16 +423,19 @@ public abstract class AbstractClientStream extends AbstractStream
     public final void transportReportStatus(
         final Status status,
         final RpcProgress rpcProgress,
-        boolean stopDelivery,
+        boolean cancelled,
         final Metadata trailers) {
       checkNotNull(status, "status");
       checkNotNull(trailers, "trailers");
-      // If stopDelivery, we continue in case previous invocation is waiting for stall
-      if (statusReported && !stopDelivery) {
+      // If cancelled, we continue in case previous invocation is waiting for stall
+      if (statusReported && !cancelled) {
         return;
       }
       statusReported = true;
       statusReportedIsOk = status.isOk();
+      if (cancelled) {
+        statsTraceCtx.clientCancelled(status);
+      }
       onStreamDeallocated();
 
       if (deframerClosed) {
@@ -444,7 +449,7 @@ public abstract class AbstractClientStream extends AbstractStream
                 closeListener(status, rpcProgress, trailers);
               }
             };
-        closeDeframer(stopDelivery);
+        closeDeframer(cancelled);
       }
     }
 

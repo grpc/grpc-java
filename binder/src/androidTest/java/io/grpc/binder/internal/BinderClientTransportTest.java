@@ -293,6 +293,22 @@ public final class BinderClientTransportTest {
   }
 
   @Test
+  public void testCancelStream_notifiesTracer() throws Exception {
+    transport = new BinderClientTransportBuilder().build();
+    startAndAwaitReady(transport, transportListener);
+    
+    ClientStreamTracer mockTracer = org.mockito.Mockito.mock(ClientStreamTracer.class);
+    ClientStream stream =
+        transport.newStream(methodDesc, new Metadata(), CallOptions.DEFAULT, new ClientStreamTracer[]{mockTracer});
+
+    stream.start(streamListener);
+    Status cancelStatus = Status.CANCELLED.withDescription("Client cancelled");
+    stream.cancel(cancelStatus);
+
+    org.mockito.Mockito.verify(mockTracer, org.mockito.Mockito.timeout(5000)).cancelled(org.mockito.ArgumentMatchers.eq(cancelStatus));
+  }
+
+  @Test
   public void testNewStreamBeforeTransportReadyFails() throws Exception {
     // Use a special SecurityPolicy that lets us act before the transport is setup/ready.
     transport =
