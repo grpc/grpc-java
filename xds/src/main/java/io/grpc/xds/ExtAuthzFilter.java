@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -28,6 +30,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
@@ -36,6 +39,7 @@ import io.grpc.xds.internal.extauthz.CheckRequestBuilder;
 import io.grpc.xds.internal.extauthz.CheckResponseHandler;
 import io.grpc.xds.internal.extauthz.ExtAuthzClientCall;
 import io.grpc.xds.internal.extauthz.ExtAuthzConfig;
+import io.grpc.xds.internal.extauthz.ExtAuthzMetrics;
 import io.grpc.xds.internal.extauthz.ExtAuthzParseException;
 import io.grpc.xds.internal.extauthz.FailingClientCall;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
@@ -46,8 +50,6 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 
-// TODO(sauravz): Implement ext_authz metrics per gRFC A92 (Section: Metrics).
-// Client-side counters: grpc.client_ext_authz.{allowed,denied,filter_disabled,failed}_rpcs
 @ThreadSafe
 final class ExtAuthzFilter implements Filter {
 
@@ -109,7 +111,8 @@ final class ExtAuthzFilter implements Filter {
 
     @Override
     public ExtAuthzFilter newInstance(FilterContext context) {
-      return new ExtAuthzFilter(new GrpcChannelProvider(), ThreadSafeRandomImpl.instance);
+      return new ExtAuthzFilter(new GrpcChannelProvider(), ThreadSafeRandomImpl.instance,
+          context.metricsRecorder());
     }
 
     @Override
@@ -193,10 +196,13 @@ final class ExtAuthzFilter implements Filter {
 
   private final ChannelProvider channelProvider;
   private final ThreadSafeRandom random;
+  private final MetricRecorder metricRecorder;
 
-  ExtAuthzFilter(ChannelProvider channelProvider, ThreadSafeRandom random) {
+  ExtAuthzFilter(ChannelProvider channelProvider, ThreadSafeRandom random,
+      MetricRecorder metricRecorder) {
     this.channelProvider = channelProvider;
     this.random = random;
+    this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
   }
 
   @Nullable
@@ -221,7 +227,7 @@ final class ExtAuthzFilter implements Filter {
         new CheckRequestBuilder(extAuthzConfig),
         new CheckResponseHandler(
             new HeaderMutationFilter(extAuthzConfig.decoderHeaderMutationRules())),
-        scheduler);
+        scheduler, metricRecorder);
   }
 
   @Override
@@ -241,6 +247,7 @@ final class ExtAuthzFilter implements Filter {
     private final CheckRequestBuilder checkRequestBuilder;
     private final CheckResponseHandler responseHandler;
     private final ScheduledExecutorService scheduler;
+    private final MetricRecorder metricRecorder;
 
     ExtAuthzClientInterceptor(
         ExtAuthzConfig config,
@@ -248,13 +255,14 @@ final class ExtAuthzFilter implements Filter {
         ThreadSafeRandom random,
         CheckRequestBuilder checkRequestBuilder,
         CheckResponseHandler responseHandler,
-        ScheduledExecutorService scheduler) {
+        ScheduledExecutorService scheduler, MetricRecorder metricRecorder) {
       this.config = config;
       this.random = random;
       this.authzStub = authzStub;
       this.checkRequestBuilder = checkRequestBuilder;
       this.responseHandler = responseHandler;
       this.scheduler = scheduler;
+      this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
     }
 
     @com.google.common.annotations.VisibleForTesting
@@ -265,10 +273,12 @@ final class ExtAuthzFilter implements Filter {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      String target = next.authority();
       FractionMatcher filterEnabled = config.filterEnabled();
       
       // 1. FractionMatcher Evaluation (Spec Parity / Correctness fix)
       if (random.nextInt(filterEnabled.denominator()) >= filterEnabled.numerator()) {
+        ExtAuthzMetrics.recordClientFilterDisabled(metricRecorder, target);
         if (config.denyAtDisable()) {
           return new FailingClientCall<>(config.statusOnError());
         }
@@ -292,7 +302,9 @@ final class ExtAuthzFilter implements Filter {
           authzStub,
           checkRequestBuilder,
           responseHandler,
-          config);
+          config,
+          metricRecorder,
+          target);
     }
   }
 }
