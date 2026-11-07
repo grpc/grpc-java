@@ -71,7 +71,7 @@ public class CheckResponseHandlerTest {
     AuthzResponse authzResponse = responseHandler.handleResponse(checkResponse);
     assertThat(authzResponse.decision()).isEqualTo(Decision.ALLOW);
     assertThat(authzResponse.requestHeaderMutations())
-        .isEqualTo(HeaderMutations.create(ImmutableList.of(), ImmutableList.of()));
+        .isEqualTo(HeaderMutations.EMPTY_MUTATIONS);
   }
 
   @Test
@@ -192,7 +192,7 @@ public class CheckResponseHandlerTest {
     assertThat(status.getDescription())
         .isEqualTo("RPC denied by external authorization server");
     HeaderMutations expectedMutations =
-        HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
+        HeaderMutations.EMPTY_MUTATIONS;
     assertThat(authzResponse.responseHeaderMutations()).isEqualTo(expectedMutations);
   }
 
