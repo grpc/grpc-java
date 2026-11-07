@@ -159,8 +159,39 @@ public final class Grpc {
     try {
       return new URI(null, null, host, port, null, null, null).getAuthority();
     } catch (URISyntaxException ex) {
+      String placeholderHost = addPlaceholderLabelIfLastLabelStartsWithDigit(host);
+      if (placeholderHost != null) {
+        try {
+          new URI(null, null, placeholderHost, port, null, null, null);
+          return port < 0 ? host : host + ":" + port;
+        } catch (URISyntaxException ignored) {
+          // Fall through and throw original exception.
+        }
+      }
       throw new IllegalArgumentException("Invalid host or port: " + host + " " + port, ex);
     }
+  }
+
+  /**
+   * Workaround for JDK-8188305: {@link URI} enforces RFC 2396's {@code toplabel} rule requiring
+   * the final label of a multi-label hostname to start with an ASCII letter, whereas RFC 1123
+   * Section 2.1 and RFC 3986 allow it to start with an ASCII digit.
+   */
+  private static String addPlaceholderLabelIfLastLabelStartsWithDigit(String host) {
+    if (host == null || host.indexOf('@') != -1) {
+      return null;
+    }
+    boolean trailingDot = host.endsWith(".");
+    int end = trailingDot ? host.length() - 1 : host.length();
+    int lastDot = host.lastIndexOf('.', end - 1);
+    if (lastDot <= 0 || lastDot + 1 >= end) {
+      return null;
+    }
+    char firstCharOfLastLabel = host.charAt(lastDot + 1);
+    if (firstCharOfLastLabel < '0' || firstCharOfLastLabel > '9') {
+      return null;
+    }
+    return trailingDot ? host.substring(0, end) + ".a." : host + ".a";
   }
 
   /**

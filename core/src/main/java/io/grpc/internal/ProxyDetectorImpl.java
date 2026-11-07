@@ -183,16 +183,15 @@ class ProxyDetectorImpl implements ProxyDetector {
     URI uri;
     String host = targetAddr.getHostString();
     try {
+      String authority = GrpcUtil.authorityFromHostAndPort(host, targetAddr.getPort());
       uri =
           new URI(
               PROXY_SCHEME,
-              null, /* userInfo */
-              host,
-              targetAddr.getPort(),
+              authority,
               null, /* path */
               null, /* query */
               null /* fragment */);
-    } catch (final URISyntaxException e) {
+    } catch (final URISyntaxException | IllegalArgumentException e) {
       log.log(
           Level.WARNING,
           "Failed to construct URI for proxy lookup, proceeding without proxy",
