@@ -23,14 +23,31 @@ import io.grpc.MetricRecorder;
 
 /** Ext_authz counters defined by gRFC A92. */
 public final class ExtAuthzMetrics {
-  private static final LongCounterMetricInstrument CLIENT_ALLOWED = registerClient(
-      "allowed_rpcs", "RPCs allowed by ext_authz or failure_mode_allow.");
-  private static final LongCounterMetricInstrument CLIENT_DENIED = registerClient(
-      "denied_rpcs", "RPCs denied by ext_authz.");
-  private static final LongCounterMetricInstrument CLIENT_FILTER_DISABLED = registerClient(
-      "filter_disabled_rpcs", "RPCs for which the ext_authz filter was disabled.");
-  private static final LongCounterMetricInstrument CLIENT_FAILED = registerClient(
-      "failed_rpcs", "RPCs for which the ext_authz call-out failed or returned invalid data.");
+  private static final LongCounterMetricInstrument CLIENT_ALLOWED;
+  private static final LongCounterMetricInstrument CLIENT_DENIED;
+  private static final LongCounterMetricInstrument CLIENT_FILTER_DISABLED;
+  private static final LongCounterMetricInstrument CLIENT_FAILED;
+
+  static {
+    MetricInstrumentRegistry registry = MetricInstrumentRegistry.getDefaultRegistry();
+    CLIENT_ALLOWED = registry.registerLongCounter(
+        "grpc.client_ext_authz.allowed_rpcs",
+        "EXPERIMENTAL. RPCs allowed by ext_authz or failure_mode_allow.", "{RPCs}",
+        ImmutableList.of("grpc.target"), ImmutableList.of(), false);
+    CLIENT_DENIED = registry.registerLongCounter(
+        "grpc.client_ext_authz.denied_rpcs",
+        "EXPERIMENTAL. RPCs denied by ext_authz.", "{RPCs}",
+        ImmutableList.of("grpc.target"), ImmutableList.of(), false);
+    CLIENT_FILTER_DISABLED = registry.registerLongCounter(
+        "grpc.client_ext_authz.filter_disabled_rpcs",
+        "EXPERIMENTAL. RPCs for which the ext_authz filter was disabled.", "{RPCs}",
+        ImmutableList.of("grpc.target"), ImmutableList.of(), false);
+    CLIENT_FAILED = registry.registerLongCounter(
+        "grpc.client_ext_authz.failed_rpcs",
+        "EXPERIMENTAL. RPCs for which the ext_authz call-out failed or returned invalid data.",
+        "{RPCs}", ImmutableList.of("grpc.target"), ImmutableList.of(),
+        false);
+  }
 
   private ExtAuthzMetrics() {}
 
@@ -53,11 +70,5 @@ public final class ExtAuthzMetrics {
   private static void recordClient(MetricRecorder recorder, String target,
       LongCounterMetricInstrument instrument) {
     recorder.addLongCounter(instrument, 1, ImmutableList.of(target), ImmutableList.of());
-  }
-
-  private static LongCounterMetricInstrument registerClient(String suffix, String description) {
-    return MetricInstrumentRegistry.getDefaultRegistry().registerLongCounter(
-        "grpc.client_ext_authz." + suffix, "EXPERIMENTAL. " + description, "{RPCs}",
-        ImmutableList.of("grpc.target"), ImmutableList.of(), true);
   }
 }

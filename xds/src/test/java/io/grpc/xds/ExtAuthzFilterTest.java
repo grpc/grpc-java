@@ -513,7 +513,7 @@ public class ExtAuthzFilterTest {
         argThat(instrument -> instrument.getName().equals("grpc.client_ext_authz." + suffix)
             && instrument.getUnit().equals("{RPCs}")
             && instrument.getRequiredLabelKeys().equals(ImmutableList.of("grpc.target"))
-            && instrument.isEnableByDefault()),
+            && !instrument.isEnableByDefault()),
         eq(1L), eq(java.util.Collections.singletonList(channel.authority())),
         eq(java.util.Collections.emptyList()));
   }

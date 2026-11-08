@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -202,7 +200,7 @@ final class ExtAuthzFilter implements Filter {
       MetricRecorder metricRecorder) {
     this.channelProvider = channelProvider;
     this.random = random;
-    this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
+    this.metricRecorder = metricRecorder;
   }
 
   @Nullable
@@ -262,7 +260,7 @@ final class ExtAuthzFilter implements Filter {
       this.checkRequestBuilder = checkRequestBuilder;
       this.responseHandler = responseHandler;
       this.scheduler = scheduler;
-      this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
+      this.metricRecorder = metricRecorder;
     }
 
     @com.google.common.annotations.VisibleForTesting
@@ -273,6 +271,7 @@ final class ExtAuthzFilter implements Filter {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      // TODO: Propagate the channel's target URI instead of its authority.
       String target = next.authority();
       FractionMatcher filterEnabled = config.filterEnabled();
       

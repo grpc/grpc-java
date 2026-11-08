@@ -16,8 +16,6 @@
 
 package io.grpc.xds.internal.extauthz;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.util.Timestamps;
 import io.envoyproxy.envoy.service.auth.v3.AuthorizationGrpc;
@@ -78,8 +76,8 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
     this.checkRequestBuilder = checkRequestBuilder;
     this.responseHandler = responseHandler;
     this.config = config;
-    this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
-    this.target = checkNotNull(target, "target");
+    this.metricRecorder = metricRecorder;
+    this.target = target;
     this.callExecutor = executor;
     this.authzContext = Context.current().withCancellation();
     this.delegate = new DelayedAuthzCall<>(executor, scheduler, callOptions.getDeadline());

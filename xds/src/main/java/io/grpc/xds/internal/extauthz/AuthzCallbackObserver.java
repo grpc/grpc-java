@@ -16,8 +16,6 @@
 
 package io.grpc.xds.internal.extauthz;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.service.auth.v3.CheckResponse;
 import io.grpc.CallOptions;
@@ -77,8 +75,8 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
     this.responseHandler = responseHandler;
     this.config = config;
     this.authzContext = authzContext;
-    this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
-    this.target = checkNotNull(target, "target");
+    this.metricRecorder = metricRecorder;
+    this.target = target;
   }
 
   @Override
@@ -114,6 +112,8 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
         ExtAuthzMetrics.recordClientAllowed(metricRecorder, target);
       }
     } else {
+      // TODO: Distinguish authorization denials from response validation failures so that
+      // denials increment denied_rpcs and validation failures increment failed_rpcs.
       // DENY responses always have a status because the deny() factory requires one.
       Status status = authzResponse.status().orElseThrow(
           () -> new IllegalArgumentException("DENY response missing status"));
