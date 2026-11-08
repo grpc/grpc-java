@@ -112,8 +112,8 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
         ExtAuthzMetrics.recordClientAllowed(metricRecorder, target);
       }
     } else {
-      // TODO: Distinguish authorization denials from response validation failures so that
-      // denials increment denied_rpcs and validation failures increment failed_rpcs.
+      // TODO: Treat response validation failures as failures instead of authorization denials,
+      // per the clarified ext_authz spec. Count them in failed_rpcs instead of denied_rpcs.
       // DENY responses always have a status because the deny() factory requires one.
       Status status = authzResponse.status().orElseThrow(
           () -> new IllegalArgumentException("DENY response missing status"));
