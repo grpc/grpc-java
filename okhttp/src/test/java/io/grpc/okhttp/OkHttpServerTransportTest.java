@@ -102,6 +102,10 @@ public class OkHttpServerTransportTest {
   private ServerTransportListener transportListener
       = mock(ServerTransportListener.class, delegatesTo(mockTransportListener));
   private OkHttpServerTransport serverTransport;
+  // Captured directly off the transportExecutor below so tests can invoke FrameReader.Handler
+  // methods (e.g. windowUpdate) on the real server-side handler without going through the wire,
+  // analogous to OkHttpClientTransportTest's frameHandler() helper.
+  private volatile OkHttpServerTransport.FrameHandler serverFrameHandler;
   private final ExecutorService threadPool = Executors.newCachedThreadPool();
   private final SocketPair socketPair = SocketPair.create(threadPool);
   private final BufferedSink clientWriterSink = Okio.buffer(
@@ -121,6 +125,7 @@ public class OkHttpServerTransportTest {
       .transportExecutor(new Executor() {
         @Override public void execute(Runnable runnable) {
           if (runnable instanceof OkHttpServerTransport.FrameHandler) {
+            serverFrameHandler = (OkHttpServerTransport.FrameHandler) runnable;
             threadPool.execute(runnable);
           } else {
             // Writing is buffered in the PipeSocket, so AsyncSinc can be executed immediately
@@ -1074,6 +1079,67 @@ public class OkHttpServerTransportTest {
     clientFrameWriter.rstStream(3, ErrorCode.CANCEL);
     pingPong();
     shutdownAndTerminate(/*lastStreamId=*/ 3);
+  }
+
+  // RFC 9113 section 6.9: a WINDOW_UPDATE with a flow-control window increment of 0 is a
+  // protocol error, but the *scope* is stream-only when streamId != 0: only that stream should be
+  // reset with RST_STREAM(PROTOCOL_ERROR); the connection and unrelated streams must remain
+  // alive. Invoking the real FrameHandler directly (bypassing the wire/parser) is intentional:
+  // the parser's own handling of increment==0 is separately pinned by Http2Test.
+  @Test
+  public void windowUpdateZeroIncrementOnStream_shouldResetOnlyThatStream() throws Exception {
+    initTransport();
+    handshake();
+
+    List<Header> headers = Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER);
+    clientFrameWriter.headers(1, new ArrayList<>(headers));
+    clientFrameWriter.headers(3, new ArrayList<>(headers));
+    clientFrameWriter.flush();
+    pingPong();
+
+    MockStreamListener streamA = mockTransportListener.newStreams.pop();
+    MockStreamListener streamB = mockTransportListener.newStreams.pop();
+    streamB.stream.request(1);
+
+    serverFrameHandler.windowUpdate(1, 0);
+
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).rstStream(eq(1), eq(ErrorCode.PROTOCOL_ERROR));
+
+    // Confirm the connection is still alive: no GOAWAY snuck in ahead of a fresh ping ack.
+    pingPong();
+    verify(clientFramesRead, never())
+        .goAway(anyInt(), any(ErrorCode.class), any(ByteString.class));
+
+    // Stream B (unrelated to the violation) must remain fully functional.
+    writeDataDirectly(clientWriterSink, FLAG_END_STREAM, 3, "still alive", 0);
+    pingPong();
+    assertThat(streamB.messages.pop()).isEqualTo("still alive");
+    assertThat(streamB.halfClosedCalled).isTrue();
+    assertThat(streamA).isNotNull();
+  }
+
+  // A WINDOW_UPDATE with increment 0 on the connection (streamId == 0) is a *connection* error
+  // per RFC 9113 section 6.9, and must tear down the whole transport. Before this class gained
+  // its own zero-increment check, this silently no-op'd via outboundFlow.windowUpdate(null, 0)
+  // (no enforcement at all, for either scope) once the parser stopped intercepting increment==0.
+  @Test
+  public void windowUpdateZeroIncrementOnConnection_shouldSendGoAway() throws Exception {
+    initTransport();
+    handshake();
+
+    serverFrameHandler.windowUpdate(0, 0);
+
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).goAway(eq(0), eq(ErrorCode.PROTOCOL_ERROR), any(ByteString.class));
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isFalse();
+    verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }
 
   @Test

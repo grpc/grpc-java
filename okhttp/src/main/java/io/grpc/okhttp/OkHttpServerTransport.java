@@ -1012,9 +1012,18 @@ final class OkHttpServerTransport implements ServerTransport,
     @Override
     public void windowUpdate(int streamId, long delta) {
       frameLogger.logWindowsUpdate(OkHttpFrameLogger.Direction.INBOUND, streamId, delta);
-      // delta == 0 checking is in HTTP/2 decoder. And it isn't quite right, as it will always cause
-      // a GOAWAY. RFC7540 section 6.9 says to use RST_STREAM if the stream id isn't 0. Doesn't
-      // matter much though.
+      if (delta == 0) {
+        // RFC7540 section 6.9: a zero increment is a protocol error. It is a connection error if
+        // streamId is 0, and a stream error (scoped to that stream only) otherwise.
+        if (streamId == Utils.CONNECTION_STREAM_ID) {
+          connectionError(ErrorCode.PROTOCOL_ERROR,
+              "Connection WINDOW_UPDATE with a zero increment. RFC7540 section 6.9");
+        } else {
+          streamError(streamId, ErrorCode.PROTOCOL_ERROR,
+              "Stream WINDOW_UPDATE with a zero increment. RFC7540 section 6.9");
+        }
+        return;
+      }
       synchronized (lock) {
         if (streamId == Utils.CONNECTION_STREAM_ID) {
           outboundFlow.windowUpdate(null, (int) delta);
