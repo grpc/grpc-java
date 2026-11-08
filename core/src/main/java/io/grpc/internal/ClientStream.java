@@ -89,6 +89,16 @@ public interface ClientStream extends Stream {
   void setMaxOutboundMessageSize(int maxSize);
 
   /**
+   * Sets whether the client is sending a gzip-compressed request. This is called by
+   * {@link ClientCallImpl#setMessageCompression(boolean)} when the compressor is gzip.
+   * This information is used to validate the server's {@code grpc-accept-encoding} response header.
+   *
+   * @param enabled whether message compression is enabled
+   * @param compressorName the name of the compressor being used (e.g., "gzip")
+   */
+  void setMessageCompression(boolean enabled, String compressorName);
+
+  /**
    * Sets the effective deadline of the RPC.
    */
   void setDeadline(@Nonnull Deadline deadline);
