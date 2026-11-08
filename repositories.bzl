@@ -51,6 +51,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "org.mockito:mockito-core:4.4.0",
     "org.checkerframework:checker-qual:3.49.5",
     "org.codehaus.mojo:animal-sniffer-annotations:1.28",
+    "org.jspecify:jspecify:1.0.0",
 ]
 # GRPC_DEPS_END
 
