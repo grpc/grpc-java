@@ -52,23 +52,18 @@ public final class ExtAuthzMetrics {
   private ExtAuthzMetrics() {}
 
   public static void recordClientAllowed(MetricRecorder recorder, String target) {
-    recordClient(recorder, target, CLIENT_ALLOWED);
+    recorder.addLongCounter(CLIENT_ALLOWED, 1, ImmutableList.of(target), ImmutableList.of());
   }
 
   public static void recordClientDenied(MetricRecorder recorder, String target) {
-    recordClient(recorder, target, CLIENT_DENIED);
+    recorder.addLongCounter(CLIENT_DENIED, 1, ImmutableList.of(target), ImmutableList.of());
   }
 
   public static void recordClientFilterDisabled(MetricRecorder recorder, String target) {
-    recordClient(recorder, target, CLIENT_FILTER_DISABLED);
+    recorder.addLongCounter(CLIENT_FILTER_DISABLED, 1, ImmutableList.of(target), ImmutableList.of());
   }
 
   public static void recordClientFailed(MetricRecorder recorder, String target) {
-    recordClient(recorder, target, CLIENT_FAILED);
-  }
-
-  private static void recordClient(MetricRecorder recorder, String target,
-      LongCounterMetricInstrument instrument) {
-    recorder.addLongCounter(instrument, 1, ImmutableList.of(target), ImmutableList.of());
+    recorder.addLongCounter(CLIENT_FAILED, 1, ImmutableList.of(target), ImmutableList.of());
   }
 }
