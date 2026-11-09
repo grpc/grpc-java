@@ -23,10 +23,10 @@ import io.grpc.MetricRecorder;
 
 /** Ext_authz counters defined by gRFC A92. */
 public final class ExtAuthzMetrics {
-  private static final LongCounterMetricInstrument CLIENT_ALLOWED;
-  private static final LongCounterMetricInstrument CLIENT_DENIED;
-  private static final LongCounterMetricInstrument CLIENT_FILTER_DISABLED;
-  private static final LongCounterMetricInstrument CLIENT_FAILED;
+  public static final LongCounterMetricInstrument CLIENT_ALLOWED;
+  public static final LongCounterMetricInstrument CLIENT_DENIED;
+  public static final LongCounterMetricInstrument CLIENT_FILTER_DISABLED;
+  public static final LongCounterMetricInstrument CLIENT_FAILED;
 
   static {
     MetricInstrumentRegistry registry = MetricInstrumentRegistry.getDefaultRegistry();

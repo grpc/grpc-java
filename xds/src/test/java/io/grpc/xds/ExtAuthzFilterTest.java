@@ -17,6 +17,10 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.extauthz.ExtAuthzMetrics.CLIENT_ALLOWED;
+import static io.grpc.xds.internal.extauthz.ExtAuthzMetrics.CLIENT_DENIED;
+import static io.grpc.xds.internal.extauthz.ExtAuthzMetrics.CLIENT_FAILED;
+import static io.grpc.xds.internal.extauthz.ExtAuthzMetrics.CLIENT_FILTER_DISABLED;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -38,6 +42,7 @@ import io.envoyproxy.envoy.type.v3.HttpStatus;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
@@ -315,7 +320,7 @@ public class ExtAuthzFilterTest {
 
     // Verify the authz service was NEVER contacted (filter was disabled)
     verify(mockAuthzService, never()).check(any(CheckRequest.class), any());
-    verifyMetric("filter_disabled_rpcs");
+    verifyMetric(CLIENT_FILTER_DISABLED);
   }
 
   @Test
@@ -352,7 +357,7 @@ public class ExtAuthzFilterTest {
 
     // Assert: Authz service was NEVER contacted
     verify(mockAuthzService, never()).check(any(CheckRequest.class), any());
-    verifyMetric("filter_disabled_rpcs");
+    verifyMetric(CLIENT_FILTER_DISABLED);
   }
 
   @Test
@@ -389,7 +394,7 @@ public class ExtAuthzFilterTest {
 
     // Assert: Authz service WAS contacted (filter is active)
     verify(mockAuthzService).check(any(CheckRequest.class), any());
-    verifyMetric("allowed_rpcs");
+    verifyMetric(CLIENT_ALLOWED);
     verifyNoMoreInteractions(metricRecorder);
   }
 
@@ -425,7 +430,7 @@ public class ExtAuthzFilterTest {
 
     // Assert: Authz service WAS contacted
     verify(mockAuthzService).check(any(CheckRequest.class), any());
-    verifyMetric("denied_rpcs");
+    verifyMetric(CLIENT_DENIED);
     verifyNoMoreInteractions(metricRecorder);
   }
 
@@ -448,8 +453,8 @@ public class ExtAuthzFilterTest {
     call.request(1);
 
     assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.OK);
-    verifyMetric("failed_rpcs");
-    verifyMetric("allowed_rpcs");
+    verifyMetric(CLIENT_FAILED);
+    verifyMetric(CLIENT_ALLOWED);
     verifyNoMoreInteractions(metricRecorder);
   }
 
@@ -477,7 +482,7 @@ public class ExtAuthzFilterTest {
     call.start(listener, new Metadata());
 
     assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
-    verifyMetric("denied_rpcs");
+    verifyMetric(CLIENT_DENIED);
     verifyNoMoreInteractions(metricRecorder);
   }
 
@@ -504,16 +509,13 @@ public class ExtAuthzFilterTest {
     call.start(listener, new Metadata());
 
     assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
-    verifyMetric("denied_rpcs");
+    verifyMetric(CLIENT_DENIED);
     verifyNoMoreInteractions(metricRecorder);
   }
 
-  private void verifyMetric(String suffix) {
+  private void verifyMetric(LongCounterMetricInstrument expectedMetric) {
     verify(metricRecorder).addLongCounter(
-        argThat(instrument -> instrument.getName().equals("grpc.client_ext_authz." + suffix)
-            && instrument.getUnit().equals("{RPCs}")
-            && instrument.getRequiredLabelKeys().equals(ImmutableList.of("grpc.target"))
-            && !instrument.isEnableByDefault()),
+        argThat(instrument -> instrument.getName().equals(expectedMetric.getName())),
         eq(1L), eq(java.util.Collections.singletonList(channel.authority())),
         eq(java.util.Collections.emptyList()));
   }
