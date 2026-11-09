@@ -90,12 +90,23 @@ Tagging the Release
 -------------------
 
 1. Verify there are no open issues in the release milestone. Open issues should
-   either be deferred or resolved and the fix backported. Verify there are no
-   [TODO:release blocker][] nor [TODO:backport][] issues (open or closed), or
-   that they are tracking an issue for a different branch.
-2. Ensure that the Google-internal steps  
+   either be deferred or resolved and the fix backported, to atleast 2 most recent
+   branches as a rule of thumb. Verify there are no [TODO:release blocker][] nor
+   [TODO:backport][] issues (open or closed), or that they are tracking an issue for
+   a different branch. Before removing the `TODO:backport` label double-check to make
+   sure that there has been no missed backport of the issue in the latest branch cut
+   either due to
+   1.1 Mistyping the latest minor version branch to backport it to OR
+   1.2 Concurrent branching activities: There's a time window there where you can lose a
+   backport where the branch didn't exist. One engineer might be making a branch cut and
+   concurrently another engineer might be making a fix to the master branch and backporting
+   it to only the most recent minor version branch before the branch cut currently being made.
+2. Keep a tab over the commits made on master since the branch cut, to check if any commits
+   standout or look suspicious that it should be backported, and check with the PR author if
+   necessary.
+3. Ensure that the Google-internal steps  
    at go/grpc-java/releasing#before-tagging-a-release are completed.
-3. For vMajor.Minor.x branch, change `README.md` to refer to the next release
+4. For vMajor.Minor.x branch, change `README.md` to refer to the next release
    version. _Also_ update the version numbers for protoc if the protobuf library
    version was updated since the last release.
 
@@ -110,7 +121,7 @@ Tagging the Release
    
    git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
-4. Change root build files to remove "-SNAPSHOT" for the next release version
+5. Change root build files to remove "-SNAPSHOT" for the next release version
    (e.g. `0.7.0`). Commit the result and make a tag:
 
    ```bash
@@ -121,7 +132,7 @@ Tagging the Release
    git commit -a -m "Bump version to $MAJOR.$MINOR.$PATCH"
    git tag -a v$MAJOR.$MINOR.$PATCH -m "Version $MAJOR.$MINOR.$PATCH"
    ```
-5. Change root build files to the next snapshot version (e.g. `0.7.1-SNAPSHOT`).
+6. Change root build files to the next snapshot version (e.g. `0.7.1-SNAPSHOT`).
    Commit the result:
 
    ```bash
@@ -135,7 +146,7 @@ Tagging the Release
    git push -u origin release-v$MAJOR.$MINOR.$PATCH
    ```
    Raise a PR and set the base branch of the PR to v$MAJOR.$MINOR.x of the upstream grpc-java repo.
-6. Go through PR review and push the release tag and updated release branch to
+7. Go through PR review and push the release tag and updated release branch to
    GitHub (DO NOT click the merge button on the GitHub page):
 
    ```bash
@@ -144,9 +155,9 @@ Tagging the Release
    git push upstream v$MAJOR.$MINOR.x
    git push upstream v$MAJOR.$MINOR.$PATCH
    ```
-7. Close the release milestone.
+8. Close the release milestone.
 
-8. Trigger build as described in "Auto releasing using kokoro" at
+9. Trigger build as described in "Auto releasing using kokoro" at
    go/grpc-java/releasing.
 
     It runs three jobs on Kokoro, one on each platform. See their scripts:
@@ -154,7 +165,7 @@ Tagging the Release
     outputs of each script is combined into a single folder and then processed
     by `upload_artifacts.sh`, which signs the files and uploads to Sonatype.
 
-9. Once all of the artifacts have been pushed to the staging repository, the
+10. Once all of the artifacts have been pushed to the staging repository, the
    repository should have been closed by `upload_artifacts.sh`. Closing triggers
    several sanity checks on the repository. If this completes successfully, the
    repository can then be `released`, which will begin the process of pushing
@@ -162,7 +173,7 @@ Tagging the Release
    in the process). You can see the complete process for releasing to Maven
    Central on the [OSSRH site](https://central.sonatype.org/publish/publish-portal-ossrh-staging-api/#deploying).
 
-10. We have containers for each release to detect compatibility regressions with
+11. We have containers for each release to detect compatibility regressions with
     old releases. Generate one for the new release by following the [GCR image
     generation instructions][gcr-image]. Summary:
     ```bash
@@ -184,7 +195,7 @@ Tagging the Release
     ```
 [gcr-image]: https://github.com/grpc/grpc/blob/master/tools/interop_matrix/README.md#step-by-step-instructions-for-adding-a-gcr-image-for-a-new-release-for-compatibility-test
 
-11. Update gh-pages with the new Javadoc. Generally the file is on repo1
+12. Update gh-pages with the new Javadoc. Generally the file is on repo1
     15 minutes after publishing:
 
     ```bash
@@ -203,16 +214,16 @@ Tagging the Release
 
     Verify the current version is [live on grpc.io](https://grpc.io/grpc-java/javadoc/).
 
-12. Add [Release Notes](https://github.com/grpc/grpc-java/releases) for the new tag.
+13. Add [Release Notes](https://github.com/grpc/grpc-java/releases) for the new tag.
     *Make sure that any backports are reflected in the release notes.*
 
-13. Notify the Community. Post a release announcement to
+14. Notify the Community. Post a release announcement to
     [grpc-io](https://groups.google.com/forum/#!forum/grpc-io)
     (`grpc-io@googlegroups.com`) with the title `gRPC-Java v$MAJOR.$MINOR.$PATCH
     Released`. The email content should link to the GitHub release notes and
     include a copy of them.
 
-14. Update README.md. Cherry-pick the commit that updated the README.md into the
+15. Update README.md. Cherry-pick the commit that updated the README.md into the
     master branch.
 
     ```bash
@@ -223,7 +234,7 @@ Tagging the Release
 
     Create a PR and go through the review process
 
-15. Update version referenced by tutorials. Update `params.grpc_vers.java` in
+16. Update version referenced by tutorials. Update `params.grpc_vers.java` in
     [config.yaml](https://github.com/grpc/grpc.io/blob/master/config.yaml) of
     the grpc.io repository. Create a PR and go through the review process.
 
@@ -254,3 +265,4 @@ When happy with the dependency upgrades, update the versions in `MODULE.bazel`,
 Upgrade the `uses:` for actions in `.github/workflows` to newer versions. Make
 sure to see what changed in each new major version, but it is most often just
 requiring a newer Node.js version.
+
