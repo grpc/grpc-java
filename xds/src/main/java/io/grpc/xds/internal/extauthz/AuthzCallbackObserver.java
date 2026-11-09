@@ -89,6 +89,7 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
       if (setCallAndDrain(new FailingClientCall<>(
           Status.INTERNAL.withCause(e).withDescription("Failed to process authz response")))) {
         ExtAuthzMetrics.recordClientFailed(metricRecorder, target);
+        ExtAuthzMetrics.recordClientDenied(metricRecorder, target);
       }
     }
   }
@@ -161,6 +162,7 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
       Status statusToReturn = config.statusOnError().withCause(t);
       if (setCallAndDrain(new FailingClientCall<>(statusToReturn))) {
         ExtAuthzMetrics.recordClientFailed(metricRecorder, target);
+        ExtAuthzMetrics.recordClientDenied(metricRecorder, target);
       }
       authzContext.close();
     }
@@ -176,6 +178,7 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
         .withDescription("Authz server completed without sending CheckResponse");
     if (setCallAndDrain(new FailingClientCall<>(status))) {
       ExtAuthzMetrics.recordClientFailed(metricRecorder, target);
+      ExtAuthzMetrics.recordClientDenied(metricRecorder, target);
     }
     authzContext.close();
   }

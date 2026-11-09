@@ -274,19 +274,23 @@ final class ExtAuthzFilter implements Filter {
       // TODO: Propagate the channel's target URI instead of its authority.
       String target = next.authority();
       FractionMatcher filterEnabled = config.filterEnabled();
-      
+
       // 1. FractionMatcher Evaluation (Spec Parity / Correctness fix)
       if (random.nextInt(filterEnabled.denominator()) >= filterEnabled.numerator()) {
         ExtAuthzMetrics.recordClientFilterDisabled(metricRecorder, target);
         if (config.denyAtDisable()) {
+          ExtAuthzMetrics.recordClientDenied(metricRecorder, target);
           return new FailingClientCall<>(config.statusOnError());
         }
+        ExtAuthzMetrics.recordClientAllowed(metricRecorder, target);
         return next.newCall(method, callOptions);
       }
 
       // 2. Strict Fail-Fast Executor Validation
       Executor executor = callOptions.getExecutor();
       if (executor == null) {
+        ExtAuthzMetrics.recordClientFailed(metricRecorder, target);
+        ExtAuthzMetrics.recordClientDenied(metricRecorder, target);
         return new FailingClientCall<>(Status.INTERNAL
             .withDescription("No executor provided in CallOptions or Channel"));
       }

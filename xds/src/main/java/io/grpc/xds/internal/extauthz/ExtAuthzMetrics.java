@@ -60,7 +60,8 @@ public final class ExtAuthzMetrics {
   }
 
   public static void recordClientFilterDisabled(MetricRecorder recorder, String target) {
-    recorder.addLongCounter(CLIENT_FILTER_DISABLED, 1, ImmutableList.of(target), ImmutableList.of());
+    recorder.addLongCounter(CLIENT_FILTER_DISABLED, 1,
+        ImmutableList.of(target), ImmutableList.of());
   }
 
   public static void recordClientFailed(MetricRecorder recorder, String target) {
