@@ -45,16 +45,12 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Encapsulates all communication with an external autosharding service over the
- * {@code WatchShardingAssignment} streaming protocol.
+ * Streams assignments from the sharding service over {@code WatchShardingAssignment}: reassembles,
+ * validates and acknowledges them, and hands valid {@link Assignment}s to an
+ * {@link AssignmentWatcher}. See gRFC A119, "AutoshardingClient".
  *
- * <p>This component owns the stream lifecycle, buffers and reassembles chunked assignments,
- * validates them, acknowledges them, and hands validated {@link Assignment}s to the parent load
- * balancer. See gRFC A119, "Communicating with the Autosharding service".
- *
- * <p>Threading model: This class is not thread-safe. All public methods must be invoked from the
- * {@link SynchronizationContext} supplied at construction, and all callbacks to the
- * {@link AssignmentWatcher} are delivered on that same context.
+ * <p>Not thread-safe: every method must be called on the {@link SynchronizationContext} given to
+ * the constructor, which is also where the watcher is called.
  */
 @NotThreadSafe
 final class AutoshardingClient {
@@ -169,8 +165,8 @@ final class AutoshardingClient {
   }
 
   /**
-   * Cancels any in-flight stream and pending retry. The channel is not shut down, because it is
-   * owned by the parent load balancer.
+   * Cancels the stream, any pending retry and the initial assignment timer. The channel is not
+   * touched: the parent load balancer holds its lease.
    */
   void shutdown() {
     syncContext.throwIfNotInThisSynchronizationContext();
@@ -337,12 +333,10 @@ final class AutoshardingClient {
     }
 
     /**
-     * Reassembles, validates and acknowledges the buffered chunks terminated by an
-     * {@code AssignmentMetadata} message.
-     *
-     * <p>Implements the outcome table in gRFC A119, "Handling assignments from the Autosharding
-     * server": every assignment is acknowledged, and only the ones carrying at least one usable
-     * slice reach the load balancer.
+     * Validates and acknowledges the buffered chunks terminated by an {@code AssignmentMetadata}
+     * message, following the outcome table in gRFC A119, "Handling assignments from the
+     * Autosharding server". Every assignment is acknowledged, but only a newer one with at least
+     * one usable slice reaches the load balancer.
      */
     private void handleAssignmentComplete(long generation) {
       List<AssignmentChunk> chunks = new ArrayList<>(bufferedChunks);
@@ -424,10 +418,7 @@ final class AutoshardingClient {
       }
     }
 
-    /**
-     * Cancels the stream without scheduling a retry. Used when the client is shutting down or
-     * when the configuration changed and a fresh stream is being created.
-     */
+    /** Cancels the stream without scheduling a retry. Used when the client shuts down. */
     void close(Status status) {
       if (closed) {
         return;

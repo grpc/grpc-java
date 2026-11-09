@@ -32,24 +32,9 @@ import java.util.concurrent.ThreadLocalRandom;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Subchannel picker for the auto-sharding load balancing policy.
- *
- * <p>Routes RPCs to backend endpoints based on a request metadata header key, matching against
- * an immutable {@link SliceMap}.
- *
- * <p>This picker is intended for active routing and post-timeout fallback handling:
- * <ul>
- *   <li>Pending Initial Assignment: During startup before the first assignment is received
- *       (and while the initial assignment timer is running), the load balancer handles RPC
- *       queuing polymorphically using a buffering picker in
- *       {@link io.grpc.ConnectivityState#CONNECTING}.
- *   <li>Active Routing: Once a valid assignment is received from the control plane,
- *       this picker routes RPCs according to the populated {@link SliceMap}.
- *   <li>Post-Timeout Fallback: If the initial assignment timer expires without an
- *       assignment, this picker is used with an empty {@link SliceMap} to either route across
- *       the {@code fallbackPool} (if fallback is enabled) or fail RPCs with
- *       {@link io.grpc.Status#UNAVAILABLE} (if fallback is disabled).
- * </ul>
+ * Routes each RPC to an endpoint of the slice covering its sharding key. With fallback enabled,
+ * an RPC goes to any resolved endpoint instead when there is no assignment or the slice has no
+ * usable endpoint. A slice that the server assigned no endpoints fails the RPC either way.
  */
 final class AutoShardingPicker extends SubchannelPicker {
   @ThreadSafe

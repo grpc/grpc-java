@@ -485,9 +485,8 @@ public class AutoshardingClientTest {
   }
 
   /**
-   * The LB policy answers a target or channel change by replacing the client rather than by
-   * updating it, so the accepted-generation watermark never crosses over to a different server or
-   * resource. See gRFC A119, "Communicating with the Autosharding service".
+   * A new client sends a {@code latest_generation} of zero, so when the LB policy replaces the
+   * client, no watermark carries over to a different server or target.
    */
   @Test
   public void newClient_startsFromGenerationZero() throws Exception {

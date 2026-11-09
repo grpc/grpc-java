@@ -116,8 +116,8 @@ final class EndpointMap {
    * @param helper the parent LB policy's helper, used for its synchronization context and passed
    *     through to child load balancers
    * @param childProvider provides the per-endpoint child load balancer, normally {@code
-   *     pick_first}. It is wrapped in a {@link LazyLoadBalancer} here, so the child is not
-   *     instantiated, and therefore does not start connecting, until a pick asks for it
+   *     pick_first}. It is wrapped in a {@link LazyLoadBalancer} here, so a child is not created
+   *     until it is first asked to connect
    * @param childStateListener run after a child reports a new connectivity state or picker.
    *     Invoked on the synchronization context, never during {@link #updateEndpoints} or after
    *     {@link #shutdown}

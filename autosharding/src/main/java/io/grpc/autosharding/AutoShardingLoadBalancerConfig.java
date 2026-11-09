@@ -27,11 +27,6 @@ import java.util.concurrent.TimeUnit;
 /**
  * Configuration for the {@code autosharding_experimental} LB policy, as specified by
  * {@code AutoshardingLbConfig} in gRFC A119.
- *
- * <p>{@link AutoShardingLoadBalancerProvider} parses this out of service config JSON and reports
- * a bad configuration as a {@link io.grpc.NameResolver.ConfigOrError}, so the channel gets a
- * useful message instead of an exception. The constructor here re-checks the same constraints as
- * a backstop that cannot be bypassed.
  */
 final class AutoShardingLoadBalancerConfig {
 

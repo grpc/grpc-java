@@ -1566,7 +1566,7 @@ public class AutoShardingLoadBalancerTest {
   }
 
   /**
-   * Hands out in-process channels, each wrapped so that successive borrows are distinguishable
+   * Hands out in-process channels, each wrapped so that successive leases are distinguishable
    * even though they share one transport.
    */
   private final class FakeChannelFactory implements ChannelFactory {
@@ -1619,10 +1619,10 @@ public class AutoShardingLoadBalancerTest {
     }
   }
 
-  /** Gives each handle a distinct channel identity over one shared transport. */
+  /** Gives each lease a distinct channel over one shared transport. */
   private static final class WrappedChannel extends Channel {
     private final Channel delegate;
-    // Calls created on this handle that the client has not cancelled.
+    // Calls created on this channel that the client has not cancelled.
     int liveCalls;
 
     WrappedChannel(Channel delegate) {

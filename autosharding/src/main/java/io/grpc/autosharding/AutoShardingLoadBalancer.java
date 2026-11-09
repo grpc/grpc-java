@@ -424,12 +424,9 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Joins the current assignment with the current endpoints, translating the assignment's
-   * hostnames into endpoint indices. Hostnames the resolver has not given us are dropped, which
-   * can leave a slice with no endpoints; the picker treats such a slice as being in fallback.
-   *
-   * <p>Without an assignment the result has no slices, so every lookup misses and the picker
-   * routes through the fallback pool or fails, according to configuration.
+   * Translates the endpoint names in the current assignment into indices into
+   * {@link #endpointMap}, dropping names the resolver has not supplied. Without an assignment the
+   * result has no slices, so every lookup misses and RPCs use the fallback pool.
    */
   private SliceMap buildSliceMap() {
     int endpointCount = endpointMap.size();

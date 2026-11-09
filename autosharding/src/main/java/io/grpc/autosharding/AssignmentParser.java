@@ -32,25 +32,13 @@ import javax.annotation.Nullable;
 
 /**
  * Combines the {@link AssignmentChunk} messages of a single logical assignment into a sorted,
- * contiguous and gap-free {@link Assignment}.
+ * contiguous and gap-free {@link Assignment}, following gRFC A119, "Handling assignments from the
+ * Autosharding server".
  *
- * <p>Validation follows gRFC A119, "Handling assignments from the Autosharding server". A slice
- * is usable only if all of the following hold:
- *
- * <ul>
- *   <li>its {@code SliceAssignment} actually carries a {@code slice};
- *   <li>its {@code startKey} is strictly less than its {@code endKey}, or it has no
- *       {@code endKey} and so runs to the end of the keyspace;
- *   <li>every endpoint index it references is valid once the endpoint names from all chunks are
- *       combined in chunk order;
- *   <li>its key range overlaps no other slice; when slices do overlap, all of them are dropped,
- *       since there is no basis for preferring one over another.
- * </ul>
- *
- * <p>A slice that fails any of these is <em>dropped and treated as a gap</em> rather than
- * invalidating the whole assignment. Gaps, whether they came from the server or from a dropped
- * slice, are filled with slices containing no endpoints, so that RPCs matching them either fall
- * back (when fallback is enabled) or fail.
+ * <p>A slice is dropped if either key is longer than 512 bytes, its start key is not below its
+ * end key, it references an endpoint index that is out of range, or it overlaps another slice. A
+ * dropped slice leaves a gap instead of invalidating the assignment, and gaps are filled with
+ * slices that have no endpoints.
  */
 final class AssignmentParser {
 
@@ -154,9 +142,9 @@ final class AssignmentParser {
   }
 
   /**
-   * Concatenates the slice assignments across all chunks, dropping any whose keys are too long,
-   * whose key range is inverted or whose endpoint indices are out of range. Slice assignments may
-   * appear in any order across chunks.
+   * Concatenates the slice assignments across all chunks, dropping any with a key longer than 512
+   * bytes, a start key not below its end key, or an out-of-range endpoint index. Slice assignments
+   * may appear in any order across chunks.
    *
    * @param errorDetails collects a description of each slice that was dropped
    */
