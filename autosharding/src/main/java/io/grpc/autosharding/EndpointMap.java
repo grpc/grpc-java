@@ -172,7 +172,7 @@ final class EndpointMap {
     }
   }
 
-  // Returns the number of endpoints currently held
+  /** Returns the number of endpoints currently held. */
   int size() {
     return holders.size();
   }

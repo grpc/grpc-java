@@ -237,8 +237,8 @@ final class AssignmentParser {
   }
 
   /**
-   * Returns whether a range ending at {@code endKey} covers {@code startKey}, which is known not
-   * to precede it. A null {@code endKey} runs to the end of the keyspace and so covers everything.
+   * Returns whether a range ending at {@code endKey}, or at infinity when it is null, extends
+   * past {@code startKey}.
    */
   private static boolean reaches(@Nullable byte[] endKey, byte[] startKey) {
     return endKey == null || UNSIGNED_BYTES_COMPARATOR.compare(endKey, startKey) > 0;

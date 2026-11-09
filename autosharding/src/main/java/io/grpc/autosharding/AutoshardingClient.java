@@ -108,8 +108,8 @@ final class AutoshardingClient {
    * @param timerService used to schedule stream retries and the initial assignment timer
    * @param backoffPolicyProvider supplies the exponential backoff sequence for stream retries
    * @param stopwatchSupplier supplies the stopwatch measuring time spent in a stream attempt
-   * @param channel the channel to the sharding service, created via the "Channel Factory" and
-   *     owned by the parent load balancer
+   * @param channel the channel to the sharding service, leased from the {@link ChannelFactory}
+   *     by the parent load balancer
    * @param target the autosharding target, with any {@code %s} token already substituted
    * @param initialAssignmentTimeoutNanos how long to wait for the first assignment before
    *     reporting an error

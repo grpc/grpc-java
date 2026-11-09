@@ -469,7 +469,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   /**
    * Rejects an update the policy cannot use, returning the error for {@link
    * #acceptResolvedAddresses} to hand back to the channel. Every RPC fails with it until an update
-   * is accepted. The client and its channel are closed and what the client reported is dropped,
+   * is accepted. The client is shut down, its channel lease closed and what it reported dropped,
    * so the next accepted update starts afresh, queueing RPCs until its client reports.
    */
   private Status rejectUpdate(String description) {

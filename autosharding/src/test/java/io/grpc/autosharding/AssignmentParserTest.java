@@ -347,8 +347,8 @@ public class AssignmentParserTest {
   }
 
   /**
-   * An empty range is unroutable whatever it carries, and it need not sit next to another
-   * slice, so dropping it has to fall through to ordinary gap filling.
+   * A zero-width slice is dropped even when it has endpoints, and the keys on either side of it
+   * become a single gap.
    */
   @Test
   public void parse_zeroWidthSlice_withEndpointsAndNoNeighbour_leavesNoHole() {

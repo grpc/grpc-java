@@ -33,7 +33,7 @@ final class AutoShardingLoadBalancerConfig {
   /** Default for {@link #getInitialAssignmentTimeoutNanos} when the field is unset. */
   static final long DEFAULT_INITIAL_ASSIGNMENT_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(60);
 
-  /** Opaque key passed to the "Channel Factory" to reach the sharding service. */
+  /** Opaque key passed to the {@link ChannelFactory} to reach the sharding service. */
   private final String channelFactoryKey;
 
   /**
@@ -51,9 +51,7 @@ final class AutoShardingLoadBalancerConfig {
   /** Whether RPCs may fall back to the full set of resolved endpoints. */
   private final boolean enableFallback;
 
-  /**
-   * How long each new client waits for its first assignment before reporting an error.
-   */
+  /** How long each new client waits for its first assignment before reporting an error. */
   private final long initialAssignmentTimeoutNanos;
 
   AutoShardingLoadBalancerConfig(

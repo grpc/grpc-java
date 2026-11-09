@@ -54,7 +54,7 @@ public class AutoShardingPickerTest {
     return new PickSubchannelArgsImpl(METHOD, headers, CallOptions.DEFAULT, NOOP_CONSUMER);
   }
 
-  /** Headers carrying a key under {@code headerName}; every test slice starts at "". */
+  /** Headers carrying the key "k" under {@code headerName}. */
   private static Metadata keyed(String headerName) {
     Metadata headers = new Metadata();
     headers.put(Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER), "k");
