@@ -96,8 +96,8 @@ Tagging the Release
    a different branch. Before removing the `TODO:backport` label double-check to make
    sure that there has been no missed backport of the issue in the latest branch cut
    either due to
-   1.1 Mistyping the latest minor version branch to backport it to OR
-   1.2 Concurrent branching activities: There's a time window there where you can lose a
+   a. Mistyping the latest minor version branch to backport it to OR
+   b. Concurrent branching activities: There's a time window there where you can lose a
    backport where the branch didn't exist. One engineer might be making a branch cut and
    concurrently another engineer might be making a fix to the master branch and backporting
    it to only the most recent minor version branch before the branch cut currently being made.
