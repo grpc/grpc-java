@@ -31,7 +31,10 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.gms.security.ProviderInstaller;
 import io.grpc.ManagedChannel;
+import io.grpc.Server;
 import io.grpc.android.UdsChannelBuilder;
+import io.grpc.android.UdsServerBuilder;
+import io.grpc.testing.integration.TestServiceImpl;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -39,6 +42,8 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class TesterActivity extends AppCompatActivity
     implements ProviderInstaller.ProviderInstallListener {
@@ -52,9 +57,10 @@ public class TesterActivity extends AppCompatActivity
   private TextView resultText;
   private CheckBox testCertCheckBox;
 
-  private UdsTcpEndpointConnector endpointConnector;
+  private Server udsServer;
 
   private ExecutorService executor;
+  private ScheduledExecutorService serverExecutor;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -79,12 +85,22 @@ public class TesterActivity extends AppCompatActivity
     enableButtons(false);
 
     executor = Executors.newSingleThreadExecutor();
+    serverExecutor = Executors.newScheduledThreadPool(2);
+  }
+
+  @Override
+  protected void onDestroy() {
+    super.onDestroy();
+    executor.shutdownNow();
+    serverExecutor.shutdownNow();
   }
 
   /** Click handler for unix domain socket. */
   public void enableUds(View view) {
     boolean enabled = ((CheckBox) view).isChecked();
     udsEdit.setEnabled(enabled);
+    hostEdit.setEnabled(!enabled);
+    portEdit.setEnabled(!enabled);
     testCertCheckBox.setEnabled(!enabled);
     if (enabled) {
       testCertCheckBox.setChecked(false);
@@ -140,22 +156,28 @@ public class TesterActivity extends AppCompatActivity
       testCert = null;
     }
 
-    // Create Channel
+    // Create Channel (and in-process UDS server when UDS is selected).
     ManagedChannel channel;
     if (udsEnabled) {
-      channel = UdsChannelBuilder.forPath(udsPath, Namespace.ABSTRACT).build();
+      try {
+        udsServer =
+            UdsServerBuilder.forPath(udsPath, Namespace.ABSTRACT)
+                .maxInboundMessageSize(16 * 1024 * 1024)
+                .addService(new TestServiceImpl(serverExecutor))
+                .build()
+                .start();
+      } catch (IOException e) {
+        Log.e(LOG_TAG, "Failed to start UDS server.", e);
+        resultText.setText(e.getMessage());
+        enableButtons(true);
+        return;
+      }
+      channel =
+          UdsChannelBuilder.forPath(udsPath, Namespace.ABSTRACT)
+              .maxInboundMessageSize(16 * 1024 * 1024)
+              .build();
     } else {
       channel = TesterOkHttpChannelBuilder.build(host, port, serverHostOverride, true, testCert);
-    }
-
-    // Port-forward uds local port to server exposing tcp endpoint.
-    if (udsEnabled) {
-      endpointConnector = new UdsTcpEndpointConnector(udsPath, host, port);
-      try {
-        endpointConnector.start();
-      } catch (IOException e) {
-        Log.e(LOG_TAG, "Failed to start UDS-TCP Endpoint Connector.");
-      }
     }
 
     // Start Test.
@@ -165,9 +187,14 @@ public class TesterActivity extends AppCompatActivity
     } catch (ExecutionException | InterruptedException e) {
       result = e.getMessage();
     } finally {
-      if (endpointConnector != null) {
-        endpointConnector.shutDown();
-        endpointConnector = null;
+      if (udsServer != null) {
+        udsServer.shutdownNow();
+        try {
+          udsServer.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+        udsServer = null;
       }
       resultText.setText(result);
       enableButtons(true);
