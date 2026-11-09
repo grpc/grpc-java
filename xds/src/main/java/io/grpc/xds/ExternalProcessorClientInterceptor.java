@@ -1328,11 +1328,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      boolean sendResponseTrailers =
-          dataPlaneClientCall.getCurrentProcessingMode().getResponseTrailerMode()
-              == ProcessingMode.HeaderSendMode.SEND;
-
-      if (dataPlaneClientCall.responseDraining.get() && sendResponseTrailers) {
+      if (dataPlaneClientCall.responseDraining.get()) {
         return;
       }
 
@@ -1428,7 +1424,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         dataPlaneClientCall.responseDraining.set(false);
       }
       dataPlaneClientCall.drainPendingRequests();
-      proceedWithClose();
+      if (savedStatus != null) {
+        triggerCloseHandshake();
+      }
     }
 
     private void proceedWithSavedMessages() {

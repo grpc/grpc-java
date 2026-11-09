@@ -8078,6 +8078,7 @@ public class ExternalProcessorClientInterceptorTest {
     final AtomicReference<StreamObserver<ProcessingResponse>> extProcResponseObserverRef =
         new AtomicReference<>();
     final CountDownLatch filterSentDrainLatch = new CountDownLatch(1);
+    final CountDownLatch drainCompletedLatch = new CountDownLatch(1);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
       @Override
@@ -8114,6 +8115,10 @@ public class ExternalProcessorClientInterceptorTest {
 
           @Override
           public void onCompleted() {
+            synchronized (responseObserver) {
+              responseObserver.onCompleted();
+            }
+            drainCompletedLatch.countDown();
           }
         };
       }
@@ -8234,18 +8239,20 @@ public class ExternalProcessorClientInterceptorTest {
                   .build())
               .build())
           .build());
-      extProcRespObserver.onCompleted();
     }
 
-    // Wait for the call to close on application side
+    // Wait for the call to close on application side and ext_proc stream to be half-closed
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(drainCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // Verify the delivery order: response headers, upstream response, and close status/trailers
     assertThat(appReceivedHeaders.get()).isNotNull();
     assertThat(appReceivedMessages).containsExactly("Response Message During Drain");
     assertThat(appReceivedStatus.get().isOk()).isTrue();
     assertThat(appReceivedTrailers.get()).isNotNull();
-    
+
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   @Test
@@ -8377,6 +8384,9 @@ public class ExternalProcessorClientInterceptorTest {
     
               @Override
               public void onCompleted() {
+                synchronized (responseObserver) {
+                  responseObserver.onCompleted();
+                }
                 drainCompletedLatch.countDown();
               }
             };
@@ -8521,11 +8531,11 @@ public class ExternalProcessorClientInterceptorTest {
                   .build())
               .build())
           .build());
-      extProcRespObserver.onCompleted();
     }
 
-    // Wait for the call to close on application side
+    // Wait for the call to close on application side and ext_proc stream to be half-closed
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(drainCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // Verify delivery order: mutated messages first, then bypass messages, and finally
     // status/trailers
@@ -9427,6 +9437,181 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(appReceivedMessages)
         .containsExactly("Response After FailOpen 1", "Response After FailOpen 2")
         .inOrder();
+    assertThat(appReceivedStatus.get().isOk()).isTrue();
+
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void drainingAfterResponseHeaders_whenResponseTrailersSkip_defersCloseUntilDrainCompletes()
+      throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
+                        + "channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = new ExternalProcessorFilterConfig(
+        proto.toBuilder()
+            .setProcessingMode(proto.getProcessingMode().toBuilder()
+                .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
+                .build())
+            .build(),
+        configOrError.config.getGrpcServiceConfig(),
+        java.util.Optional.empty(),
+        java.util.Optional.empty());
+
+    final AtomicReference<StreamObserver<ProcessingResponse>> extProcResponseObserverRef =
+        new AtomicReference<>();
+    final CountDownLatch filterSentDrainLatch = new CountDownLatch(1);
+    final CountDownLatch extProcStreamCompletedLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            extProcResponseObserverRef.set(responseObserver);
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .setRequestDrainResponses(true)
+                      .build());
+                } else if (request.hasResponseBody()
+                    && request.getResponseBody().getDrainComplete()) {
+                  filterSentDrainLatch.countDown();
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+                extProcStreamCompletedLatch.countDown();
+              }
+            };
+          }
+        };
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config ->
+        grpcCleanup.register(
+            InProcessChannelBuilder.forName(extProcServerName).directExecutor().build()));
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final AtomicReference<ServerCall<String, String>> serverCallRef = new AtomicReference<>();
+    final CountDownLatch dataPlaneCallStartedLatch = new CountDownLatch(1);
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_BIDI_STREAMING,
+            new io.grpc.ServerCallHandler<String, String>() {
+              @Override
+              public ServerCall.Listener<String> startCall(
+                  ServerCall<String, String> call, Metadata headers) {
+                serverCallRef.set(call);
+                call.request(10);
+                dataPlaneCallStartedLatch.countDown();
+                return new ServerCall.Listener<String>() {};
+              }
+            })
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    final List<String> appEvents = new java.util.concurrent.CopyOnWriteArrayList<>();
+    final AtomicReference<Status> appReceivedStatus = new AtomicReference<>();
+    final CountDownLatch headersDeliveredLatch = new CountDownLatch(1);
+    final CountDownLatch appCloseLatch = new CountDownLatch(1);
+    ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+      @Override
+      public void onHeaders(Metadata headers) {
+        appEvents.add("HEADERS");
+        headersDeliveredLatch.countDown();
+      }
+
+      @Override
+      public void onMessage(String message) {
+        appEvents.add("MSG:" + message);
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        appEvents.add("CLOSE");
+        appReceivedStatus.set(status);
+        appCloseLatch.countDown();
+      }
+    };
+
+    CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_BIDI_STREAMING, callOptions, dataPlaneChannel);
+    proxyCall.start(appListener, new Metadata());
+    proxyCall.request(10);
+
+    assertThat(dataPlaneCallStartedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    ServerCall<String, String> serverCall = serverCallRef.get();
+
+    // 1. Upstream sends response headers; ext_proc responds with request_drain_responses = true.
+    // This delivers response headers to the app (clearing savedHeaders) and enters responseDraining
+    serverCall.sendHeaders(new Metadata());
+    assertThat(headersDeliveredLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(filterSentDrainLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // 2. While responseDraining is active, upstream sends a message and closes the call.
+    // Even though responseTrailerMode is SKIP, onClose must be deferred so it does not overtake
+    // the buffered message.
+    serverCall.sendMessage("Message During Drain");
+    serverCall.close(Status.OK, new Metadata());
+
+    assertThat(appEvents).containsExactly("HEADERS");
+    assertThat(appReceivedStatus.get()).isNull();
+
+    // 3. Complete the response drain from ext_proc.
+    extProcResponseObserverRef.get().onNext(ProcessingResponse.newBuilder()
+        .setResponseBody(BodyResponse.newBuilder()
+            .setResponse(CommonResponse.newBuilder()
+                .setBodyMutation(BodyMutation.newBuilder()
+                    .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                        .setDrainComplete(true)
+                        .build())
+                    .build())
+                .build())
+            .build())
+        .build());
+
+    assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcStreamCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(appEvents).containsExactly("HEADERS", "MSG:Message During Drain", "CLOSE").inOrder();
     assertThat(appReceivedStatus.get().isOk()).isTrue();
 
     proxyCall.cancel("Cleanup", null);
