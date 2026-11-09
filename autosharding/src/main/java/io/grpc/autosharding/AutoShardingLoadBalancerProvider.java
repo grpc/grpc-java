@@ -65,12 +65,7 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
     }
   }
 
-  /**
-   * Translates {@code AutoshardingLbConfig} from its JSON form, as specified by gRFC A119.
-   *
-   * <p>{@code channelFactoryKey}, {@code autoshardingTarget} and
-   * {@code keyHeaderName} are required, and {@code keyHeaderName} must be a valid header name.
-   */
+  /** Parses {@code AutoshardingLbConfig} from its JSON form, as specified by gRFC A119. */
   private ConfigOrError parseLoadBalancingPolicyConfigInternal(Map<String, ?> rawConfig) {
     String channelFactoryKey = JsonUtil.getString(rawConfig, "channelFactoryKey");
     if (channelFactoryKey == null || channelFactoryKey.isEmpty()) {

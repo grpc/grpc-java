@@ -45,11 +45,6 @@ public interface ChannelFactory {
    * Returns a lease on a channel to the sharding service identified by {@code channelFactoryKey}.
    * The caller must close the lease once it no longer uses the channel.
    *
-   * <p>Failure is reported by throwing, for a key that is not recognized or not allowed as well as
-   * for any other reason the channel cannot be created. The LB policy then treats the failure as
-   * an error from the sharding service: RPCs fall back if fallback is enabled and fail otherwise.
-   * The key is not tried again until it changes.
-   *
    * @throws IllegalArgumentException if the key is not recognized or not allowed
    * @throws RuntimeException if the channel cannot be created for any other reason
    */

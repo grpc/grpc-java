@@ -42,19 +42,7 @@ import javax.annotation.Nullable;
  */
 final class AssignmentParser {
 
-  /**
-   * The outcome of parsing one logical assignment.
-   *
-   * <p>Maps onto the non-stale rows of the outcome table in gRFC A119, "Handling assignments from
-   * the Autosharding server":
-   *
-   * <ul>
-   *   <li>every slice usable and no gaps: {@link #assignment} set, {@link #errorMessage} null;
-   *   <li>gaps, or some slices dropped but at least one kept: both set;
-   *   <li>no usable slice, including none received at all: {@link #assignment} null, {@link
-   *       #errorMessage} set.
-   * </ul>
-   */
+  /** The outcome of parsing one logical assignment. */
   static final class Result {
     /** The assignment to hand to the LB policy, or null if no usable slice remained. */
     @Nullable final Assignment assignment;
@@ -84,10 +72,7 @@ final class AssignmentParser {
    */
   private static final int MAX_KEY_BYTES = 512;
 
-  /**
-   * How much of a key to hex-encode into a description. Keys may be up to 512 bytes, and only
-   * the leading bytes are needed to tell one slice from another in a log.
-   */
+  /** How many leading bytes of a key to hex-encode into a description. */
   private static final int MAX_ENCODED_KEY_BYTES = 8;
 
   private static final String SEPARATOR = "; ";
@@ -100,10 +85,6 @@ final class AssignmentParser {
 
   /**
    * Parses and validates the buffered chunks of a single logical assignment.
-   *
-   * <p>An assignment is unusable when no usable slice remains, whether because every slice was
-   * dropped or because it carried none. Gaps are filled and reported, but do not make an
-   * assignment unusable.
    *
    * @param chunks the chunks received since the last {@code AssignmentMetadata}, in the order
    *     they were received
@@ -297,11 +278,8 @@ final class AssignmentParser {
   }
 
   /**
-   * Summarizes the dropped slices and gaps, reporting as many as the {@code error_message} budget
-   * of an {@code AssignmentAck} allows and naming the count of those left out.
-   *
-   * <p>The result is sized to fit within {@link #MAX_ERROR_MESSAGE_CHARS} so that
-   * {@code AutoshardingClient}'s final truncation never has to cut a description in half.
+   * Summarizes the dropped slices and gaps, reporting as many as fit in the {@code error_message}
+   * of an {@code AssignmentAck}, followed by the count of those left out.
    */
   private static String describe(List<String> errorDetails) {
     StringBuilder message = new StringBuilder();
@@ -328,9 +306,8 @@ final class AssignmentParser {
   }
 
   /**
-   * Hex-encodes a key for a human-readable description, shortening it if it is long. The
-   * protocol allows keys of up to 512 bytes, which would fill the entire error message budget
-   * twice over.
+   * Hex-encodes a key for a description, shortened to its first {@link #MAX_ENCODED_KEY_BYTES}
+   * bytes. A null key, meaning infinity, is written as "inf".
    */
   private static String encode(@Nullable byte[] key) {
     if (key == null) {

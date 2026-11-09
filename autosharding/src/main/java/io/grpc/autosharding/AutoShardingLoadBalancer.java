@@ -50,25 +50,13 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * The {@code autosharding_experimental} load balancing policy.
+ * The {@code autosharding_experimental} load balancing policy. Shards RPCs across endpoints by an
+ * application-defined key carried in a request header, using key ranges streamed from an external
+ * sharding service. See gRFC A119.
  *
- * <p>This policy shards RPCs across endpoints by an application-defined key carried in a request
- * header. The mapping from key ranges to endpoints is streamed from an external sharding service.
- * See gRFC A119.
- *
- * <h3>Startup</h3>
- *
- * <p>A client streaming from the sharding service reports either valid assignments or, until it
- * has reported one, errors (including its initial assignment timer firing). Until the first
- * report RPCs are queued and the policy reports IDLE, whatever state the endpoints are in.
- * After an error, RPCs either spread across every resolved endpoint or fail with that
- * error, depending on {@code enable_fallback}. A new client is created whenever the channel
- * factory key or the sharding target changes; whatever the previous client last reported keeps
- * being used until the new one reports, so a change of sharding service does not interrupt
- * traffic. A failure to create the channel is handled like an error from the client. An update
- * with no config, no endpoints or no channel factory is rejected instead: the client and its
- * channel are closed, and RPCs fail until an update is accepted, after which they queue for the
- * new client as at startup.
+ * <p>Until its {@link AutoshardingClient} reports an assignment or an error, the policy queues
+ * RPCs and reports IDLE. After an error, RPCs go to any resolved endpoint or fail, depending on
+ * {@code enable_fallback}.
  *
  * <h3>Threading model</h3>
  *
@@ -289,9 +277,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Leases a channel to the sharding service. If the factory fails, returns a {@link LameChannel}
-   * carrying the error instead: the client then fails its stream and reports the error, so RPCs
-   * fall back if enabled and fail otherwise. The key is not retried until it changes.
+   * Leases a channel to the sharding service, or returns a {@link LameChannel} carrying the error
+   * if the factory throws.
    */
   private static ChannelFactory.ChannelLease leaseChannel(
       ChannelFactory factory, String channelFactoryKey) {
@@ -311,14 +298,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Creates and starts an {@link AutoshardingClient}.
-   *
-   * <p>A new client, rather than the old one pointed elsewhere, because its accepted-generation
-   * watermark is only meaningful against the server and the resource it was learned from;
-   * carrying it over could make a different server withhold assignments indefinitely.
-   *
-   * <p>Each new client starts its own initial assignment timer. Whatever the previous client
-   * reported keeps being served until the new one reports.
+   * Creates and starts an {@link AutoshardingClient}. Every target or channel change gets a new
+   * client, so that an accepted generation never carries over to another server or target.
    */
   private AutoshardingClient startClient(
       Channel channel, String target, long initialAssignmentTimeoutNanos) {
@@ -339,12 +320,7 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
 
   /**
    * Returns the locality every endpoint is in, or null if any endpoint has none or they differ.
-   *
-   * <p>Under a locality picker such as {@code weighted_target_experimental}, this policy only
-   * receives the endpoints of its own locality, so they all agree; under xDS this yields the same
-   * value that {@code weighted_target_experimental} publishes as its child name. When the policy
-   * does its own locality picking, it is handed endpoints from every locality, which disagree and
-   * yield null, so the result never depends on resolver ordering.
+   * Under xDS this is the {@code weighted_target_experimental} child name.
    */
   @Nullable
   private static String sharedLocality(List<EquivalentAddressGroup> endpoints) {
@@ -361,9 +337,8 @@ final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Substitutes the first {@code %s} token in the configured target with the locality, or with
-   * the empty string when there is none. gRFC A119 says the token is not meant to be used when
-   * this policy does its own locality picking, which is the case that has no locality.
+   * Replaces the first {@code %s} in the configured target with the locality, or with the empty
+   * string when there is none.
    */
   private static String resolveTarget(String configuredTarget, @Nullable String locality) {
     int token = configuredTarget.indexOf("%s");

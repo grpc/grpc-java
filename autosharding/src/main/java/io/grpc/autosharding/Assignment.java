@@ -28,22 +28,10 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
- * An immutable, validated, gap-free snapshot of a logical assignment received from the
- * autosharding service.
- *
- * <p>Instances are produced exclusively by {@link AssignmentParser}, which guarantees the
- * following invariants (see gRFC A119, "Contract of the AutoshardingClient"):
- * <ol>
- *   <li>The {@link #getSlices()} list covers the entire keyspace, starting at the minimum
- *       possible key (the empty byte string) and ending at the maximum possible key
- *       (infinity, represented by a {@code null} {@link Slice#getEndKey()}).</li>
- *   <li>The slices are sorted in ascending lexicographical (unsigned) order by
- *       {@link Slice#getStartKey()}.</li>
- *   <li>The partitioning is contiguous and non-overlapping: for every index {@code i} in
- *       {@code [0, N-2]}, {@code slices[i].endKey} is exactly {@code slices[i + 1].startKey}.</li>
- *   <li>Key ranges not assigned by the autosharding server are present as slices with an
- *       empty {@link Slice#getEndpoints()} list.</li>
- * </ol>
+ * An immutable, validated assignment from the sharding service: slices sorted by start key that
+ * together cover the whole keyspace, from the empty key to infinity, without gaps or overlaps.
+ * Key ranges without a usable slice from the server are slices with no endpoints. Produced only
+ * by {@link AssignmentParser}; see gRFC A119, "Contract of the AutoshardingClient".
  */
 @Immutable
 final class Assignment {

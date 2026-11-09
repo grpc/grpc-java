@@ -67,10 +67,10 @@ final class AutoShardingPicker extends SubchannelPicker {
   private final ThreadSafeRandom random;
 
   /**
-   * Pre-creates a {@link Metadata.Key} for the given key header name.
+   * Returns a key that reads {@code keyHeaderName}'s value as bytes: the binary value for a
+   * {@code -bin} header, and the ASCII bytes otherwise.
    *
-   * @param keyHeaderName the metadata header name
-   * @return the pre-computed {@link Metadata.Key}
+   * @throws IllegalArgumentException if {@code keyHeaderName} is not a valid header name
    */
   static Metadata.Key<byte[]> createKeyHeader(String keyHeaderName) {
     if (keyHeaderName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
@@ -80,14 +80,6 @@ final class AutoShardingPicker extends SubchannelPicker {
     }
   }
 
-  /**
-   * Constructs an {@link AutoShardingPicker}.
-   *
-   * @param sliceMap the pre-built, immutable mapping from key ranges to endpoint indices
-   * @param endpoints the list of endpoint snapshots corresponding 1:1 to endpoint indices
-   * @param fallbackEnabled whether fallback routing to all resolved endpoints is enabled
-   * @param keyHeader the pre-parsed metadata header key used to extract the routing key
-   */
   AutoShardingPicker(
       SliceMap sliceMap,
       List<PickerEndpoint> endpoints,

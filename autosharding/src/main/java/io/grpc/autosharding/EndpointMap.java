@@ -58,19 +58,10 @@ import javax.annotation.concurrent.NotThreadSafe;
  *
  * <h3>Endpoint indices</h3>
  *
- * <p>Endpoints are identified throughout the LB policy by a dense index in {@code [0, size)}.
- * The index of an endpoint is its position in the list most recently passed to
- * {@link #updateEndpoints}, after duplicate hostnames have been dropped. Indices handed out by
- * {@link #indexOf} agree with the positions in the list returned by {@link #toPickerEndpoints},
- * as long as both are obtained without an intervening {@link #updateEndpoints} call. The LB
- * policy relies on that pairing when it builds a {@link SliceMap} and an
- * {@link AutoShardingPicker} from the same snapshot.
- *
- * <h3>Lifecycle</h3>
- *
- * <p>One instance lives as long as the LB policy. {@link #updateEndpoints}, the only method that
- * changes the set of endpoints or their indices, updates it in place: child load balancers of
- * endpoints that remain, and therefore their connections, survive the update.
+ * <p>Endpoints are identified by a dense index in {@code [0, size)}: their position in the list
+ * most recently passed to {@link #updateEndpoints}, after duplicate hostnames are dropped.
+ * {@link #indexOf} and {@link #toPickerEndpoints} agree as long as no {@link #updateEndpoints}
+ * call comes between them.
  *
  * <h3>Threading model</h3>
  *
@@ -98,15 +89,8 @@ final class EndpointMap {
   private final Map<String, Integer> indexByHostname = new HashMap<>();
 
   /**
-   * Set while children are being handed their new addresses in {@link #updateEndpoints}. A child
-   * usually reports a state synchronously from that call, and forwarding every one would have
-   * the LB policy publish a picker per endpoint for a single resolver update. The state and
-   * picker are still recorded; only the notification is skipped, and the caller publishes once
-   * afterwards.
-   *
-   * <p>Not specific to this policy: {@code MultiChildLoadBalancer} in {@code io.grpc.util}, which
-   * backs {@code round_robin}, {@code ring_hash}, {@code weighted_target} and the rest, carries
-   * the same flag as {@code resolvingAddresses} for the same reason.
+   * Set while {@link #updateEndpoints} hands children their addresses. Their state updates are
+   * still recorded but not forwarded, since the caller publishes once afterwards.
    */
   private boolean rebuilding;
 
@@ -278,10 +262,7 @@ final class EndpointMap {
    *
    * <p>Because this policy only connects in response to picks, such an aggregated state could
    * otherwise persist with nothing in flight to resolve it, so gRFC A119 has the policy nudge a
-   * single endpoint. An IDLE or READY aggregate is left alone, which keeps the policy lazy. Which
-   * endpoint is chosen does not matter; this picks the lowest-indexed IDLE one. It usually
-   * reports CONNECTING before this returns, so a call made from the resulting child state update
-   * wakes no one else.
+   * single endpoint. An IDLE or READY aggregate is left alone, which keeps the policy lazy.
    */
   void maybeWakeUpIdleEndpoint() {
     ConnectivityState aggregate = aggregateConnectivityState();
@@ -391,14 +372,9 @@ final class EndpointMap {
     }
 
     /**
-     * The {@link PickerEndpoint.ExitIdler} handed to pickers. Called from RPC threads, so it
-     * hops onto the synchronization context before doing anything.
-     *
-     * <p>The state is re-checked there rather than here, which is what makes repeated calls
-     * harmless: a picker snapshot may be shared by many concurrent RPCs that all observe the
-     * same IDLE endpoint, and the snapshot may outlive the endpoint entirely if a resolver
-     * update removed it in the meantime. By the time the second and later tasks run, either the
-     * child has moved to CONNECTING or the holder has been shut down, and they return early.
+     * The {@link PickerEndpoint.ExitIdler} handed to pickers. Called from RPC threads, so it hops
+     * onto the synchronization context, where {@link #requestConnection} re-checks the state;
+     * that makes repeated calls, and calls for a removed endpoint, harmless.
      */
     private void exitIdle() {
       helper.getSynchronizationContext().execute(this::requestConnection);

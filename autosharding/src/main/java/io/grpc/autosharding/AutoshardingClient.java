@@ -87,17 +87,9 @@ final class AutoshardingClient {
   private final long initialAssignmentTimeoutNanos;
 
   /**
-   * Generation of the most recent accepted assignment. Sent to the server so that it can skip
-   * resending an assignment the client already has.
-   *
-   * <p>This is why the parent load balancer replaces the whole client when the channel or the
-   * target changes: the stored value is meaningless against a different sharding server or a
-   * different resource, and retaining it could cause the server to withhold assignments
-   * indefinitely.
-   *
-   * <p>Zero until something is accepted, which the proto reads as "unset". A generation 
-   * is only accepted if it is greater than this, so zero and negative generations never
-   * are, and a positive value means an assignment has been reported to the watcher.
+   * Generation of the most recent accepted assignment, sent to the server so that it can skip
+   * resending one the client already has. Zero, which the proto reads as unset, until an
+   * assignment is accepted; only a greater generation is accepted.
    */
   private long latestGeneration;
 
@@ -283,19 +275,12 @@ final class AutoshardingClient {
      */
     private final List<AssignmentChunk> bufferedChunks = new ArrayList<>();
 
-    /**
-     * The sending half of the stream. Set by {@link ResponseObserver#beforeStart}, which the stub
-     * invokes before it starts the call and before it returns, so this is set before
-     * {@link #start} can send and before this stream is reachable by anything else.
-     */
+    /** The sending half of the stream, set by {@link ResponseObserver#beforeStart}. */
     private ClientCallStreamObserver<WatchShardingAssignmentRequest> requestStream;
 
     /**
-     * Whether this stream delivered an assignment the load balancer could use, which is the only
-     * thing gRFC A119 resets the retry backoff on. An assignment dropped as stale, or rejected
-     * for having no usable slice, leaves the balancer with nothing newer than it already had, so
-     * the following attempt still backs off. A server that honours {@code latest_generation} does
-     * not resend an already-accepted assignment after a reconnect anyway.
+     * Whether this stream delivered an assignment the load balancer could use, the only thing
+     * that resets the retry backoff. Stale assignments and ones with no usable slice don't count.
      */
     private boolean receivedGoodAssignment;
     private boolean closed;
@@ -460,12 +445,8 @@ final class AutoshardingClient {
   }
 
   /**
-   * Enforces the limit {@code autosharding.proto} places on {@code AssignmentAck.error_message}:
-   * "The length of this field MUST NOT exceed 512 characters (Unicode code points, see
-   * https://google.aip.dev/210)".
-   *
-   * <p>A backstop only. {@link AssignmentParser} already assembles its summary to fit, so this
-   * should never actually cut anything.
+   * Cuts {@code message} to {@link #MAX_ERROR_MESSAGE_CODE_POINTS} code points. A backstop only:
+   * {@link AssignmentParser} already sizes its messages to fit.
    */
   private static String truncateErrorMessage(String message) {
     // A string never has more code points than chars, so this settles the common case without
