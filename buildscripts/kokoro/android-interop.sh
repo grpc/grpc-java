@@ -22,6 +22,7 @@ GRADLE_FLAGS="-Pandroid.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx1024m -PskipCo
 
 ./gradlew $GRADLE_FLAGS :grpc-android-interop-testing:assembleDebug
 ./gradlew $GRADLE_FLAGS :grpc-android-interop-testing:assembleDebugAndroidTest
+./gradlew $GRADLE_FLAGS :grpc-android:assembleDebugAndroidTest
 ./gradlew $GRADLE_FLAGS :grpc-binder:assembleDebugAndroidTest
 
 # To see currently-available virtual devices:
@@ -47,6 +48,19 @@ gcloud firebase test android run \
   --type instrumentation \
   --app android-interop-testing/build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
   --test binder/build/outputs/apk/androidTest/debug/grpc-binder-debug-androidTest.apk \
+  --device model=MediumPhone.arm,version=30,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=29,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=28,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=27,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=26,locale=en,orientation=portrait \
+  --device model=Nexus6P,version=25,locale=en,orientation=portrait \
+  --device model=Nexus6P,version=24,locale=en,orientation=portrait \
+
+# Run grpc-android instrumentation tests on Firebase Test Lab
+gcloud firebase test android run \
+  --type instrumentation \
+  --app android-interop-testing/build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
+  --test android/build/outputs/apk/androidTest/debug/grpc-android-debug-androidTest.apk \
   --device model=MediumPhone.arm,version=30,locale=en,orientation=portrait \
   --device model=MediumPhone.arm,version=29,locale=en,orientation=portrait \
   --device model=MediumPhone.arm,version=28,locale=en,orientation=portrait \
