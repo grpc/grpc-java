@@ -476,21 +476,7 @@ final class XdsNameResolver extends NameResolver {
       } while (!retainCluster(cluster));
 
       final RouteAction routeAction = selectedRoute.routeAction;
-      Long timeoutNanos = null;
-      if (enableTimeout) {
-        timeoutNanos = routeAction.timeoutNano();
-        if (timeoutNanos == null) {
-          timeoutNanos = routingCfg.fallbackTimeoutNano;
-        }
-        if (timeoutNanos <= 0) {
-          timeoutNanos = null;
-        }
-      }
-      RetryPolicy retryPolicy = routeAction.retryPolicy();
-      // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
-      Map<String, ?> rawServiceConfig =
-          generateServiceConfigWithMethodConfig(timeoutNanos, retryPolicy);
-      ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
+      ConfigOrError parsedServiceConfig = selectedRoute.parsedServiceConfig;
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
         releaseCluster(cluster);
@@ -781,15 +767,31 @@ final class XdsNameResolver extends NameResolver {
       Map<String, RlsPluginConfig> rlsPluginConfigMap = new HashMap<>();
       for (Route route : routes) {
         RouteAction action = route.routeAction();
+        ConfigOrError parsedServiceConfig = null;
+        if (action != null) {
+          Long timeoutNanos = null;
+          if (enableTimeout) {
+            timeoutNanos = action.timeoutNano();
+            if (timeoutNanos == null) {
+              timeoutNanos = httpMaxStreamDurationNano;
+            }
+            if (timeoutNanos <= 0) {
+              timeoutNanos = null;
+            }
+          }
+          // These settings depend only on the routing snapshot, not on the individual RPC.
+          parsedServiceConfig = serviceConfigParser.parseServiceConfig(
+              generateServiceConfigWithMethodConfig(timeoutNanos, action.retryPolicy()));
+        }
         String prefixedName;
         if (action == null) {
-          routesData.add(new RouteData(route.routeMatch(), null, ImmutableList.of()));
+          routesData.add(new RouteData(route.routeMatch(), null, ImmutableList.of(), null));
         } else if (action.cluster() != null) {
           prefixedName = prefixedClusterName(action.cluster());
           clusters.add(prefixedName);
           clusterNameMap.put(prefixedName, action.cluster());
           ClientInterceptor filters = createFilters(filterConfigs, virtualHost, route, null);
-          routesData.add(new RouteData(route.routeMatch(), route.routeAction(), filters));
+          routesData.add(new RouteData(route.routeMatch(), action, filters, parsedServiceConfig));
         } else if (action.weightedClusters() != null) {
           ImmutableList.Builder<ClientInterceptor> filterList = ImmutableList.builder();
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
@@ -799,7 +801,7 @@ final class XdsNameResolver extends NameResolver {
             filterList.add(createFilters(filterConfigs, virtualHost, route, weightedCluster));
           }
           routesData.add(
-              new RouteData(route.routeMatch(), route.routeAction(), filterList.build()));
+              new RouteData(route.routeMatch(), action, filterList.build(), parsedServiceConfig));
         } else if (action.namedClusterSpecifierPluginConfig() != null) {
           PluginConfig pluginConfig = action.namedClusterSpecifierPluginConfig().config();
           if (pluginConfig instanceof RlsPluginConfig) {
@@ -809,7 +811,7 @@ final class XdsNameResolver extends NameResolver {
             rlsPluginConfigMap.put(prefixedName, (RlsPluginConfig) pluginConfig);
           }
           ClientInterceptor filters = createFilters(filterConfigs, virtualHost, route, null);
-          routesData.add(new RouteData(route.routeMatch(), route.routeAction(), filters));
+          routesData.add(new RouteData(route.routeMatch(), action, filters, parsedServiceConfig));
         } else {
           // Discard route
         }
@@ -864,7 +866,7 @@ final class XdsNameResolver extends NameResolver {
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
-      routingConfig = new RoutingConfig(xdsConfig, httpMaxStreamDurationNano, routesData.build());
+      routingConfig = new RoutingConfig(xdsConfig, routesData.build());
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).refCount.decrementAndGet();
         if (count == 0) {
@@ -955,21 +957,18 @@ final class XdsNameResolver extends NameResolver {
    */
   private static class RoutingConfig {
     final XdsConfig xdsConfig;
-    final long fallbackTimeoutNano;
     final ImmutableList<RouteData> routes;
     final Status errorStatus;
 
     private RoutingConfig(
-        XdsConfig xdsConfig, long fallbackTimeoutNano, ImmutableList<RouteData> routes) {
+        XdsConfig xdsConfig, ImmutableList<RouteData> routes) {
       this.xdsConfig = checkNotNull(xdsConfig, "xdsConfig");
-      this.fallbackTimeoutNano = fallbackTimeoutNano;
       this.routes = checkNotNull(routes, "routes");
       this.errorStatus = null;
     }
 
     private RoutingConfig(Status errorStatus) {
       this.xdsConfig = null;
-      this.fallbackTimeoutNano = 0;
       this.routes = null;
       this.errorStatus = checkNotNull(errorStatus, "errorStatus");
       checkArgument(!errorStatus.isOk(), "errorStatus should not be okay");
@@ -987,20 +986,27 @@ final class XdsNameResolver extends NameResolver {
      * clusters.
      */
     final ImmutableList<ClientInterceptor> filterChoices;
+    /** Parsed method config shared by RPCs using this route; null for non-forwarding actions. */
+    @Nullable
+    final ConfigOrError parsedServiceConfig;
 
-    RouteData(RouteMatch routeMatch, @Nullable RouteAction routeAction, ClientInterceptor filter) {
-      this(routeMatch, routeAction, ImmutableList.of(filter));
+    RouteData(RouteMatch routeMatch, @Nullable RouteAction routeAction, ClientInterceptor filter,
+        @Nullable ConfigOrError parsedServiceConfig) {
+      this(routeMatch, routeAction, ImmutableList.of(filter), parsedServiceConfig);
     }
 
     RouteData(
         RouteMatch routeMatch,
         @Nullable RouteAction routeAction,
-        ImmutableList<ClientInterceptor> filterChoices) {
+        ImmutableList<ClientInterceptor> filterChoices,
+        @Nullable ConfigOrError parsedServiceConfig) {
       this.routeMatch = checkNotNull(routeMatch, "routeMatch");
       checkArgument(
           routeAction == null || !filterChoices.isEmpty(),
           "filter may be empty only for non-forwarding action");
       this.routeAction = routeAction;
+      this.parsedServiceConfig = routeAction == null ? null
+          : checkNotNull(parsedServiceConfig, "parsedServiceConfig");
       if (routeAction != null && routeAction.weightedClusters() != null) {
         checkArgument(
             routeAction.weightedClusters().size() == filterChoices.size(),
