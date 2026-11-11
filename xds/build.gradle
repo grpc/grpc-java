@@ -6,7 +6,6 @@ plugins {
 
     id "com.google.protobuf"
     id "com.gradleup.shadow"
-    id "me.champeau.jmh"
     id "ru.vyarus.animalsniffer"
 }
 
@@ -46,7 +45,6 @@ dependencies {
             project(':grpc-stub')
     compileOnly sourceSets.thirdparty.output
     testCompileOnly sourceSets.thirdparty.output
-    jmhCompileOnly sourceSets.thirdparty.output
     implementation project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-util'),
