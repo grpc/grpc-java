@@ -21,7 +21,6 @@ import io.grpc.InternalTcpMetrics;
 import io.grpc.MetricRecorder;
 import io.netty.channel.Channel;
 import io.netty.util.concurrent.ScheduledFuture;
-import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Arrays;
@@ -38,57 +37,7 @@ import java.util.logging.Logger;
 final class TcpMetrics {
   private static final Logger log = Logger.getLogger(TcpMetrics.class.getName());
 
-  static EpollInfo epollInfo = loadEpollInfo();
-
-  static final class EpollInfo {
-    final Class<?> channelClass;
-    final java.lang.reflect.Constructor<?> infoConstructor;
-    final Method tcpInfo;
-    final Method totalRetrans;
-    final Method retransmits;
-    final Method rtt;
-
-    EpollInfo(
-        Class<?> channelClass,
-        java.lang.reflect.Constructor<?> infoConstructor,
-        Method tcpInfo,
-        Method totalRetrans,
-        Method retransmits,
-        Method rtt) {
-      this.channelClass = channelClass;
-      this.infoConstructor = infoConstructor;
-      this.tcpInfo = tcpInfo;
-      this.totalRetrans = totalRetrans;
-      this.retransmits = retransmits;
-      this.rtt = rtt;
-    }
-  }
-
-  static EpollInfo loadEpollInfo() {
-    boolean epollAvailable = false;
-    try {
-      Class<?> epollClass = Class.forName("io.netty.channel.epoll.Epoll");
-      Method isAvailableMethod = epollClass.getDeclaredMethod("isAvailable");
-      epollAvailable = (Boolean) isAvailableMethod.invoke(null);
-      if (epollAvailable) {
-        Class<?> channelClass = Class.forName("io.netty.channel.epoll.EpollSocketChannel");
-        Class<?> infoClass = Class.forName("io.netty.channel.epoll.EpollTcpInfo");
-        return new EpollInfo(
-            channelClass,
-            infoClass.getDeclaredConstructor(),
-            channelClass.getMethod("tcpInfo", infoClass),
-            infoClass.getMethod("totalRetrans"),
-            infoClass.getMethod("retrans"),
-            infoClass.getMethod("rtt"));
-      }
-    } catch (ReflectiveOperationException e) {
-      log.log(Level.FINE, "Failed to initialize Epoll tcp_info reflection", e);
-    } finally {
-      log.log(Level.FINE, "Epoll available during static init of TcpMetrics:"
-          + "{0}", epollAvailable);
-    }
-    return null;
-  }
+  static EpollTcpInfoAccessor epollInfo = EpollTcpInfoAccessor.INSTANCE;
 
   private static final long RECORD_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(5);
   private final MetricRecorder metricRecorder;
@@ -102,7 +51,7 @@ final class TcpMetrics {
     Object tcpInfo = null;
     if (epollInfo != null) {
       try {
-        tcpInfo = epollInfo.infoConstructor.newInstance();
+        tcpInfo = epollInfo.newTcpInfo();
       } catch (ReflectiveOperationException e) {
         log.log(Level.FINE, "Failed to instantiate EpollTcpInfo", e);
       }
@@ -120,7 +69,7 @@ final class TcpMetrics {
   }
 
   private void scheduleNextReport(final Channel channel, boolean isInitial) {
-    if (epollInfo == null || !epollInfo.channelClass.isInstance(channel) || !channel.isActive()) {
+    if (epollInfo == null || !epollInfo.isEpollSocketChannel(channel) || !channel.isActive()) {
       return;
     }
 
@@ -147,7 +96,7 @@ final class TcpMetrics {
     metricRecorder.addLongUpDownCounter(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT, -1,
         Collections.emptyList(), labelValues);
     // Final collection on close
-    if (epollInfo != null && epollInfo.channelClass.isInstance(channel)) {
+    if (epollInfo != null && epollInfo.isEpollSocketChannel(channel)) {
       recordTcpInfo(channel, true);
     }
   }
@@ -157,7 +106,7 @@ final class TcpMetrics {
   }
 
   private void recordTcpInfo(Channel channel, boolean isClose) {
-    if (epollInfo == null || !epollInfo.channelClass.isInstance(channel)) {
+    if (epollInfo == null || !epollInfo.isEpollSocketChannel(channel)) {
       return;
     }
     List<String> labelValues = getLabelValues(channel);
@@ -165,10 +114,10 @@ final class TcpMetrics {
     long retransmits;
     long rtt;
     try {
-      epollInfo.tcpInfo.invoke(channel, tcpInfo);
-      totalRetrans = (Long) epollInfo.totalRetrans.invoke(tcpInfo);
-      retransmits = (Long) epollInfo.retransmits.invoke(tcpInfo);
-      rtt = (Long) epollInfo.rtt.invoke(tcpInfo);
+      epollInfo.read(channel, tcpInfo);
+      totalRetrans = epollInfo.get(tcpInfo, EpollTcpInfoAccessor.Field.TOTAL_RETRANS);
+      retransmits = epollInfo.get(tcpInfo, EpollTcpInfoAccessor.Field.RETRANSMITS);
+      rtt = epollInfo.get(tcpInfo, EpollTcpInfoAccessor.Field.RTT);
     } catch (ReflectiveOperationException e) {
       log.log(Level.FINE, "Error computing TCP metrics", e);
       return;
