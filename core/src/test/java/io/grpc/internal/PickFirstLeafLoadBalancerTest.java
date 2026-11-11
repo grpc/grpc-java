@@ -527,6 +527,94 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
+  public void pickAfterIdleAndResolvedAddressesChanged() {
+    SocketAddress socketAddr1 = new FakeSocketAddress("server1");
+    List<EquivalentAddressGroup> oldServers =
+        Lists.newArrayList(new EquivalentAddressGroup(socketAddr1));
+
+    SocketAddress socketAddr2 = new FakeSocketAddress("server2");
+    List<EquivalentAddressGroup> newServers =
+        Lists.newArrayList(new EquivalentAddressGroup(socketAddr2));
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2);
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    inOrder.verify(mockSubchannel1).requestConnection();
+    assertNull(pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+
+    // Connection breaks and transitions to IDLE
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper).refreshNameResolution();
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+
+    // Simulate the IDLE picker getting used upon an incoming RPC, triggering requestConnection()
+    assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+    inOrder.verify(mockSubchannel1).requestConnection();
+    assertEquals(CONNECTING, loadBalancer.getRawConnectivityState());
+
+    // Re-resolution result arrives before mockSubchannel1 reports CONNECTING
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
+    inOrder.verify(mockSubchannel1).shutdown();
+    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    inOrder.verify(mockSubchannel2).requestConnection();
+  }
+
+  @Test
+  public void pickAfterTransientFailureIdleAndResolvedAddressesChanged() {
+    SocketAddress socketAddr1 = new FakeSocketAddress("server1");
+    SocketAddress socketAddr2 = new FakeSocketAddress("server2");
+    List<EquivalentAddressGroup> oldServers = Lists.newArrayList(
+        new EquivalentAddressGroup(socketAddr1),
+        new EquivalentAddressGroup(socketAddr2));
+
+    SocketAddress socketAddr3 = new FakeSocketAddress("server3");
+    List<EquivalentAddressGroup> newServers =
+        Lists.newArrayList(new EquivalentAddressGroup(socketAddr3));
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener1 = stateListenerCaptor.getValue();
+    inOrder.verify(mockSubchannel1).requestConnection();
+
+    // First subchannel fails with TRANSIENT_FAILURE, advancing to second subchannel
+    stateListener1.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
+    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    inOrder.verify(mockSubchannel2).requestConnection();
+
+    // Second subchannel transitions to IDLE, resetting addressIndex to first subchannel (in TF)
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+
+    // Simulate the IDLE picker getting used upon an incoming RPC, triggering requestConnection()
+    // starting at the first subchannel (which is in TF)
+    assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+    if (serializeRetries) {
+      inOrder.verify(mockSubchannel1).requestConnection();
+    } else {
+      inOrder.verify(mockSubchannel2).requestConnection();
+    }
+    assertEquals(CONNECTING, loadBalancer.getRawConnectivityState());
+
+    // Re-resolution result arrives before subchannel reports CONNECTING
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
+    verify(mockSubchannel1).shutdown();
+    verify(mockSubchannel2).shutdown();
+    inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+    inOrder.verify(mockSubchannel3).requestConnection();
+  }
+
+  @Test
   public void healthCheck_nonPetiolePolicy() {
     when(mockSubchannel1.getAttributes()).thenReturn(
         Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
