@@ -18,6 +18,9 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -69,6 +72,7 @@ import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 
 /** Unit tests for {@link CsdsService}. */
 @RunWith(Enclosed.class)
@@ -131,6 +135,19 @@ public class CsdsServiceTest {
       } catch (StatusRuntimeException e) {
         verifyRequestInvalidResponseStatus(e.getStatus());
       }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void fetchClientConfig_errorDoesNotComplete() {
+      StreamObserver<ClientStatusResponse> responseObserver = mock(StreamObserver.class);
+
+      CSDS_SERVICE_MINIMAL.delegate.fetchClientStatus(REQUEST_INVALID, responseObserver);
+
+      ArgumentCaptor<Throwable> error = ArgumentCaptor.forClass(Throwable.class);
+      verify(responseObserver).onError(error.capture());
+      assertThat(Status.fromThrowable(error.getValue()).getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+      verify(responseObserver, never()).onCompleted();
     }
 
     /** Unexpected exceptions translated to Status.Code.INTERNAL. */

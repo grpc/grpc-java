@@ -61,7 +61,8 @@ import java.util.logging.Logger;
 public final class CsdsService implements BindableService {
   private static final Logger logger = Logger.getLogger(CsdsService.class.getName());
   private final XdsClientPoolFactory xdsClientPoolFactory;
-  private final CsdsServiceInternal delegate = new CsdsServiceInternal();
+  @VisibleForTesting
+  final CsdsServiceInternal delegate = new CsdsServiceInternal();
 
   @VisibleForTesting
   CsdsService(XdsClientPoolFactory xdsClientPoolFactory) {
@@ -83,7 +84,7 @@ public final class CsdsService implements BindableService {
   }
 
   /** Hide protobuf from being exposed via the API. */
-  private final class CsdsServiceInternal
+  final class CsdsServiceInternal
       extends ClientStatusDiscoveryServiceGrpc.ClientStatusDiscoveryServiceImplBase {
     @Override
     public void fetchClientStatus(
@@ -91,8 +92,6 @@ public final class CsdsService implements BindableService {
       if (handleRequest(request, responseObserver)) {
         responseObserver.onCompleted();
       }
-      // TODO(sergiitk): Add a case covering mutating handleRequest return false to true - to verify
-      //   that responseObserver.onCompleted() isn't erroneously called on error.
     }
 
     @Override
