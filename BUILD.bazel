@@ -67,5 +67,6 @@ java_library(
     visibility = ["//:__subpackages__"],
     exports = [
         artifact("com.google.auto.value:auto-value-annotations"),
+        artifact("org.jspecify:jspecify"),
     ],
 )
