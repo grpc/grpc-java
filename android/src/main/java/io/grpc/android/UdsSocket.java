@@ -137,6 +137,13 @@ class UdsSocket extends Socket {
   public OutputStream getOutputStream() throws IOException {
     return new FilterOutputStream(localSocket.getOutputStream()) {
       @Override
+      public void write(byte[] b, int off, int len) throws IOException {
+        // FilterOutputStream's default implementation writes one byte at a time, which for
+        // LocalSocket means one native write per byte. Delegate the bulk write directly.
+        out.write(b, off, len);
+      }
+
+      @Override
       public void close() throws IOException {
         UdsSocket.this.close();
       }
