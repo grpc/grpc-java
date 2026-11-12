@@ -39,9 +39,20 @@ dependencies {
     implementation libraries.guava
     testImplementation project('::grpc-okhttp')
     testImplementation libraries.androidx.test.core
+    testImplementation libraries.guava.testlib
     testImplementation libraries.junit
     testImplementation libraries.robolectric
     testImplementation libraries.truth
+
+    androidTestImplementation project(':grpc-okhttp')
+    androidTestImplementation project(':grpc-stub')
+    androidTestImplementation project(':grpc-testing')
+    androidTestImplementation testFixtures(project(':grpc-api'))
+    androidTestImplementation libraries.junit
+    androidTestImplementation libraries.androidx.test.core
+    androidTestImplementation libraries.androidx.test.ext.junit
+    androidTestImplementation libraries.androidx.test.runner
+    androidTestImplementation libraries.truth
 }
 
 tasks.register("javadocs", Javadoc) {

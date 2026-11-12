@@ -65,7 +65,7 @@ class UdsSocketFactory extends SocketFactory {
   }
 
   private Socket create() {
-    return new UdsSocket(localSocketAddress);
+    return new UdsSocket.Client(localSocketAddress);
   }
 
   private Socket createAndConnect() throws IOException {
