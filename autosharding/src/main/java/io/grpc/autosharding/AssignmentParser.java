@@ -1,0 +1,321 @@
+/*
+ * Copyright 2026 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.autosharding;
+
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.cloud.autosharding.v1.AssignmentChunk;
+import com.google.cloud.autosharding.v1.EndpointState;
+import com.google.cloud.autosharding.v1.PerSliceEndpointState;
+import com.google.cloud.autosharding.v1.SliceAssignment;
+import com.google.common.collect.ImmutableList;
+import com.google.common.io.BaseEncoding;
+import com.google.common.primitives.UnsignedBytes;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import javax.annotation.Nullable;
+
+/**
+ * Combines the {@link AssignmentChunk} messages of a single logical assignment into a sorted,
+ * contiguous and gap-free {@link Assignment}, following gRFC A119, "Handling assignments from the
+ * Autosharding server".
+ *
+ * <p>A slice is dropped if either key is longer than 512 bytes, its start key is not below its
+ * end key, it references an endpoint index that is out of range, or it overlaps another slice. A
+ * dropped slice leaves a gap instead of invalidating the assignment, and gaps are filled with
+ * slices that have no endpoints.
+ */
+final class AssignmentParser {
+
+  /** The outcome of parsing one logical assignment. */
+  static final class Result {
+    /** The assignment to hand to the LB policy, or null if no usable slice remained. */
+    @Nullable final Assignment assignment;
+
+    /**
+     * Describes the dropped slices and the gaps, or that no slice was received at all, suitable
+     * for the {@code error_message} of an {@code AssignmentAck}. Null when every slice was usable
+     * and they left no gaps.
+     */
+    @Nullable final String errorMessage;
+
+    private Result(@Nullable Assignment assignment, @Nullable String errorMessage) {
+      this.assignment = assignment;
+      this.errorMessage = errorMessage;
+    }
+  }
+
+  /**
+   * The limit on {@code AssignmentAck.error_message}, from {@code autosharding.proto}: "The
+   * length of this field MUST NOT exceed 512 characters".
+   */
+  private static final int MAX_ERROR_MESSAGE_CHARS = 512;
+
+  /**
+   * The limit on slice keys, from {@code autosharding.proto}: "Will be at most 512 bytes". A slice
+   * with a longer key is dropped.
+   */
+  private static final int MAX_KEY_BYTES = 512;
+
+  /** How many leading bytes of a key to hex-encode into a description. */
+  private static final int MAX_ENCODED_KEY_BYTES = 8;
+
+  private static final String SEPARATOR = "; ";
+
+  private static final Comparator<byte[]> UNSIGNED_BYTES_COMPARATOR =
+      UnsignedBytes.lexicographicalComparator();
+  private static final byte[] EMPTY_BYTES = new byte[0];
+
+  private AssignmentParser() {}
+
+  /**
+   * Parses and validates the buffered chunks of a single logical assignment.
+   *
+   * @param chunks the chunks received since the last {@code AssignmentMetadata}, in the order
+   *     they were received
+   */
+  static Result parse(List<AssignmentChunk> chunks) {
+    checkNotNull(chunks, "chunks");
+
+    ImmutableList<String> endpointNames = combineEndpointNames(chunks);
+    List<String> errorDetails = new ArrayList<>();
+    List<Assignment.Slice> slices = combineSlices(chunks, endpointNames.size(), errorDetails);
+
+    slices.sort(Assignment.Slice.START_KEY_ORDER);
+    slices = dropOverlaps(slices, errorDetails);
+
+    if (slices.isEmpty()) {
+      return new Result(
+          null, errorDetails.isEmpty() ? "no slice assignments received" : describe(errorDetails));
+    }
+    List<Assignment.Slice> filled = fillGaps(slices, errorDetails);
+    String errorMessage = errorDetails.isEmpty() ? null : describe(errorDetails);
+    return new Result(new Assignment(filled, endpointNames), errorMessage);
+  }
+
+  /**
+   * Concatenates the endpoint names across all chunks, in chunk order. Slice endpoint indices
+   * are defined against this combined list.
+   */
+  private static ImmutableList<String> combineEndpointNames(List<AssignmentChunk> chunks) {
+    ImmutableList.Builder<String> names = ImmutableList.builder();
+    for (AssignmentChunk chunk : chunks) {
+      for (EndpointState endpointState : chunk.getEndpointsList()) {
+        names.add(endpointState.getEndpoint());
+      }
+    }
+    return names.build();
+  }
+
+  /**
+   * Concatenates the slice assignments across all chunks, dropping any with a key longer than 512
+   * bytes, a start key not below its end key, or an out-of-range endpoint index. Slice assignments
+   * may appear in any order across chunks.
+   *
+   * @param errorDetails collects a description of each slice that was dropped
+   */
+  private static List<Assignment.Slice> combineSlices(
+      List<AssignmentChunk> chunks, int endpointCount, List<String> errorDetails) {
+    List<Assignment.Slice> slices = new ArrayList<>();
+    for (AssignmentChunk chunk : chunks) {
+      for (SliceAssignment sliceAssignment : chunk.getSliceAssignmentsList()) {
+        // An unset slice reads as ["", inf), the whole keyspace.
+        com.google.cloud.autosharding.v1.Slice slice = sliceAssignment.getSlice();
+        byte[] startKey = slice.getStartKey().toByteArray();
+        byte[] endKey = slice.hasEndKey() ? slice.getEndKey().toByteArray() : null;
+
+        if (startKey.length > MAX_KEY_BYTES) {
+          errorDetails.add(
+              String.format(
+                  "slice starting at %s has a start_key longer than %s bytes",
+                  encode(startKey), MAX_KEY_BYTES));
+          continue;
+        }
+        if (endKey != null && endKey.length > MAX_KEY_BYTES) {
+          errorDetails.add(
+              String.format(
+                  "slice starting at %s has an end_key longer than %s bytes",
+                  encode(startKey), MAX_KEY_BYTES));
+          continue;
+        }
+
+        // end_key is exclusive, so a slice covers keys only if start_key < end_key. [k, k) is
+        // empty rather than the single key k: a server assigning one key sends an end_key of k
+        // with a trailing 0x00. A slice that covers nothing cannot leave a gap when dropped.
+        if (endKey != null && UNSIGNED_BYTES_COMPARATOR.compare(startKey, endKey) >= 0) {
+          errorDetails.add(
+              String.format(
+                  "slice [%s, %s) has start_key >= end_key", encode(startKey), encode(endKey)));
+          continue;
+        }
+
+        List<Integer> endpoints = new ArrayList<>(sliceAssignment.getEndpointsCount());
+        String indexProblem = null;
+        for (PerSliceEndpointState perSlice : sliceAssignment.getEndpointsList()) {
+          int index = perSlice.getEndpointIndex();
+          if (index < 0 || index >= endpointCount) {
+            indexProblem =
+                String.format(
+                    "slice starting at %s references out-of-range endpoint index %s"
+                        + " (assignment has %s endpoints)",
+                    encode(startKey), index, endpointCount);
+            break;
+          }
+          endpoints.add(index);
+        }
+        if (indexProblem != null) {
+          errorDetails.add(indexProblem);
+          continue;
+        }
+        // No endpoints means the server deliberately left the range unassigned, so it must not
+        // fall back either.
+        slices.add(new Assignment.Slice(startKey, endKey, endpoints, endpoints.isEmpty()));
+      }
+    }
+    return slices;
+  }
+
+  /**
+   * Returns the slices of {@code slicesByStartKey} that overlap no other slice.
+   *
+   * <p>When slices overlap, every one of them is dropped. The server has told us two different
+   * things about the same key and there is no basis for preferring either, so the keys they cover
+   * become a gap.
+   *
+   * @param slicesByStartKey slices in ascending {@code startKey} order
+   * @param errorDetails collects a description of each slice that was dropped
+   */
+  private static List<Assignment.Slice> dropOverlaps(
+      List<Assignment.Slice> slicesByStartKey, List<String> errorDetails) {
+    List<Assignment.Slice> nonOverlapping = new ArrayList<>(slicesByStartKey.size());
+    int index = 0;
+    while (index < slicesByStartKey.size()) {
+      // Extend a run of slices for as long as the keys covered so far reach into the next one.
+      // Every slice that joins overlaps some earlier member, and the first two overlap directly,
+      // so a run longer than one slice consists entirely of slices that overlap something.
+      byte[] runEndKey = slicesByStartKey.get(index).getEndKey();
+      int end = index + 1;
+      while (end < slicesByStartKey.size()
+          && reaches(runEndKey, slicesByStartKey.get(end).getStartKey())) {
+        byte[] endKey = slicesByStartKey.get(end).getEndKey();
+        // A run that already reaches infinity cannot be extended any further.
+        if (runEndKey != null
+            && (endKey == null || UNSIGNED_BYTES_COMPARATOR.compare(endKey, runEndKey) > 0)) {
+          runEndKey = endKey;
+        }
+        end++;
+      }
+
+      if (end - index == 1) {
+        nonOverlapping.add(slicesByStartKey.get(index));
+      } else {
+        for (Assignment.Slice slice : slicesByStartKey.subList(index, end)) {
+          errorDetails.add(
+              String.format(
+                  "slice [%s, %s) overlaps another slice",
+                  encode(slice.getStartKey()), encode(slice.getEndKey())));
+        }
+      }
+      index = end;
+    }
+    return nonOverlapping;
+  }
+
+  /**
+   * Returns whether a range ending at {@code endKey}, or at infinity when it is null, extends
+   * past {@code startKey}.
+   */
+  private static boolean reaches(@Nullable byte[] endKey, byte[] startKey) {
+    return endKey == null || UNSIGNED_BYTES_COMPARATOR.compare(endKey, startKey) > 0;
+  }
+
+  /**
+   * Returns a contiguous list of slices covering {@code ["", inf)}, inserting endpoint-less
+   * slices wherever the sorted input leaves a gap. Those slices may fall back: only a range the
+   * server itself assigned no endpoints disables fallback.
+   *
+   * @param slicesByStartKey slices in ascending {@code startKey} order, none overlapping
+   * @param errorDetails collects a description of each gap
+   */
+  private static List<Assignment.Slice> fillGaps(
+      List<Assignment.Slice> slicesByStartKey, List<String> errorDetails) {
+    List<Assignment.Slice> filled = new ArrayList<>(slicesByStartKey.size() + 1);
+    // Exclusive upper bound of the key range covered so far; null once infinity is reached.
+    byte[] cursor = EMPTY_BYTES;
+    for (Assignment.Slice slice : slicesByStartKey) {
+      if (UNSIGNED_BYTES_COMPARATOR.compare(cursor, slice.getStartKey()) < 0) {
+        errorDetails.add(describeGap(cursor, slice.getStartKey()));
+        filled.add(new Assignment.Slice(cursor, slice.getStartKey(), ImmutableList.of()));
+      }
+      filled.add(slice);
+      cursor = slice.getEndKey();
+    }
+    if (cursor != null) {
+      errorDetails.add(describeGap(cursor, null));
+      filled.add(new Assignment.Slice(cursor, null, ImmutableList.of()));
+    }
+    return filled;
+  }
+
+  private static String describeGap(byte[] startKey, @Nullable byte[] endKey) {
+    return String.format(
+        "keys [%s, %s) are not covered by any slice", encode(startKey), encode(endKey));
+  }
+
+  /**
+   * Summarizes the dropped slices and gaps, reporting as many as fit in the {@code error_message}
+   * of an {@code AssignmentAck}, followed by the count of those left out.
+   */
+  private static String describe(List<String> errorDetails) {
+    StringBuilder message = new StringBuilder();
+    int reported = 0;
+    for (String detail : errorDetails) {
+      int separator = reported == 0 ? 0 : SEPARATOR.length();
+      // Leave room for the suffix that will be needed if this is where we stop.
+      int reserved = andMore(errorDetails.size() - reported - 1).length();
+      if (message.length() + separator + detail.length() + reserved
+          > MAX_ERROR_MESSAGE_CHARS) {
+        break;
+      }
+      if (reported > 0) {
+        message.append(SEPARATOR);
+      }
+      message.append(detail);
+      reported++;
+    }
+    return message + andMore(errorDetails.size() - reported);
+  }
+
+  private static String andMore(int omitted) {
+    return omitted == 0 ? "" : String.format("; and %s more", omitted);
+  }
+
+  /**
+   * Hex-encodes a key for a description, shortened to its first {@link #MAX_ENCODED_KEY_BYTES}
+   * bytes. A null key, meaning infinity, is written as "inf".
+   */
+  private static String encode(@Nullable byte[] key) {
+    if (key == null) {
+      return "inf";
+    }
+    if (key.length <= MAX_ENCODED_KEY_BYTES) {
+      return BaseEncoding.base16().encode(key);
+    }
+    return BaseEncoding.base16().encode(key, 0, MAX_ENCODED_KEY_BYTES) + "...";
+  }
+}
