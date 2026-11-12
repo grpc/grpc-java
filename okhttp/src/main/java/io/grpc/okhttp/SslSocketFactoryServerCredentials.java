@@ -35,6 +35,16 @@ public final class SslSocketFactoryServerCredentials {
     return new ServerCredentials(factory, Utils.convertSpec(connectionSpec));
   }
 
+  public static io.grpc.ServerCredentials create(
+      SSLSocketFactory factory, String[] tlsVersions, String[] cipherSuiteList, boolean supportsTlsExtensions) {
+    ConnectionSpec connectionSpec = new ConnectionSpec.Builder(true)
+        .tlsVersions(tlsVersions)
+        .cipherSuites(cipherSuiteList)
+        .supportsTlsExtensions(supportsTlsExtensions)
+        .build();
+    return new ServerCredentials(factory, connectionSpec);
+  }
+
   // Hide implementation detail of how these credentials operate
   static final class ServerCredentials extends io.grpc.ServerCredentials {
     private final SSLSocketFactory factory;
