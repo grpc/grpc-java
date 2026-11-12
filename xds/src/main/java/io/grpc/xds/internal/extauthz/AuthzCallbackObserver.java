@@ -24,6 +24,7 @@ import io.grpc.ClientCall;
 import io.grpc.Context;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.internal.DelayedClientCall;
 import io.grpc.stub.StreamObserver;
@@ -52,6 +53,8 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
   private final HeaderMutator headerMutator = HeaderMutator.create();
   private final ExtAuthzConfig config;
   private final Context.CancellableContext authzContext;
+  private final MetricRecorder metricRecorder;
+  private final String target;
 
   AuthzCallbackObserver(
       DelayedClientCall<ReqT, RespT> delayedCall,
@@ -61,7 +64,9 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
       Executor callExecutor,
       CheckResponseHandler responseHandler,
       ExtAuthzConfig config,
-      Context.CancellableContext authzContext) {
+      Context.CancellableContext authzContext,
+      MetricRecorder metricRecorder,
+      String target) {
     this.delayedCall = delayedCall;
     this.next = next;
     this.method = method;
@@ -70,6 +75,8 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
     this.responseHandler = responseHandler;
     this.config = config;
     this.authzContext = authzContext;
+    this.metricRecorder = metricRecorder;
+    this.target = target;
   }
 
   @Override
@@ -79,8 +86,11 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
     } catch (RuntimeException e) {
       // A processing failure is not an authz communication failure, so failure_mode_allow
       // must not apply here.
-      setCallAndDrain(new FailingClientCall<>(
-          Status.INTERNAL.withCause(e).withDescription("Failed to process authz response")));
+      if (setCallAndDrain(new FailingClientCall<>(
+          Status.INTERNAL.withCause(e).withDescription("Failed to process authz response")))) {
+        ExtAuthzMetrics.recordClientFailed(metricRecorder, target);
+        ExtAuthzMetrics.recordClientDenied(metricRecorder, target);
+      }
     }
   }
 
@@ -99,11 +109,13 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
             authzResponse.responseHeaderMutations(),
             headerMutator);
       }
-      setCallAndDrain(finalCall);
+      if (setCallAndDrain(finalCall)) {
+        ExtAuthzMetrics.recordClientAllowed(metricRecorder, target);
+      }
     } else {
-      // Defensive programming: status is always present on DENY branches since every
-      // deny() factory method requires a Status parameter. This orElseThrow satisfies
-      // static analysis and documents the invariant.
+      // TODO: Treat response validation failures as failures instead of authorization denials,
+      // per the clarified ext_authz spec. Count them in failed_rpcs instead of denied_rpcs.
+      // DENY responses always have a status because the deny() factory requires one.
       Status status = authzResponse.status().orElseThrow(
           () -> new IllegalArgumentException("DENY response missing status"));
       ClientCall<ReqT, RespT> failingCall;
@@ -115,7 +127,9 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
             authzResponse.responseHeaderMutations(),
             headerMutator);
       }
-      setCallAndDrain(failingCall);
+      if (setCallAndDrain(failingCall)) {
+        ExtAuthzMetrics.recordClientDenied(metricRecorder, target);
+      }
     }
   }
 
@@ -139,11 +153,17 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
       } else {
         finalCall = delegate;
       }
-      setCallAndDrain(finalCall);
+      if (setCallAndDrain(finalCall)) {
+        ExtAuthzMetrics.recordClientFailed(metricRecorder, target);
+        ExtAuthzMetrics.recordClientAllowed(metricRecorder, target);
+      }
       authzContext.close();
     } else {
       Status statusToReturn = config.statusOnError().withCause(t);
-      setCallAndDrain(new FailingClientCall<>(statusToReturn));
+      if (setCallAndDrain(new FailingClientCall<>(statusToReturn))) {
+        ExtAuthzMetrics.recordClientFailed(metricRecorder, target);
+        ExtAuthzMetrics.recordClientDenied(metricRecorder, target);
+      }
       authzContext.close();
     }
   }
@@ -156,17 +176,22 @@ final class AuthzCallbackObserver<ReqT, RespT> implements StreamObserver<CheckRe
     // since DelayedClientCall.setCall() ignores subsequent calls.
     Status status = config.statusOnError()
         .withDescription("Authz server completed without sending CheckResponse");
-    setCallAndDrain(new FailingClientCall<>(status));
+    if (setCallAndDrain(new FailingClientCall<>(status))) {
+      ExtAuthzMetrics.recordClientFailed(metricRecorder, target);
+      ExtAuthzMetrics.recordClientDenied(metricRecorder, target);
+    }
     authzContext.close();
   }
 
-  private void setCallAndDrain(ClientCall<ReqT, RespT> call) {
+  private boolean setCallAndDrain(ClientCall<ReqT, RespT> call) {
     Runnable drain = delayedCall.setCall(call);
     // drain is null if the call was already set (e.g. onCompleted() following onNext())
     // or if the call was cancelled in-flight.
     if (drain != null) {
       callExecutor.execute(drain);
+      return true;
     }
+    return false;
   }
 
   private static boolean isHeaderMutationsEmpty(HeaderMutations mutations) {

@@ -17,11 +17,18 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.extauthz.ExtAuthzMetrics.CLIENT_ALLOWED;
+import static io.grpc.xds.internal.extauthz.ExtAuthzMetrics.CLIENT_DENIED;
+import static io.grpc.xds.internal.extauthz.ExtAuthzMetrics.CLIENT_FAILED;
+import static io.grpc.xds.internal.extauthz.ExtAuthzMetrics.CLIENT_FILTER_DISABLED;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -29,11 +36,16 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.service.auth.v3.AuthorizationGrpc;
 import io.envoyproxy.envoy.service.auth.v3.CheckRequest;
 import io.envoyproxy.envoy.service.auth.v3.CheckResponse;
+import io.envoyproxy.envoy.service.auth.v3.DeniedHttpResponse;
+import io.envoyproxy.envoy.service.auth.v3.OkHttpResponse;
+import io.envoyproxy.envoy.type.v3.HttpStatus;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
@@ -72,6 +84,8 @@ public class ExtAuthzFilterTest {
   private ThreadSafeRandom mockRandom;
   @Mock
   private AuthorizationGrpc.AuthorizationImplBase mockAuthzService;
+  @Mock
+  private MetricRecorder metricRecorder;
 
   private final ScheduledExecutorService scheduler =
       Executors.newSingleThreadScheduledExecutor();
@@ -131,7 +145,7 @@ public class ExtAuthzFilterTest {
           }
         };
 
-    filter = new ExtAuthzFilter(channelProvider, mockRandom);
+    filter = new ExtAuthzFilter(channelProvider, mockRandom, metricRecorder);
   }
 
   private ExtAuthzConfig buildExtAuthzConfig() {
@@ -139,6 +153,10 @@ public class ExtAuthzFilterTest {
   }
 
   private ExtAuthzConfig buildExtAuthzConfig(int percent) {
+    return buildExtAuthzConfig(percent, true);
+  }
+
+  private ExtAuthzConfig buildExtAuthzConfig(int percent, boolean failureModeAllow) {
     GrpcServiceConfig.GoogleGrpcConfig googleGrpc = GrpcServiceConfig.GoogleGrpcConfig.builder()
         .target("test-cluster")
         .configuredChannelCredentials(io.grpc.xds.client.ConfiguredChannelCredentials.create(
@@ -156,7 +174,7 @@ public class ExtAuthzFilterTest {
         .includePeerCertificate(true)
         .allowedHeaders(ImmutableList.of())
         .disallowedHeaders(ImmutableList.of())
-        .failureModeAllow(true)
+        .failureModeAllow(failureModeAllow)
         .failureModeAllowHeaderAdd(false)
         .denyAtDisable(false)
         .filterEnabled(io.grpc.xds.internal.Matchers.FractionMatcher.create(percent, 100))
@@ -306,6 +324,9 @@ public class ExtAuthzFilterTest {
 
     // Verify the authz service was NEVER contacted (filter was disabled)
     verify(mockAuthzService, never()).check(any(CheckRequest.class), any());
+    verifyMetric(CLIENT_FILTER_DISABLED);
+    verifyMetric(CLIENT_DENIED);
+    verifyNoMoreInteractions(metricRecorder);
   }
 
   @Test
@@ -342,6 +363,9 @@ public class ExtAuthzFilterTest {
 
     // Assert: Authz service was NEVER contacted
     verify(mockAuthzService, never()).check(any(CheckRequest.class), any());
+    verifyMetric(CLIENT_FILTER_DISABLED);
+    verifyMetric(CLIENT_ALLOWED);
+    verifyNoMoreInteractions(metricRecorder);
   }
 
   @Test
@@ -378,6 +402,8 @@ public class ExtAuthzFilterTest {
 
     // Assert: Authz service WAS contacted (filter is active)
     verify(mockAuthzService).check(any(CheckRequest.class), any());
+    verifyMetric(CLIENT_ALLOWED);
+    verifyNoMoreInteractions(metricRecorder);
   }
 
   @Test
@@ -412,6 +438,173 @@ public class ExtAuthzFilterTest {
 
     // Assert: Authz service WAS contacted
     verify(mockAuthzService).check(any(CheckRequest.class), any());
+    verifyMetric(CLIENT_DENIED);
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void interceptCall_authzError_failOpen_recordsFailedAndAllowed() {
+    when(mockRandom.nextInt(100)).thenReturn(50);
+    doAnswer(invocation -> {
+      StreamObserver<CheckResponse> observer = invocation.getArgument(1);
+      observer.onError(Status.UNAVAILABLE.asRuntimeException());
+      return null;
+    }).when(mockAuthzService).check(any(CheckRequest.class), any());
+
+    ClientInterceptor interceptor = filter.buildClientInterceptor(
+        new ExtAuthzFilter.ExtAuthzFilterConfig(buildExtAuthzConfig()), null, scheduler);
+    ClientCall<SimpleRequest, SimpleResponse> call = interceptor.interceptCall(
+        SimpleServiceGrpc.getUnaryRpcMethod(), callOptions, channel);
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    call.start(listener, new Metadata());
+    call.halfClose();
+    call.request(1);
+
+    assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.OK);
+    verifyMetric(CLIENT_FAILED);
+    verifyMetric(CLIENT_ALLOWED);
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void interceptCall_authzError_failClosed_recordsFailedAndDenied() {
+    when(mockRandom.nextInt(100)).thenReturn(50);
+    doAnswer(invocation -> {
+      StreamObserver<CheckResponse> observer = invocation.getArgument(1);
+      observer.onError(Status.UNAVAILABLE.asRuntimeException());
+      return null;
+    }).when(mockAuthzService).check(any(CheckRequest.class), any());
+
+    ClientInterceptor interceptor = filter.buildClientInterceptor(
+        new ExtAuthzFilter.ExtAuthzFilterConfig(buildExtAuthzConfig(100, false)),
+        null, scheduler);
+    ClientCall<SimpleRequest, SimpleResponse> call = interceptor.interceptCall(
+        SimpleServiceGrpc.getUnaryRpcMethod(), callOptions, channel);
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    call.start(listener, new Metadata());
+
+    assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    verifyMetric(CLIENT_FAILED);
+    verifyMetric(CLIENT_DENIED);
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void interceptCall_authzCompletesWithoutResponse_recordsFailedAndDenied() {
+    when(mockRandom.nextInt(100)).thenReturn(50);
+    doAnswer(invocation -> {
+      StreamObserver<CheckResponse> observer = invocation.getArgument(1);
+      observer.onCompleted();
+      return null;
+    }).when(mockAuthzService).check(any(CheckRequest.class), any());
+
+    ClientInterceptor interceptor = filter.buildClientInterceptor(
+        new ExtAuthzFilter.ExtAuthzFilterConfig(buildExtAuthzConfig(100, false)),
+        null, scheduler);
+    ClientCall<SimpleRequest, SimpleResponse> call = interceptor.interceptCall(
+        SimpleServiceGrpc.getUnaryRpcMethod(), callOptions, channel);
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    call.start(listener, new Metadata());
+
+    assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    verifyMetric(CLIENT_FAILED);
+    verifyMetric(CLIENT_DENIED);
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void interceptCall_invalidAuthzResponse_recordsDenied() {
+    when(mockRandom.nextInt(100)).thenReturn(50);
+    doAnswer(invocation -> {
+      StreamObserver<CheckResponse> observer = invocation.getArgument(1);
+      observer.onNext(CheckResponse.newBuilder()
+          .setStatus(com.google.rpc.Status.newBuilder().setCode(com.google.rpc.Code.OK_VALUE))
+          .setOkResponse(OkHttpResponse.newBuilder().addHeaders(
+              io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
+                  .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                      .setKey("host").setValue("invalid"))))
+          .build());
+      observer.onCompleted();
+      return null;
+    }).when(mockAuthzService).check(any(CheckRequest.class), any());
+
+    ClientInterceptor interceptor = filter.buildClientInterceptor(
+        new ExtAuthzFilter.ExtAuthzFilterConfig(buildExtAuthzConfig()), null, scheduler);
+    ClientCall<SimpleRequest, SimpleResponse> call = interceptor.interceptCall(
+        SimpleServiceGrpc.getUnaryRpcMethod(), callOptions, channel);
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    call.start(listener, new Metadata());
+
+    assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    verifyMetric(CLIENT_DENIED);
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void interceptCall_malformedAuthzResponse_failClosed_recordsFailedAndDenied() {
+    when(mockRandom.nextInt(100)).thenReturn(50);
+    doAnswer(invocation -> {
+      StreamObserver<CheckResponse> observer = invocation.getArgument(1);
+      observer.onNext(CheckResponse.newBuilder()
+          .setStatus(com.google.rpc.Status.newBuilder()
+              .setCode(com.google.rpc.Code.PERMISSION_DENIED_VALUE))
+          .setDeniedResponse(DeniedHttpResponse.newBuilder().addHeaders(
+              io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
+                  .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                      // The newline triggers IllegalArgumentException during header validation,
+                      // exercising the catch block in AuthzCallbackObserver.onNext().
+                      .setKey("x-deny-reason").setValue("policy\nviolation"))))
+          .build());
+      observer.onCompleted();
+      return null;
+    }).when(mockAuthzService).check(any(CheckRequest.class), any());
+
+    ClientInterceptor interceptor = filter.buildClientInterceptor(
+        new ExtAuthzFilter.ExtAuthzFilterConfig(buildExtAuthzConfig(100, false)),
+        null, scheduler);
+    ClientCall<SimpleRequest, SimpleResponse> call = interceptor.interceptCall(
+        SimpleServiceGrpc.getUnaryRpcMethod(), callOptions, channel);
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    call.start(listener, new Metadata());
+
+    assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    verifyMetric(CLIENT_FAILED);
+    verifyMetric(CLIENT_DENIED);
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void interceptCall_deniedWithInternalStatus_recordsDenied() {
+    when(mockRandom.nextInt(100)).thenReturn(50);
+    doAnswer(invocation -> {
+      StreamObserver<CheckResponse> observer = invocation.getArgument(1);
+      observer.onNext(CheckResponse.newBuilder()
+          .setStatus(com.google.rpc.Status.newBuilder()
+              .setCode(com.google.rpc.Code.PERMISSION_DENIED_VALUE))
+          .setDeniedResponse(DeniedHttpResponse.newBuilder()
+              .setStatus(HttpStatus.newBuilder().setCodeValue(400)))
+          .build());
+      observer.onCompleted();
+      return null;
+    }).when(mockAuthzService).check(any(CheckRequest.class), any());
+
+    ClientInterceptor interceptor = filter.buildClientInterceptor(
+        new ExtAuthzFilter.ExtAuthzFilterConfig(buildExtAuthzConfig()), null, scheduler);
+    ClientCall<SimpleRequest, SimpleResponse> call = interceptor.interceptCall(
+        SimpleServiceGrpc.getUnaryRpcMethod(), callOptions, channel);
+    CapturingListener<SimpleResponse> listener = new CapturingListener<>();
+    call.start(listener, new Metadata());
+
+    assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    verifyMetric(CLIENT_DENIED);
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  private void verifyMetric(LongCounterMetricInstrument expectedMetric) {
+    verify(metricRecorder).addLongCounter(
+        argThat(instrument -> instrument.getName().equals(expectedMetric.getName())),
+        eq(1L), eq(java.util.Collections.singletonList(channel.authority())),
+        eq(java.util.Collections.emptyList()));
   }
 
   @Test
@@ -432,6 +625,9 @@ public class ExtAuthzFilterTest {
     assertThat(listener.closeStatus).isNotNull();
     assertThat(listener.closeStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(listener.closeStatus.getDescription()).contains("No executor provided");
+    verifyMetric(CLIENT_FAILED);
+    verifyMetric(CLIENT_DENIED);
+    verifyNoMoreInteractions(metricRecorder);
   }
 
   // ==========================================================================

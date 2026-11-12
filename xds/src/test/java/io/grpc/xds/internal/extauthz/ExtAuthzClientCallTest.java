@@ -88,6 +88,7 @@ public class ExtAuthzClientCallTest {
   @Mock
   private AuthorizationGrpc.AuthorizationImplBase authzService;
 
+  private final io.grpc.MetricRecorder metricRecorder = new io.grpc.MetricRecorder() {};
   private final ScheduledExecutorService scheduler =
       Executors.newSingleThreadScheduledExecutor();
   private Server server;
@@ -260,7 +261,7 @@ public class ExtAuthzClientCallTest {
         new ExtAuthzClientCall<>(
             callOptions.getExecutor(), scheduler, callOptions, channel,
             SimpleServiceGrpc.getUnaryRpcMethod(), interceptedStub,
-            mockCheckRequestBuilder, mockResponseHandler, config));
+            mockCheckRequestBuilder, mockResponseHandler, config, metricRecorder, "test-target"));
 
     CapturingListener<SimpleResponse> listener = new CapturingListener<>();
     call.start(listener, new Metadata());
@@ -670,7 +671,7 @@ public class ExtAuthzClientCallTest {
         SimpleServiceGrpc.getUnaryRpcMethod(),
         AuthorizationGrpc.newStub(channel),
         mockCheckRequestBuilder, mockResponseHandler,
-        config);
+        config, metricRecorder, "test-target");
   }
 
   private static ExtAuthzConfig buildConfig() {
