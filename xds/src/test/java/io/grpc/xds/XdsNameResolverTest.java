@@ -823,6 +823,18 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void resolved_configReused() {
+    InternalConfigSelector selector = resolveToClusters();
+    Result first = selector.selectConfig(
+        newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    Result second = selector.selectConfig(
+        newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    assertThat(first.getStatus().isOk()).isTrue();
+    assertThat(second.getStatus().isOk()).isTrue();
+    assertThat(second.getConfig()).isSameInstanceAs(first.getConfig());
+  }
+
+  @Test
   public void resolved_simpleCallFailedToRoute_noMatchingRoute() {
     InternalConfigSelector configSelector = resolveToClusters();
     CallInfo call = new CallInfo("FooService", "barMethod");
