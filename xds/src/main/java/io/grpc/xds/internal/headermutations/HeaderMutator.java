@@ -29,15 +29,20 @@ import java.util.logging.Logger;
 public class HeaderMutator {
 
   private static final Logger logger = Logger.getLogger(HeaderMutator.class.getName());
+  /** Shared stateless header mutator. */
+  public static final HeaderMutator HEADER_MUTATOR = new HeaderMutator();
 
   /**
    * Creates a new instance of {@code HeaderMutator}.
+   *
+   * @deprecated Use {@link #HEADER_MUTATOR} instead.
    */
+  @Deprecated
   public static HeaderMutator create() {
     return new HeaderMutator();
   }
 
-  HeaderMutator() {}
+  private HeaderMutator() {}
 
   /**
    * Applies the given header mutations to the provided metadata headers.
