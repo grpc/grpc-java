@@ -23,6 +23,7 @@ import static io.grpc.xds.FaultFilter.HEADER_ABORT_HTTP_STATUS_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_ABORT_PERCENTAGE_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_PERCENTAGE_KEY;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -75,6 +76,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusOr;
+import io.grpc.StatusRuntimeException;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -3227,6 +3229,10 @@ public class XdsNameResolverTest {
       ClientCall.Listener<String> listener = mock(ClientCall.Listener.class);
       call.start(listener, new Metadata());
       call.sendMessage("World");
+      // Subsequent sendMessage and halfClose after internal sendMessage cancellation are no-ops
+      // and must not throw IllegalStateException.
+      call.sendMessage("World2");
+      call.halfClose();
 
       ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
       verify(listener).onClose(statusCaptor.capture(), any(Metadata.class));
@@ -3235,6 +3241,29 @@ public class XdsNameResolverTest {
       assertThat(status.getDescription())
           .isEqualTo("Failed to read message for raw message interceptor");
       assertThat(status.getCause()).isSameInstanceAs(ioException);
+
+      // Verify ClientCalls.blockingUnaryCall (which calls sendMessage followed by halfClose)
+      // surfaces StatusRuntimeException(CANCELLED) rather than IllegalStateException.
+      StatusRuntimeException sre = assertThrows(
+          StatusRuntimeException.class,
+          () -> ClientCalls.blockingUnaryCall(
+              interceptedChannel, failingRequestMethod, CallOptions.DEFAULT, "World"));
+      assertThat(sre.getStatus().getCode()).isEqualTo(Status.Code.CANCELLED);
+      assertThat(sre.getStatus().getDescription())
+          .isEqualTo("Failed to read message for raw message interceptor");
+      assertThat(sre.getStatus().getCause()).isSameInstanceAs(ioException);
+
+      // Verify explicit application cancellation still causes subsequent sendMessage and halfClose
+      // to throw IllegalStateException.
+      ClientCall<String, String> explicitlyCancelledCall =
+          interceptedChannel.newCall(failingRequestMethod, CallOptions.DEFAULT);
+      @SuppressWarnings("unchecked")
+      ClientCall.Listener<String> explicitCancelListener = mock(ClientCall.Listener.class);
+      explicitlyCancelledCall.start(explicitCancelListener, new Metadata());
+      explicitlyCancelledCall.cancel("Application cancelled", null);
+      assertThrows(
+          IllegalStateException.class, () -> explicitlyCancelledCall.sendMessage("World"));
+      assertThrows(IllegalStateException.class, explicitlyCancelledCall::halfClose);
     }
   }
 
