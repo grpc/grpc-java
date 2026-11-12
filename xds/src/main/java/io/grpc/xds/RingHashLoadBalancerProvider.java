@@ -22,6 +22,7 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.Metadata;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
@@ -105,6 +106,16 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
     if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize) {
       return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
           "Invalid 'minRingSize'/'maxRingSize'"));
+    }
+    if (!requestHashHeader.isEmpty()) {
+      // gRFC A76: reject header names that are invalid or refer to a binary (-bin) header.
+      try {
+        requestHashHeader =
+            Metadata.Key.of(requestHashHeader, Metadata.ASCII_STRING_MARSHALLER).name();
+      } catch (IllegalArgumentException e) {
+        return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
+            "Invalid 'requestHashHeader': " + requestHashHeader).withCause(e));
+      }
     }
     return ConfigOrError.fromConfig(
         new RingHashConfig(minRingSize, maxRingSize, requestHashHeader));
