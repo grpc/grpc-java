@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.*;
 import static org.junit.Assert.assertThrows;
 
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Empty;
@@ -29,9 +30,11 @@ import io.grpc.binder.internal.BinderTransportSecurity.ServerPolicyChecker;
 import io.grpc.binder.internal.BinderTransportSecurity.TransportAuthorizationState;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import java.util.NoSuchElementException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
@@ -191,6 +194,39 @@ public final class TransportAuthorizationStateTest {
     authState.notifyTerminatedUnlocked();
 
     assertThat(authResult.isCancelled()).isTrue();
+  }
+
+  @Test
+  public void notifyTerminatedUnlocked_waitsForPolicyInvocation() throws Exception {
+    CountDownLatch policyEntered = new CountDownLatch(1);
+    CountDownLatch releasePolicy = new CountDownLatch(1);
+    authState =
+        new TransportAuthorizationState(
+            UID,
+            (uid, serviceName) -> {
+              policyEntered.countDown();
+              try {
+                releasePolicy.await();
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return Futures.immediateFailedFuture(e);
+              }
+              return Futures.immediateFuture(Status.OK);
+            },
+            executor);
+
+    Future<?> check = executor.submit(() -> authState.checkAuthorization(CODEGEN_METHOD));
+    try {
+      assertThat(policyEntered.await(10, SECONDS)).isTrue();
+      ListenableFuture<?> terminated = authState.notifyTerminatedUnlocked();
+      assertThat(terminated.isDone()).isFalse();
+
+      releasePolicy.countDown();
+      check.get(10, SECONDS);
+      terminated.get(10, SECONDS);
+    } finally {
+      releasePolicy.countDown();
+    }
   }
 
   @Test
