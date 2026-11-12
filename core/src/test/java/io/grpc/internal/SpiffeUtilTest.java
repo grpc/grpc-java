@@ -32,6 +32,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
@@ -417,6 +418,21 @@ public class SpiffeUtilTest {
           .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_USE)));
       assertEquals("'use' parameter must be 'x509-svid' but 'i_am_not_x509-svid' found."
           + DOMAIN_ERROR_MESSAGE, iae.getMessage());
+    }
+
+    @Test
+    public void loadTrustBundleFromFileInvalidTrustDomainTest() throws Exception {
+      for (String trustDomain : new String[] {"invalid#character", "UPPER.example.com"}) {
+        File bundleFile = tempFolder.newFile();
+        try (OutputStream fileStream = new FileOutputStream(bundleFile)) {
+          fileStream.write(("{\"trust_domains\": {\"" + trustDomain + "\": {}}}")
+              .getBytes(StandardCharsets.UTF_8));
+        }
+        IllegalArgumentException iae = assertThrows(IllegalArgumentException.class,
+            () -> SpiffeUtil.loadTrustBundleFromFile(bundleFile.toString()));
+        assertEquals("Trust Domain must contain only letters, numbers, dots, dashes, and "
+            + "underscores ([a-z0-9.-_])", iae.getMessage());
+      }
     }
 
     @Test
