@@ -77,6 +77,14 @@ public class OkHttpChannelBuilderTest {
   }
 
   @Test
+  public void authorityFromHostWithLastLabelStartingWithDigit() {
+    OkHttpChannelBuilder builder =
+        OkHttpChannelBuilder.forAddress("otlp.1234-k8s-namespace", 4317);
+    ManagedChannel channel = grpcCleanupRule.register(builder.build());
+    assertEquals("otlp.1234-k8s-namespace:4317", channel.authority());
+  }
+
+  @Test
   public void overrideAuthorityIsReadableForAddress() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("original", 1234);
     overrideAuthorityIsReadableHelper(builder, "override:5678");

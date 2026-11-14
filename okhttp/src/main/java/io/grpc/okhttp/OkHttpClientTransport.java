@@ -975,8 +975,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @VisibleForTesting
   String getOverridenHost() {
     URI uri = GrpcUtil.authorityToUri(defaultAuthority);
-    if (uri.getHost() != null) {
-      return uri.getHost();
+    String host = GrpcUtil.getHost(uri);
+    if (host != null) {
+      return host;
     }
 
     return defaultAuthority;
@@ -985,8 +986,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @VisibleForTesting
   int getOverridenPort() {
     URI uri = GrpcUtil.authorityToUri(defaultAuthority);
-    if (uri.getPort() != -1) {
-      return uri.getPort();
+    int port = GrpcUtil.getPort(uri);
+    if (port != -1) {
+      return port;
     }
 
     return address.getPort();
