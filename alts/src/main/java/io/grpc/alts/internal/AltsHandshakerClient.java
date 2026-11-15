@@ -22,6 +22,7 @@ import com.google.common.base.Strings;
 import com.google.protobuf.ByteString;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.Deadline;
 import io.grpc.Status;
 import io.grpc.alts.internal.HandshakerServiceGrpc.HandshakerServiceStub;
 import java.io.IOException;
@@ -55,6 +56,10 @@ class AltsHandshakerClient {
     this.handshakerStub = handshakerStub;
     handshakerOptions = options;
     this.logger = logger;
+  }
+
+  void setDeadline(Deadline deadline) {
+    handshakerStub.setDeadline(deadline);
   }
 
   static String getApplicationProtocol() {

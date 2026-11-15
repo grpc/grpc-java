@@ -19,6 +19,7 @@ package io.grpc.alts.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import io.grpc.Deadline;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.nio.ByteBuffer;
@@ -34,6 +35,10 @@ public final class NettyTsiHandshaker {
 
   public NettyTsiHandshaker(TsiHandshaker handshaker) {
     internalHandshaker = checkNotNull(handshaker);
+  }
+
+  void setDeadline(Deadline deadline) {
+    internalHandshaker.setDeadline(deadline);
   }
 
   /**

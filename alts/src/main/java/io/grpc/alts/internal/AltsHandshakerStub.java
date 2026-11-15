@@ -20,11 +20,13 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
+import io.grpc.Deadline;
 import io.grpc.alts.internal.HandshakerServiceGrpc.HandshakerServiceStub;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 
 /** An interface to the ALTS handshaker service. */
 class AltsHandshakerStub {
@@ -36,6 +38,7 @@ class AltsHandshakerStub {
   private final AtomicReference<ThrowableInfo> exceptionMessage = new AtomicReference<>();
 
   private static final long HANDSHAKE_RPC_DEADLINE_SECS = 20;
+  @Nullable private Deadline deadline;
 
   AltsHandshakerStub(HandshakerServiceStub serviceStub) {
     this.serviceStub = serviceStub;
@@ -78,11 +81,16 @@ class AltsHandshakerStub {
     }
   }
 
+  void setDeadline(Deadline deadline) {
+    this.deadline = deadline;
+  }
+
   /** Create a new writer if the writer is null. */
   private void createWriterIfNull() {
     if (writer == null) {
-      writer =
-          serviceStub.withDeadlineAfter(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS).doHandshake(reader);
+      Deadline rpcDeadline =
+          deadline != null ? deadline : Deadline.after(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS);
+      writer = serviceStub.withDeadline(rpcDeadline).doHandshake(reader);
     }
   }
 
