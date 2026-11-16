@@ -6,9 +6,36 @@ subjectAltName = @alt_names_multi
 
 [spiffe_server_e2e]
 subjectAltName = @alt_names_server_e2e
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature
 
 [spiffe_client_e2e]
 subjectAltName = @alt_names_client_e2e
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature
+
+# Leaf SVIDs that each violate exactly one X509-SVID leaf validation rule,
+# used by XdsX509TrustManagerTest to check that the trust manager rejects them.
+
+[spiffe_leaf_root_path]
+subjectAltName = @alt_names_root_path
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature
+
+[spiffe_leaf_key_cert_sign]
+subjectAltName = @alt_names_key_cert_sign
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature, keyCertSign
+
+[spiffe_leaf_crl_sign]
+subjectAltName = @alt_names_crl_sign
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature, cRLSign
+
+[spiffe_leaf_no_digital_signature]
+subjectAltName = @alt_names_no_digital_signature
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, keyEncipherment
 
 [alt_names]
 URI = spiffe://foo.bar.com/client/workload/1
@@ -26,3 +53,15 @@ URI = spiffe://example.com/workload/9eebccd2
 
 [alt_names_client_e2e]
 URI = spiffe://foo.bar.com/9eebccd2-12bf-40a6-b262-65fe0487d453
+
+[alt_names_root_path]
+URI = spiffe://example.com
+
+[alt_names_key_cert_sign]
+URI = spiffe://example.com/workload/keycertsign
+
+[alt_names_crl_sign]
+URI = spiffe://example.com/workload/crlsign
+
+[alt_names_no_digital_signature]
+URI = spiffe://example.com/workload/no-digitalsignature

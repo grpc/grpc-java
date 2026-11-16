@@ -25,6 +25,11 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_SPI
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_CA_CERT_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_CRLSIGN_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_KEYCERTSIGN_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_NO_DIGSIG_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_ROOT_PATH_PEM_FILE;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.atLeastOnce;
@@ -638,6 +643,97 @@ public class XdsX509TrustManagerTest {
     trustManager = XdsTrustManagerFactory.createX509TrustManager(
         ImmutableMap.of("foo.bar.com", caCerts), null, false);
     trustManager.checkClientTrusted(clientCerts, "RSA");
+  }
+
+  @Test
+  public void checkServerTrustedSpiffeTrustMap_rootPathSpiffeId_expectException()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SPIFFE_ROOT_PATH_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null, false);
+    try {
+      trustManager.checkServerTrusted(serverCerts, "RSA");
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .isEqualTo("Leaf certificate SPIFFE ID must have a non-root path");
+    }
+  }
+
+  @Test
+  public void checkServerTrustedSpiffeTrustMap_caFlagSet_expectException()
+      throws CertificateException, IOException, CertStoreException {
+    // A signing certificate that is itself an SVID must not be usable for authentication.
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SPIFFE_CA_CERT_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("foo.bar.com", caCerts), null, false);
+    try {
+      trustManager.checkServerTrusted(serverCerts, "RSA");
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .isEqualTo("Leaf certificate must not have CA flag set to true");
+    }
+  }
+
+  @Test
+  public void checkServerTrustedSpiffeTrustMap_keyCertSign_expectException()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SPIFFE_KEYCERTSIGN_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null, false);
+    try {
+      trustManager.checkServerTrusted(serverCerts, "RSA");
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .isEqualTo("Leaf certificate must not have 'keyCertSign' as key usage");
+    }
+  }
+
+  @Test
+  public void checkServerTrustedSpiffeTrustMap_crlSign_expectException()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SPIFFE_CRLSIGN_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null, false);
+    try {
+      trustManager.checkServerTrusted(serverCerts, "RSA");
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .isEqualTo("Leaf certificate must not have 'cRLSign' as key usage");
+    }
+  }
+
+  @Test
+  public void checkServerTrustedSpiffeTrustMap_missingDigitalSignature_expectException()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate[] serverCerts = CertificateUtils.toX509Certificates(
+        TlsTesting.loadCert(SPIFFE_NO_DIGSIG_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null, false);
+    try {
+      trustManager.checkServerTrusted(serverCerts, "RSA");
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .isEqualTo("Leaf certificate must have 'digitalSignature' as key usage");
+    }
   }
 
   @Test

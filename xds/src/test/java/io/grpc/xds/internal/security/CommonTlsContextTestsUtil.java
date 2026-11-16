@@ -57,6 +57,13 @@ public class CommonTlsContextTestsUtil {
   public static final String CA_PEM_FILE = "ca.pem";
   public static final String SPIFFE_TRUST_MAP_FILE = "spiffebundle.json";
   public static final String SPIFFE_TRUST_MAP_1_FILE = "spiffebundle1.json";
+  /** Self-signed signing certificate that is itself an SVID, i.e. has CA:true and a URI SAN. */
+  public static final String SPIFFE_CA_CERT_PEM_FILE = "spiffe_cert.pem";
+  /** Leaf SVIDs that each violate exactly one X509-SVID leaf validation rule. */
+  public static final String SPIFFE_ROOT_PATH_PEM_FILE = "spiffe_root_path_cert.pem";
+  public static final String SPIFFE_KEYCERTSIGN_PEM_FILE = "spiffe_keycertsign_cert.pem";
+  public static final String SPIFFE_CRLSIGN_PEM_FILE = "spiffe_crlsign_cert.pem";
+  public static final String SPIFFE_NO_DIGSIG_PEM_FILE = "spiffe_no_digitalsignature_cert.pem";
   /** Bad/untrusted server certs. */
   public static final String BAD_SERVER_PEM_FILE = "badserver.pem";
   public static final String BAD_SERVER_KEY_FILE = "badserver.key";
