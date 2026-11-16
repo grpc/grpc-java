@@ -1113,7 +1113,10 @@ public abstract class AbstractInteropTest {
           Pattern.matches("CallOptions deadline exceeded after .*s. \\[.*\\]", desc)
           // If server expires first, it'd reset the stream and client would generate a different
           // message
-          || desc.startsWith("ClientCall was cancelled at or after deadline."));
+          || desc.startsWith("ClientCall was cancelled at or after deadline.")
+          // If server expires first and sends the status instead of resetting the stream (e.g.,
+          // servlet based servers), the client sees the server's status
+          || desc.equals("context timed out"));
     }
 
     assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);

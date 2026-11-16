@@ -112,29 +112,4 @@ public class TomcatInteropTest extends AbstractInteropTest {
   @Ignore("Tomcat is broken on client GOAWAY")
   @Test
   public void gracefulShutdown() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void specialStatusMessage() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void unimplementedMethod() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void statusCodeAndMessage() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void emptyStream() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void timeoutOnSleepingServer() {}
 }

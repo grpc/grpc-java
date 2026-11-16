@@ -280,11 +280,15 @@ final class ServletServerStream extends AbstractServerStream {
             new Object[] {logId, trailers, headersSent, status});
       }
       if (!headersSent) {
-        writeHeadersToServletResponse(trailers);
-      } else {
-        serializeHeaders(trailers,
-            (k, v) -> trailerSupplier.get().merge(k, v, (oldV, newV) -> oldV + "," + newV));
+        // Don't send a Trailers-Only response (status in the response headers). Some containers,
+        // like Tomcat, don't set END_STREAM on that HEADERS frame and instead terminate the stream
+        // with an empty DATA frame, which the client treats as a protocol error, discarding the
+        // status. Send (empty) headers followed by real trailers instead.
+        writeHeadersToServletResponse(new Metadata());
+        resp.setTrailerFields(trailerSupplier);
       }
+      serializeHeaders(trailers,
+          (k, v) -> trailerSupplier.get().merge(k, v, (oldV, newV) -> oldV + "," + newV));
 
       writer.complete();
     }
