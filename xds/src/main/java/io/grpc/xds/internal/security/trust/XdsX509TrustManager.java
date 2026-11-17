@@ -60,6 +60,12 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   private static final int ALT_URI_NAME = 6;
   private static final int ALT_IPA_NAME = 7;
 
+  // Positions in the array returned by X509Certificate#getKeyUsage(), as defined by
+  // RFC 5280 section 4.2.1.3.
+  private static final int KEY_USAGE_DIGITAL_SIGNATURE = 0;
+  private static final int KEY_USAGE_KEY_CERT_SIGN = 5;
+  private static final int KEY_USAGE_CRL_SIGN = 6;
+
   private final X509ExtendedTrustManager delegate;
   private final Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates;
   private final CertificateValidationContext certContext;
@@ -324,6 +330,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       if (!spiffeId.isPresent()) {
         throw new CertificateException("Failed to extract SPIFFE ID from peer leaf certificate");
       }
+      validateLeafSpiffeId(spiffeId.get());
+      validateLeafCertificate(chain[0]);
       String trustDomain = spiffeId.get().getTrustDomain();
       if (!spiffeTrustMapDelegates.containsKey(trustDomain)) {
         throw new CertificateException(String.format("Spiffe Trust Map doesn't contain trust"
@@ -333,6 +341,64 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     } else {
       return delegate;
     }
+  }
+
+  /**
+   * Validates that the SPIFFE ID in the peer leaf certificate has a non-root path component.
+   * Root-path SPIFFE IDs are reserved for signing certificates, which must not be used for
+   * authentication purposes. The X.509-SVID spec requires validators to enforce this, and
+   * java-spiffe rejects root-path SPIFFE IDs during peer validation in
+   * {@code X509SvidProfile.validateLeafSpiffeId}.
+   *
+   * @see <a
+   *     href="https://github.com/spiffe/spiffe/blob/main/standards/X509-SVID.md#52-leaf-validation">X509-SVID
+   *     spec section 5.2</a>
+   * @see <a
+   *     href="https://github.com/spiffe/java-spiffe/blob/main/java-spiffe-core/src/main/java/io/spiffe/svid/x509svid/X509SvidProfile.java">java-spiffe
+   *     X509SvidProfile</a>
+   */
+  private static void validateLeafSpiffeId(SpiffeUtil.SpiffeId spiffeId)
+      throws CertificateException {
+    String path = spiffeId.getPath();
+    if (path == null || path.isEmpty()) {
+      throw new CertificateException("Leaf certificate SPIFFE ID must have a non-root path");
+    }
+  }
+
+  /**
+   * Validates that the peer leaf certificate is a leaf SVID and not a signing certificate:
+   * the {@code cA} basic constraint must be false, the key usage must include
+   * {@code digitalSignature}, and must not include {@code keyCertSign} or {@code cRLSign}.
+   * Without these checks a signing certificate, which per the X.509-SVID spec is itself an
+   * SVID, could be presented for authentication. The spec requires validators to enforce
+   * this, and java-spiffe enforces the same checks in
+   * {@code X509SvidProfile.validateLeafCertificate}.
+   *
+   * @see <a
+   *     href="https://github.com/spiffe/spiffe/blob/main/standards/X509-SVID.md#52-leaf-validation">X509-SVID
+   *     spec section 5.2</a>
+   * @see <a
+   *     href="https://github.com/spiffe/java-spiffe/blob/main/java-spiffe-core/src/main/java/io/spiffe/svid/x509svid/X509SvidProfile.java">java-spiffe
+   *     X509SvidProfile</a>
+   */
+  private static void validateLeafCertificate(X509Certificate leaf) throws CertificateException {
+    if (leaf.getBasicConstraints() != -1) {
+      throw new CertificateException("Leaf certificate must not have CA flag set to true");
+    }
+    boolean[] keyUsage = leaf.getKeyUsage();
+    if (keyUsage == null || !isKeyUsageSet(keyUsage, KEY_USAGE_DIGITAL_SIGNATURE)) {
+      throw new CertificateException("Leaf certificate must have 'digitalSignature' as key usage");
+    }
+    if (isKeyUsageSet(keyUsage, KEY_USAGE_KEY_CERT_SIGN)) {
+      throw new CertificateException("Leaf certificate must not have 'keyCertSign' as key usage");
+    }
+    if (isKeyUsageSet(keyUsage, KEY_USAGE_CRL_SIGN)) {
+      throw new CertificateException("Leaf certificate must not have 'cRLSign' as key usage");
+    }
+  }
+
+  private static boolean isKeyUsageSet(boolean[] keyUsage, int index) {
+    return index < keyUsage.length && keyUsage[index];
   }
 
   @Override
