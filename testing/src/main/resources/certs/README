@@ -105,13 +105,22 @@ rule, used by XdsX509TrustManagerTest (spiffe_root_path_cert.pem, \
 spiffe_keycertsign_cert.pem, spiffe_crlsign_cert.pem, \
 spiffe_no_digitalsignature_cert.pem):
 ----------------------
-$ for sect in root_path key_cert_sign crl_sign no_digital_signature; do
-$   openssl req -x509 -newkey rsa:2048 -nodes \
-$    -keyout throwaway.key -out spiffe_${sect}_cert.pem \
-$    -config spiffe-openssl.cnf -extensions spiffe_leaf_${sect} \
-$    -days 3650 -sha256 \
-$    -subj /C=US/ST=CA/L=SVL/O=gRPC/CN=test-spiffe-leaf
-$ done
+$ openssl req -x509 -newkey rsa:2048 -nodes -keyout throwaway.key \
+  -out spiffe_root_path_cert.pem -config spiffe-openssl.cnf \
+  -extensions spiffe_leaf_root_path -days 3650 -sha256 \
+  -subj /C=US/ST=CA/L=SVL/O=gRPC/CN=test-spiffe-leaf
+$ openssl req -x509 -newkey rsa:2048 -nodes -keyout throwaway.key \
+  -out spiffe_keycertsign_cert.pem -config spiffe-openssl.cnf \
+  -extensions spiffe_leaf_key_cert_sign -days 3650 -sha256 \
+  -subj /C=US/ST=CA/L=SVL/O=gRPC/CN=test-spiffe-leaf
+$ openssl req -x509 -newkey rsa:2048 -nodes -keyout throwaway.key \
+  -out spiffe_crlsign_cert.pem -config spiffe-openssl.cnf \
+  -extensions spiffe_leaf_crl_sign -days 3650 -sha256 \
+  -subj /C=US/ST=CA/L=SVL/O=gRPC/CN=test-spiffe-leaf
+$ openssl req -x509 -newkey rsa:2048 -nodes -keyout throwaway.key \
+  -out spiffe_no_digitalsignature_cert.pem -config spiffe-openssl.cnf \
+  -extensions spiffe_leaf_no_digital_signature -days 3650 -sha256 \
+  -subj /C=US/ST=CA/L=SVL/O=gRPC/CN=test-spiffe-leaf
 
 (The self-signed signing certificate spiffe_cert.pem, which is itself an \
 SVID with CA:TRUE, is reused for the CA-flag rejection test.)
