@@ -16,6 +16,7 @@
 package io.grpc.binder.internal;
 
 import android.os.IBinder;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
@@ -128,8 +129,8 @@ public final class BinderServerTransport extends BinderTransport implements Serv
   }
 
   @Override
-  void notifyTerminatedUnlocked() {
-    BinderTransportSecurity.notifyTerminatedUnlocked(getAttributes());
+  ListenableFuture<?> notifyTerminatedUnlocked() {
+    return BinderTransportSecurity.notifyTerminatedUnlocked(getAttributes());
   }
 
   @Override
