@@ -55,7 +55,7 @@ public class HeaderMutatorTest {
   private static final Metadata.Key<String> OVERWRITE_IF_EXISTS_ABSENT_KEY =
       Metadata.Key.of("overwrite-if-exists-absent-key", Metadata.ASCII_STRING_MARSHALLER);
 
-  private final HeaderMutator headerMutator = HeaderMutator.create();
+  private final HeaderMutator headerMutator = HeaderMutator.HEADER_MUTATOR;
 
   private static final TestLogHandler logHandler = new TestLogHandler();
   private static final Logger logger = Logger.getLogger(HeaderMutator.class.getName());

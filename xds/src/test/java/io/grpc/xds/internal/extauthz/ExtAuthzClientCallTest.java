@@ -207,8 +207,7 @@ public class ExtAuthzClientCallTest {
       return null;
     }).when(authzService).check(any(CheckRequest.class), any());
 
-    HeaderMutations emptyMutations = HeaderMutations.create(
-        ImmutableList.of(), ImmutableList.of());
+    HeaderMutations emptyMutations = HeaderMutations.EMPTY_MUTATIONS;
     AuthzResponse authzResponse =
         AuthzResponse.allow(emptyMutations)
             .setResponseHeaderMutations(emptyMutations)
@@ -309,8 +308,7 @@ public class ExtAuthzClientCallTest {
         .check(any(CheckRequest.class),
             ArgumentMatchers.any());
 
-    HeaderMutations emptyMutations = HeaderMutations.create(
-        ImmutableList.of(), ImmutableList.of());
+    HeaderMutations emptyMutations = HeaderMutations.EMPTY_MUTATIONS;
     AuthzResponse authzResponse =
         AuthzResponse.allow(emptyMutations)
             .setResponseHeaderMutations(emptyMutations)
@@ -375,8 +373,7 @@ public class ExtAuthzClientCallTest {
       return null;
     }).when(authzService).check(any(CheckRequest.class), ArgumentMatchers.any());
 
-    HeaderMutations emptyMutations = HeaderMutations.create(
-        ImmutableList.of(), ImmutableList.of());
+    HeaderMutations emptyMutations = HeaderMutations.EMPTY_MUTATIONS;
     AuthzResponse authzResponse = AuthzResponse.allow(emptyMutations)
         .setResponseHeaderMutations(emptyMutations)
         .build();
@@ -411,8 +408,7 @@ public class ExtAuthzClientCallTest {
             HeaderValue.create("foo", "bar"),
             HeaderValueOption.HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD)),
         ImmutableList.of());
-    HeaderMutations responseMutations = HeaderMutations.create(
-        ImmutableList.of(), ImmutableList.of());
+    HeaderMutations responseMutations = HeaderMutations.EMPTY_MUTATIONS;
     AuthzResponse authzResponse = AuthzResponse.allow(requestMutations)
         .setResponseHeaderMutations(responseMutations)
         .build();
@@ -443,8 +439,7 @@ public class ExtAuthzClientCallTest {
       return null;
     }).when(authzService).check(any(CheckRequest.class), ArgumentMatchers.any());
 
-    HeaderMutations emptyMutations = HeaderMutations.create(
-        ImmutableList.of(), ImmutableList.of());
+    HeaderMutations emptyMutations = HeaderMutations.EMPTY_MUTATIONS;
     AuthzResponse authzResponse = AuthzResponse.deny(Status.PERMISSION_DENIED)
         .setResponseHeaderMutations(emptyMutations)
         .build();
@@ -613,8 +608,7 @@ public class ExtAuthzClientCallTest {
       return null;
     }).when(authzService).check(any(CheckRequest.class), ArgumentMatchers.any());
 
-    HeaderMutations emptyMutations = HeaderMutations.create(
-        ImmutableList.of(), ImmutableList.of());
+    HeaderMutations emptyMutations = HeaderMutations.EMPTY_MUTATIONS;
     AuthzResponse authzResponse = AuthzResponse.allow(emptyMutations)
         .setResponseHeaderMutations(emptyMutations)
         .build();

@@ -32,7 +32,7 @@ public class AuthzResponseTest {
   @Test
   public void testAllow() {
     HeaderMutations requestMutations =
-        HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
+        HeaderMutations.EMPTY_MUTATIONS;
     AuthzResponse response = AuthzResponse.allow(requestMutations).build();
     assertThat(response.decision()).isEqualTo(Decision.ALLOW);
     assertThat(response.requestHeaderMutations()).isEqualTo(requestMutations);
@@ -43,7 +43,7 @@ public class AuthzResponseTest {
   @Test
   public void testAllowWithHeaderMutations() {
     HeaderMutations requestMutations =
-        HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
+        HeaderMutations.EMPTY_MUTATIONS;
     HeaderMutations responseMutations =
         HeaderMutations.create(
             ImmutableList.of(

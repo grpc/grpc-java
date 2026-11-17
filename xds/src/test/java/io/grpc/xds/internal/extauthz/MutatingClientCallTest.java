@@ -131,7 +131,7 @@ public class MutatingClientCallTest {
   @Test
   public void emptyRequestMutations_nonEmptyResponseMutations_wrapsListener() {
     HeaderMutations emptyRequest =
-        HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
+        HeaderMutations.EMPTY_MUTATIONS;
     CapturingClientCall<Void, Void> delegate = new CapturingClientCall<>();
     MutatingClientCall<Void, Void> call = new MutatingClientCall<>(
         delegate, emptyRequest, responseMutations, mockHeaderMutator);
@@ -159,7 +159,7 @@ public class MutatingClientCallTest {
   @Test
   public void start_emptyResponseMutations_headersPassThroughUnmodified() {
     HeaderMutations emptyResponseMutations =
-        HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
+        HeaderMutations.EMPTY_MUTATIONS;
     CapturingClientCall<Void, Void> delegate = new CapturingClientCall<>();
     MutatingClientCall<Void, Void> call = new MutatingClientCall<>(
         delegate, requestMutations, emptyResponseMutations, mockHeaderMutator);
