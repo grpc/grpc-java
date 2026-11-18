@@ -273,6 +273,38 @@ public class ControlPlaneClientTest {
     assertThat(unsub.getResourceNamesList()).isEmpty();
   }
 
+  @Test
+  public void shutdown_closesStreamImmediatelyAndSkipsQueuedRecvMessage() {
+    Map<String, XdsResourceType<?>> subscribedTypes = ImmutableMap.of(CDS_TYPE_URL, cdsType);
+    when(resourceStore.getSubscribedResourceTypesWithTypeUrl()).thenReturn(subscribedTypes);
+    when(resourceStore.getSubscribedResources(serverInfo, cdsType))
+        .thenReturn(ImmutableList.of("foo-cluster"));
+
+    syncContext.execute(cpc::sendDiscoveryRequests);
+    verify(streamingCall).start(handlerCaptor.capture());
+    handlerCaptor.getValue().onReady();
+
+    DiscoveryResponse response =
+        DiscoveryResponse.newBuilder()
+            .setTypeUrl(CDS_TYPE_URL)
+            .setVersionInfo("1")
+            .setNonce("nonce-1")
+            .build();
+
+    // Simulate a response arriving while syncContext is draining a task that shuts down this CPC
+    // (e.g. XdsClientImpl.shutdownLowerPriorityCpcs when a higher-priority server responds first).
+    syncContext.execute(
+        () -> {
+          handlerCaptor.getValue().onRecvMessage(response);
+          cpc.shutdown();
+        });
+
+    verify(streamingCall).sendError(any());
+    verify(xdsTransport).shutdown();
+    verify(responseHandler, never())
+        .handleResourceResponse(any(), any(), any(), any(), any(), any(Boolean.class), any());
+  }
+
   private static DiscoveryRequest argThatTypeUrlIs(String typeUrl) {
     return argThat(req -> req != null && typeUrl.equals(req.getTypeUrl()));
   }

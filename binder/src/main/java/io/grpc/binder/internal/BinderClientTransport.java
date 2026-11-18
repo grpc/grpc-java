@@ -49,6 +49,8 @@ import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicy;
 import io.grpc.internal.ClientStream;
+import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.FailingClientStream;
@@ -251,6 +253,7 @@ public final class BinderClientTransport extends BinderTransport
           tracers);
     }
 
+    // Just allocations here. The new call is registered when it's start()ed, in startStream().
     int callId = latestCallId++;
     if (latestCallId == LAST_CALL_ID) {
       latestCallId = FIRST_CALL_ID;
@@ -260,30 +263,91 @@ public final class BinderClientTransport extends BinderTransport
     Inbound.ClientInbound inbound =
         new Inbound.ClientInbound(
             this, attributes, callId, GrpcUtil.shouldBeCountedForInUse(callOptions));
-    if (ongoingCalls.putIfAbsent(callId, inbound) != null) {
-      Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
-      shutdownInternal(failure, true);
-      return newFailingClientStream(failure, attributes, headers, tracers);
-    }
-
-    if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
-      clientTransportListener.transportInUse(true);
-    }
     Outbound.ClientOutbound outbound =
         new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
     if (method.getType().clientSendsOneMessage()) {
-      return new SingleMessageClientStream(inbound, outbound, attributes);
+      return new SingleMessageClientStream(this, inbound, outbound, attributes);
     } else {
-      return new MultiMessageClientStream(inbound, outbound, attributes);
+      return new MultiMessageClientStream(this, inbound, outbound, attributes);
     }
   }
 
+  /**
+   * Starts a stream allocated by {@link #newStream}: connects {@code inbound} to its Outbound and
+   * listener and registers it as an ongoing call.
+   *
+   * <p>If this transport has already shut down, the call isn't registered at all and {@code
+   * listener} is instead told that the stream was closed with {@link RpcProgress#MISCARRIED}, which
+   * is accurate: nothing has been sent on its behalf yet, so the server never saw it and the RPC
+   * can be transparently retried on another transport.
+   *
+   * <p>Takes the transport lock, so must not be called with any Inbound or Outbound lock held.
+   *
+   * @return true iff the call was registered, in which case the caller may proceed to use the
+   *     stream normally. False iff the stream is now closed and {@code listener} has already been
+   *     told so, in which case the caller must not call it again.
+   */
+  @CheckReturnValue
+  boolean startStream(
+      Inbound.ClientInbound inbound,
+      Outbound.ClientOutbound outbound,
+      ClientStreamListener listener) {
+    // Initializing first means that, from the moment it's visible in ongoingCalls, the Inbound has
+    // a listener to report any close to.
+    synchronized (inbound) {
+      inbound.init(outbound, listener);
+    }
+    Status failure = registerCall(inbound);
+    if (failure != null) {
+      // Nobody else can reach a never-registered Inbound so we can finish up without our own lock,
+      // like every other close. MISCARRIED promises the server never saw this call, yet a closed
+      // stream may still be written to and half-closed (the listener's state has no bearing on
+      // what a caller may do; see ClientCall). So first make sure nothing can ever go on the wire
+      // for this call, then tell the listener.
+      synchronized (outbound) {
+        outbound.close();
+      }
+      synchronized (inbound) {
+        inbound.closeMiscarried(failure);
+      }
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Registers {@code inbound} as an ongoing call, unless we've shut down.
+   *
+   * @return null iff {@code inbound} is now registered, otherwise the reason it couldn't be
+   */
+  @Nullable
+  private synchronized Status registerCall(Inbound.ClientInbound inbound) {
+    // Registering under our lock means that, relative to shutdownInternal()'s snapshot of
+    // ongoingCalls, either shutdown ran first (and the stream miscarries) or we're in the snapshot
+    // (and the stream gets closed like any other).
+    if (isShutdown()) {
+      return shutdownStatus;
+    }
+    if (ongoingCalls.putIfAbsent(inbound.callId, inbound) != null) {
+      Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
+      shutdownInternal(failure, true);
+      return failure;
+    }
+    if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
+      clientTransportListener.transportInUse(true);
+    }
+    return null;
+  }
+
   @Override
-  protected void unregisterInbound(Inbound<?, ?> inbound) {
-    if (inbound.countsForInUse() && numInUseStreams.decrementAndGet() == 0) {
+  protected boolean unregisterInbound(Inbound<?, ?> inbound) {
+    boolean removed = super.unregisterInbound(inbound);
+    // Only ever registered Inbounds counted towards in-use, and forced termination may have already
+    // unregistered everything (see notifyTerminated() for the corresponding transportInUse(false)).
+    if (removed && inbound.countsForInUse() && numInUseStreams.decrementAndGet() == 0) {
       clientTransportListener.transportInUse(false);
     }
-    super.unregisterInbound(inbound);
+    return removed;
   }
 
   @Override

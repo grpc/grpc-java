@@ -91,7 +91,7 @@ public class TomcatTransportTest extends AbstractTransportTest {
         Context ctx = tomcatServer.addContext(MYAPP, new File("build/tmp").getAbsolutePath());
         Tomcat.addServlet(ctx, "TomcatTransportTest", grpcServlet)
             .setAsyncSupported(true);
-        ctx.addServletMappingDecoded("/*", "TomcatTransportTest");
+        ctx.addServletMapping("/*", "TomcatTransportTest");
         tomcatServer.getConnector().addUpgradeProtocol(new Http2Protocol());
         // Workaround for https://github.com/grpc/grpc-java/issues/12540
         // Prevent premature OutputBuffer recycling by disabling facade recycling.
@@ -260,21 +260,6 @@ public class TomcatTransportTest extends AbstractTransportTest {
   @Ignore("assertNull(serverStatus.getCause()) isn't true")
   @Test
   public void clientCancel() {}
-
-  @Override
-  @Ignore("Tomcat does not support trailers only")
-  @Test
-  public void earlyServerClose_noServerHeaders() {}
-
-  @Override
-  @Ignore("Tomcat does not support trailers only")
-  @Test
-  public void earlyServerClose_serverFailure() {}
-
-  @Override
-  @Ignore("Tomcat does not support trailers only")
-  @Test
-  public void earlyServerClose_serverFailure_withClientCancelOnListenerClosed() {}
 
   @Override
   @Ignore("regression since bumping grpc v1.46 to v1.53")

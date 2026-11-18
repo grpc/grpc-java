@@ -126,7 +126,6 @@ cd $BASE_DIR/github/grpc-java
 ./gradlew clean
 git checkout HEAD^
 ./gradlew --stop  # use a new daemon to build the previous commit
-GRADLE_FLAGS="${GRADLE_FLAGS} -PskipCodegen=true" # skip codegen for build from previous commit since it wasn't built with --std=c++14 when making this change
 ./gradlew publishToMavenLocal $GRADLE_FLAGS
 cd examples/android/helloworld/
 ../../gradlew build $GRADLE_FLAGS
@@ -156,7 +155,7 @@ fi
 # Update the statuses with the deltas
 
 set +x
-gsutil cp gs://grpc-testing-secrets/github_credentials/oauth_token.txt ~/
+gcloud storage cp gs://grpc-testing-secrets/github_credentials/oauth_token.txt ~/
 
 desc="New DEX reference count: $(printf "%'d" "$new_dex_count") (delta: $(printf "%'d" "$dex_count_delta"))"
 echo "Setting status: $desc"

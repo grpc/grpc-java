@@ -73,7 +73,7 @@ public class TomcatInteropTest extends AbstractInteropTest {
             ctx, "io.grpc.servlet.TomcatInteropTest",
             new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter()))
         .setAsyncSupported(true);
-    ctx.addServletMappingDecoded("/*", "io.grpc.servlet.TomcatInteropTest");
+    ctx.addServletMapping("/*", "io.grpc.servlet.TomcatInteropTest");
 
     // Explicitly disable safeguards against malicious clients, as some unit tests trigger these
     Http2Protocol http2Protocol = new Http2Protocol();
@@ -112,29 +112,4 @@ public class TomcatInteropTest extends AbstractInteropTest {
   @Ignore("Tomcat is broken on client GOAWAY")
   @Test
   public void gracefulShutdown() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void specialStatusMessage() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void unimplementedMethod() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void statusCodeAndMessage() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void emptyStream() {}
-
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void timeoutOnSleepingServer() {}
 }

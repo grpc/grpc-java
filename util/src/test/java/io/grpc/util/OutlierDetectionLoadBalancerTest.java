@@ -56,6 +56,8 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.TestUtils.StandardLoadBalancerProvider;
 import io.grpc.util.OutlierDetectionLoadBalancer.EndpointTracker;
+import io.grpc.util.OutlierDetectionLoadBalancer.EndpointTrackerMap;
+import io.grpc.util.OutlierDetectionLoadBalancer.FailurePercentageOutlierEjectionAlgorithm;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig.FailurePercentageEjection;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig.SuccessRateEjection;
@@ -720,21 +722,103 @@ public class OutlierDetectionLoadBalancerTest {
         ImmutableSet.of(servers.get(1).getAddresses().get(0))));
   }
 
-  /**
-   * Three outliers, second one ejected even if ejecting it goes above the max ejection percentage,
-   * as this matches Envoy behavior. The third one should not get ejected.
-   */
   @Test
   public void successRateThreeOutliers_maxEjectionPercentage() {
-    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
-        .setMaxEjectionPercent(30)
-        .setSuccessRateEjection(
-            new SuccessRateEjection.Builder()
-                .setMinimumHosts(3)
-                .setRequestVolume(10)
-                .setStdevFactor(1).build())
-        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+    assertMaxEjectionPercentage(30, 1, true, false);
+  }
 
+  @Test
+  public void failurePercentageThreeOutliers_maxEjectionPercentage() {
+    assertMaxEjectionPercentage(30, 1, false, true);
+  }
+
+  @Test
+  public void successRateThreeOutliers_exactMaxEjectionPercentage() {
+    assertMaxEjectionPercentage(40, 2, true, false);
+  }
+
+  @Test
+  public void failurePercentageThreeOutliers_exactMaxEjectionPercentage() {
+    assertMaxEjectionPercentage(40, 2, false, true);
+  }
+
+  @Test
+  public void successRateThreeOutliers_maxEjectionPercentageBelowOneEndpoint() {
+    assertMaxEjectionPercentage(10, 0, true, false);
+  }
+
+  @Test
+  public void failurePercentageThreeOutliers_maxEjectionPercentageBelowOneEndpoint() {
+    assertMaxEjectionPercentage(10, 0, false, true);
+  }
+
+  @Test
+  public void successRateThreeOutliers_zeroMaxEjectionPercentage() {
+    assertMaxEjectionPercentage(0, 0, true, false);
+  }
+
+  @Test
+  public void failurePercentageThreeOutliers_zeroMaxEjectionPercentage() {
+    assertMaxEjectionPercentage(0, 0, false, true);
+  }
+
+  @Test
+  public void successRateAndFailurePercentageThreeOutliers_maxEjectionPercentage() {
+    assertMaxEjectionPercentage(30, 1, true, true);
+  }
+
+  @Test
+  public void failurePercentage_exactMaxEjectionPercentageWithPreviousEjections() {
+    assertFailurePercentageEjections(25, 6, 28, 7);
+  }
+
+  @Test
+  public void failurePercentage_singleEndpoint_maxEjectionPercentage() {
+    assertFailurePercentageEjections(1, 0, 100, 1);
+  }
+
+  private void assertFailurePercentageEjections(int endpointCount, int alreadyEjected,
+      int maxEjectionPercent, int expectedEjections) {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(maxEjectionPercent)
+        .setFailurePercentageEjection(new FailurePercentageEjection.Builder()
+            .setMinimumHosts(1).setRequestVolume(1).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+    EndpointTrackerMap trackers = new EndpointTrackerMap();
+    for (int i = 0; i < endpointCount; i++) {
+      EndpointTracker tracker = new EndpointTracker(config);
+      if (i < alreadyEjected) {
+        tracker.ejectSubchannels(0);
+      }
+      tracker.incrementCallCount(false);
+      trackers.put(ImmutableSet.of(new FakeSocketAddress("endpoint" + i)), tracker);
+    }
+    trackers.swapCounters();
+    new FailurePercentageOutlierEjectionAlgorithm(config, mock(ChannelLogger.class))
+        .ejectOutliers(trackers, 1);
+
+    int totalEjected = 0;
+    for (EndpointTracker tracker : trackers.values()) {
+      totalEjected += tracker.subchannelsEjected() ? 1 : 0;
+    }
+    assertThat(totalEjected).isEqualTo(expectedEjections);
+  }
+
+  private void assertMaxEjectionPercentage(int maxEjectionPercent, int expectedEjections,
+      boolean successRate, boolean failurePercentage) {
+    OutlierDetectionLoadBalancerConfig.Builder builder =
+        new OutlierDetectionLoadBalancerConfig.Builder()
+            .setMaxEjectionPercent(maxEjectionPercent)
+            .setChildConfig(newChildConfig(roundRobinLbProvider, null));
+    if (successRate) {
+      builder.setSuccessRateEjection(new SuccessRateEjection.Builder()
+          .setMinimumHosts(3).setRequestVolume(10).setStdevFactor(1).build());
+    }
+    if (failurePercentage) {
+      builder.setFailurePercentageEjection(new FailurePercentageEjection.Builder()
+          .setMinimumHosts(3).setRequestVolume(10).build());
+    }
+    OutlierDetectionLoadBalancerConfig config = builder.build();
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(
@@ -742,19 +826,15 @@ public class OutlierDetectionLoadBalancerTest {
         subchannel2, Status.DEADLINE_EXCEEDED,
         subchannel3, Status.DEADLINE_EXCEEDED), 7);
 
-    // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
 
     int totalEjected = 0;
-    for (EquivalentAddressGroup addressGroup: servers) {
-      totalEjected +=
-          loadBalancer.endpointTrackerMap.get(
-              ImmutableSet.of(addressGroup.getAddresses().get(0))).subchannelsEjected() ? 1 : 0;
+    for (EquivalentAddressGroup addressGroup : servers) {
+      totalEjected += loadBalancer.endpointTrackerMap.get(
+          ImmutableSet.copyOf(addressGroup.getAddresses())).subchannelsEjected() ? 1 : 0;
     }
-
-    assertThat(totalEjected).isEqualTo(2);
+    assertThat(totalEjected).isEqualTo(expectedEjections);
   }
-
 
   /**
    * The success rate algorithm leaves a healthy set of addresses alone.

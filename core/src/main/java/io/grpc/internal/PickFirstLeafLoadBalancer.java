@@ -471,6 +471,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       case IDLE:
         subchannelData.subchannel.requestConnection();
         subchannelData.updateState(CONNECTING);
+        if (rawConnectivityState == IDLE) {
+          rawConnectivityState = CONNECTING;
+        }
         scheduleNextConnection();
         break;
       case CONNECTING:

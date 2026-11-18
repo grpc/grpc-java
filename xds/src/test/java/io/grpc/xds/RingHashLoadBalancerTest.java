@@ -719,17 +719,17 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    initializeLbSubchannels(config, servers);
+    List<Subchannel> subchannelList = initializeLbSubchannels(config, servers);
 
     // Bring all subchannels to TRANSIENT_FAILURE.
-    for (Subchannel subchannel : subchannels.values()) {
+    for (Subchannel subchannel : subchannelList) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
           Status.UNAVAILABLE.withDescription(
               subchannel.getAddresses().getAddresses() + " unreachable")));
     }
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verifyConnection(PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2);
+    verifyConnection(2);
 
     // Picking subchannel triggers connection. RPC hash hits server0.
     PickSubchannelArgs args = getDefaultPickSubchannelArgsForServer(0);

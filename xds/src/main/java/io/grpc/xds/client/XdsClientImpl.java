@@ -574,6 +574,11 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       XdsResourceType.Args args, List<Any> resources, XdsResourceType<T> xdsResourceType,
       boolean isFirstResponse, ProcessingTracker processingTracker) {
     ControlPlaneClient controlPlaneClient = serverCpClientMap.get(args.serverInfo);
+    if (controlPlaneClient == null) {
+      logger.log(XdsLogLevel.DEBUG,
+          "Couldn't find CPC for {0}, so skipping resource update", args.serverInfo);
+      return;
+    }
 
     if (isFirstResponse) {
       shutdownLowerPriorityCpcs(controlPlaneClient);
@@ -606,8 +611,13 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscribedResources =
         resourceSubscribers.getOrDefault(xdsResourceType, Collections.emptyMap());
     for (Map.Entry<String, ResourceSubscriber<?>> entry : subscribedResources.entrySet()) {
-      String resourceName = entry.getKey();
       ResourceSubscriber<T> subscriber = (ResourceSubscriber<T>) entry.getValue();
+      // Only process resources subscribed to the control plane that sent this update.
+      if (getActiveCpc(subscriber.authority) != controlPlaneClient) {
+        continue;
+      }
+
+      String resourceName = entry.getKey();
       if (parsedResources.containsKey(resourceName)) {
         // Happy path: the resource updated successfully. Notify the watchers of the update.
         subscriber.onData(parsedResources.get(resourceName), args.versionInfo, updateTime,
@@ -641,9 +651,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       // For State of the World services, notify watchers when their watched resource is missing
       // from the ADS update. Note that we can only do this if the resource update is coming from
       // the same xDS server that the ResourceSubscriber is subscribed to.
-      if (getActiveCpc(subscriber.authority) == controlPlaneClient) {
-        subscriber.onAbsent(processingTracker, args.serverInfo);
-      }
+      subscriber.onAbsent(processingTracker, args.serverInfo);
     }
   }
 

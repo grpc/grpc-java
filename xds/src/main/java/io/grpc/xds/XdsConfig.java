@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableMap;
 import io.grpc.StatusOr;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.XdsLbEndpointCollectionResource.LbEndpointCollectionUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import java.io.Closeable;
@@ -157,14 +158,23 @@ final class XdsConfig {
      */
     static final class EndpointConfig implements ClusterChild {
       private final StatusOr<EdsUpdate> endpoint;
+      private final ImmutableMap<String, StatusOr<LbEndpointCollectionUpdate>>
+          lbEndpointCollectionResources;
 
       public EndpointConfig(StatusOr<EdsUpdate> endpoint) {
+        this(endpoint, ImmutableMap.of());
+      }
+
+      public EndpointConfig(StatusOr<EdsUpdate> endpoint,
+          Map<String, StatusOr<LbEndpointCollectionUpdate>> lbEndpointCollectionResources) {
         this.endpoint = checkNotNull(endpoint, "endpoint");
+        this.lbEndpointCollectionResources = ImmutableMap.copyOf(
+            checkNotNull(lbEndpointCollectionResources, "lbEndpointCollectionResources"));
       }
 
       @Override
       public int hashCode() {
-        return endpoint.hashCode();
+        return Objects.hash(endpoint, lbEndpointCollectionResources);
       }
 
       @Override
@@ -172,20 +182,36 @@ final class XdsConfig {
         if (!(obj instanceof EndpointConfig)) {
           return false;
         }
-        return Objects.equals(endpoint, ((EndpointConfig)obj).endpoint);
+        EndpointConfig that = (EndpointConfig) obj;
+        return Objects.equals(endpoint, that.endpoint)
+            && Objects.equals(lbEndpointCollectionResources, that.lbEndpointCollectionResources);
       }
 
       public StatusOr<EdsUpdate> getEndpoint() {
         return endpoint;
       }
 
+      /**
+       * The {@code LbEndpointCollection} resources referenced by the localities of the EDS
+       * resource, keyed by resource name (gRFC A95).
+       */
+      public ImmutableMap<String, StatusOr<LbEndpointCollectionUpdate>>
+          getLbEndpointCollectionResources() {
+        return lbEndpointCollectionResources;
+      }
+
       @Override
       public String toString() {
+        StringBuilder sb = new StringBuilder("EndpointConfig{");
         if (endpoint.hasValue()) {
-          return "EndpointConfig{endpoint=" + endpoint.getValue() + "}";
+          sb.append("endpoint=").append(endpoint.getValue());
         } else {
-          return "EndpointConfig{error=" + endpoint.getStatus() + "}";
+          sb.append("error=").append(endpoint.getStatus());
         }
+        if (!lbEndpointCollectionResources.isEmpty()) {
+          sb.append(", lbEndpointCollectionResources=").append(lbEndpointCollectionResources);
+        }
+        return sb.append("}").toString();
       }
     }
 

@@ -211,10 +211,22 @@ abstract class Outbound {
         sendInternal();
       } catch (StatusException se) {
         // Ensure we don't send anything else and rethrow.
-        onOutboundState(State.CLOSED);
+        close();
         throw se;
       }
     }
+  }
+
+  /**
+   * Moves to {@link State#CLOSED} so that nothing (more) is ever sent.
+   *
+   * <p>Anything subsequently handed to this Outbound is accepted but never sent. Besides the send
+   * failure case, this is for a stream that closed before anything was sent on its behalf, where
+   * sending anything now would be for a call the server must never hear about.
+   */
+  @GuardedBy("this")
+  final void close() {
+    onOutboundState(State.CLOSED);
   }
 
   @GuardedBy("this")

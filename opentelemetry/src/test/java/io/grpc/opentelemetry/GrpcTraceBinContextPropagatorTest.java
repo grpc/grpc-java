@@ -50,7 +50,10 @@ public class GrpcTraceBinContextPropagatorTest {
   private static final TextMapSetter<Map<String, String>> setter = Map::put;
   private static final TextMapGetter<Map<String, String>> getter =
       new TextMapGetter<Map<String, String>>() {
+        // keys() is deprecated in OpenTelemetry 1.66+ in favor of treating TextMapGetter as a
+        // functional interface.
         @Override
+        @SuppressWarnings("deprecation")
         public Iterable<String> keys(Map<String, String> carrier) {
           return carrier.keySet();
         }

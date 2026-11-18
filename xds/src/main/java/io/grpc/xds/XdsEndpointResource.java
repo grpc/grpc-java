@@ -30,6 +30,7 @@ import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LedsClusterLocalityConfig;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.internal.GrpcUtil;
@@ -37,6 +38,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
@@ -112,10 +114,16 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
     return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, false);
   }
 
+  /** Whether gRFC A95 support (LEDS list collections) is enabled. */
+  private static boolean isEnabledEndpointFallback() {
+    return BootstrapperImpl.enableEndpointFallback;
+  }
+
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
       throws ResourceInvalidException {
     Map<Integer, Set<Locality>> priorities = new HashMap<>();
     Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
+    Set<java.net.SocketAddress> endpointAddresses = new HashSet<>();
     List<Endpoints.DropOverload> dropOverloads = new ArrayList<>();
     int maxPriority = -1;
     for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpointsProto
@@ -143,6 +151,19 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       if (!priorities.get(priority).add(locality)) {
         throw new ResourceInvalidException("ClusterLoadAssignment has duplicate locality:"
             + locality + " for priority:" + priority);
+      }
+      // Localities whose endpoints are fetched separately as an LbEndpointCollection resource
+      // (gRFC A95) have no inlined endpoints to check here.
+      if (localityLbEndpoints.endpointCollection() != null) {
+        for (Endpoints.LbEndpoint endpoint
+            : localityLbEndpoints.endpointCollection().endpoints()) {
+          for (java.net.SocketAddress address : endpoint.eag().getAddresses()) {
+            if (!endpointAddresses.add(address)) {
+              throw new ResourceInvalidException(
+                  "ClusterLoadAssignment has duplicate endpoint address: " + address);
+            }
+          }
+        }
       }
     }
     if (priorities.size() != maxPriority + 1) {
@@ -210,40 +231,74 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       throw new ResourceInvalidException("Failed to parse Locality Endpoint metadata: "
           + e.getMessage(), e);
     }
+
+    // gRFC A95: if leds_cluster_locality_config is set, the lb_endpoints field is ignored and the
+    // endpoints are fetched separately as an LbEndpointCollection resource.
+    if (isEnabledEndpointFallback() && proto.hasLedsClusterLocalityConfig()) {
+      LedsClusterLocalityConfig ledsConfig = proto.getLedsClusterLocalityConfig();
+      if (!ledsConfig.getLedsConfig().hasSelf()) {
+        return StructOrError.fromError(
+            "LedsClusterLocalityConfig with leds_config not set to self");
+      }
+      String collectionName = ledsConfig.getLedsCollectionName();
+      if (collectionName.endsWith("/*")) {
+        return StructOrError.fromError(
+            "LEDS glob collections are not supported: " + collectionName);
+      }
+      return StructOrError.fromStruct(Endpoints.LocalityLbEndpoints.createForCollectionName(
+          collectionName, proto.getLoadBalancingWeight().getValue(), proto.getPriority(),
+          localityMetadata));
+    }
+
     List<Endpoints.LbEndpoint> endpoints = new ArrayList<>(proto.getLbEndpointsCount());
     for (io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint endpoint : proto.getLbEndpointsList()) {
-      // The endpoint field of each lb_endpoints must be set.
-      // Inside of it: the address field must be set.
-      if (!endpoint.hasEndpoint() || !endpoint.getEndpoint().hasAddress()) {
-        return StructOrError.fromError("LbEndpoint with no endpoint/address");
+      StructOrError<Endpoints.LbEndpoint> endpointOrError = parseLbEndpoint(endpoint);
+      if (endpointOrError.getErrorDetail() != null) {
+        return StructOrError.fromError(endpointOrError.getErrorDetail());
       }
-      ImmutableMap<String, Object> endpointMetadata;
-      try {
-        endpointMetadata = registry.parseMetadata(endpoint.getMetadata());
-      } catch (ResourceInvalidException e) {
-        throw new ResourceInvalidException("Failed to parse Endpoint metadata: "
-            + e.getMessage(), e);
-      }
-      List<java.net.SocketAddress> addresses = new ArrayList<>();
-      addresses.add(getInetSocketAddress(endpoint.getEndpoint().getAddress()));
-
-      if (isEnabledXdsDualStack()) {
-        for (Endpoint.AdditionalAddress additionalAddress
-            : endpoint.getEndpoint().getAdditionalAddressesList()) {
-          addresses.add(getInetSocketAddress(additionalAddress.getAddress()));
-        }
-      }
-      boolean isHealthy = (endpoint.getHealthStatus() == HealthStatus.HEALTHY)
-              || (endpoint.getHealthStatus() == HealthStatus.UNKNOWN);
-      endpoints.add(Endpoints.LbEndpoint.create(
-          new EquivalentAddressGroup(addresses),
-          endpoint.getLoadBalancingWeight().getValue(), isHealthy,
-          endpoint.getEndpoint().getHostname(),
-          endpointMetadata));
+      endpoints.add(endpointOrError.getStruct());
     }
     return StructOrError.fromStruct(Endpoints.LocalityLbEndpoints.create(
         endpoints, proto.getLoadBalancingWeight().getValue(),
         proto.getPriority(), localityMetadata));
+  }
+
+  /**
+   * Parses a single {@code LbEndpoint} message. Used both for endpoints inlined in an EDS resource
+   * and for the entries of an {@code LbEndpointCollection} resource (gRFC A95), which share the
+   * same validation rules.
+   */
+  static StructOrError<Endpoints.LbEndpoint> parseLbEndpoint(
+      io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint endpoint)
+      throws ResourceInvalidException {
+    // The endpoint field of each lb_endpoints must be set.
+    // Inside of it: the address field must be set.
+    if (!endpoint.hasEndpoint() || !endpoint.getEndpoint().hasAddress()) {
+      return StructOrError.fromError("LbEndpoint with no endpoint/address");
+    }
+    ImmutableMap<String, Object> endpointMetadata;
+    try {
+      endpointMetadata = MetadataRegistry.getInstance().parseMetadata(endpoint.getMetadata());
+    } catch (ResourceInvalidException e) {
+      throw new ResourceInvalidException("Failed to parse Endpoint metadata: "
+          + e.getMessage(), e);
+    }
+    List<java.net.SocketAddress> addresses = new ArrayList<>();
+    addresses.add(getInetSocketAddress(endpoint.getEndpoint().getAddress()));
+
+    if (isEnabledXdsDualStack()) {
+      for (Endpoint.AdditionalAddress additionalAddress
+          : endpoint.getEndpoint().getAdditionalAddressesList()) {
+        addresses.add(getInetSocketAddress(additionalAddress.getAddress()));
+      }
+    }
+    boolean isHealthy = (endpoint.getHealthStatus() == HealthStatus.HEALTHY)
+            || (endpoint.getHealthStatus() == HealthStatus.UNKNOWN);
+    return StructOrError.fromStruct(Endpoints.LbEndpoint.create(
+        new EquivalentAddressGroup(addresses),
+        endpoint.getLoadBalancingWeight().getValue(), isHealthy,
+        endpoint.getEndpoint().getHostname(),
+        endpointMetadata));
   }
 
   private static InetSocketAddress getInetSocketAddress(Address address)
