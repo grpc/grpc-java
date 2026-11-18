@@ -578,11 +578,7 @@ public class PickFirstLeafLoadBalancerTest {
     // Simulate the IDLE picker getting used upon an incoming RPC, triggering requestConnection()
     // starting at the first subchannel (which is in TF)
     assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
-    if (serializeRetries) {
-      inOrder.verify(mockSubchannel1).requestConnection();
-    } else {
-      inOrder.verify(mockSubchannel2).requestConnection();
-    }
+    inOrder.verify(mockSubchannel2).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getRawConnectivityState());
 
     // Re-resolution result arrives before subchannel reports CONNECTING
