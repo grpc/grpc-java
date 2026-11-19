@@ -90,7 +90,13 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * {@code true}. If {@code isReady() == false} the normal expectations apply, so there would be
    * <em>another</em> {@code onReadyHandler} callback.
    *
-   * @param onReadyHandler to call when peer is ready to receive more messages.
+   * <p>Readiness here has the same meaning as for {@link #isReady}: the observer can accept more
+   * messages without requiring excessive buffering internally. The callback does not distinguish
+   * whether the capacity became available because the peer requested more messages or because the
+   * observer had spare buffering capacity of its own.
+   *
+   * @param onReadyHandler to call when the observer becomes ready to accept more messages without
+   *     excessive buffering.
    */
   public abstract void setOnReadyHandler(Runnable onReadyHandler);
 
