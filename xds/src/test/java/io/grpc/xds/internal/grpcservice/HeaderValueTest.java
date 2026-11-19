@@ -52,8 +52,27 @@ public class HeaderValueTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void create_tooLongValue_throws() {
-    String longVal = new String(new char[16385]).replace('\0', 'v');
+    String longVal = new String(new char[32769]).replace('\0', 'v');
     HeaderValue.create("key", longVal);
+  }
+
+  @Test
+  public void create_maxLengthValue_succeeds() {
+    String maxVal = new String(new char[32768]).replace('\0', 'v');
+    HeaderValue headerValue = HeaderValue.create("key", maxVal);
+    assertThat(headerValue.value().get()).isEqualTo(maxVal);
+  }
+
+  @Test
+  public void create_maxLengthRawValue_succeeds() {
+    ByteString maxVal = ByteString.copyFrom(new byte[32768]);
+    HeaderValue headerValue = HeaderValue.create("key-bin", maxVal);
+    assertThat(headerValue.rawValue().get()).isEqualTo(maxVal);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void create_tooLongRawValue_throws() {
+    HeaderValue.create("key-bin", ByteString.copyFrom(new byte[32769]));
   }
 
 

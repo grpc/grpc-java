@@ -23,7 +23,7 @@ import java.util.Locale;
  * Utility class for validating HTTP headers.
  */
 public final class HeaderValueValidationUtils {
-  public static final int MAX_HEADER_LENGTH = 16384;
+  public static final int MAX_HEADER_LENGTH = 32768;
 
   private HeaderValueValidationUtils() {}
 
