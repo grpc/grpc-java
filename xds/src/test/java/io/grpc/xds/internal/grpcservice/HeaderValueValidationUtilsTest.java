@@ -36,8 +36,14 @@ public class HeaderValueValidationUtilsTest {
 
   @Test
   public void isDisallowed_string_tooLongKey() {
-    String longKey = new String(new char[16385]).replace('\0', 'a');
+    String longKey = new String(new char[32769]).replace('\0', 'a');
     assertThat(HeaderValueValidationUtils.isDisallowed(longKey)).isTrue();
+  }
+
+  @Test
+  public void isDisallowed_string_maxLengthKey() {
+    String maxKey = new String(new char[32768]).replace('\0', 'a');
+    assertThat(HeaderValueValidationUtils.isDisallowed(maxKey)).isFalse();
   }
 
   @Test
