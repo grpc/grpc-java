@@ -61,8 +61,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   @VisibleForTesting
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
-  private final boolean enableHappyEyeballs = !isSerializingRetries()
-      && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  private final boolean enableHappyEyeballs =
+      PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
   static boolean weightedShuffling =
       GrpcUtil.getFlag("GRPC_EXPERIMENTAL_PF_WEIGHTED_SHUFFLING", true);
   private final Helper helper;
@@ -75,18 +75,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
   private boolean notAPetiolePolicy = true; // means not under a petiole policy
-  private final BackoffPolicy.Provider bkoffPolProvider = new ExponentialBackoffPolicy.Provider();
-  private BackoffPolicy reconnectPolicy;
-  @Nullable
-  private ScheduledHandle reconnectTask = null;
-  private final boolean serializingRetries = isSerializingRetries();
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
-  }
-
-  static boolean isSerializingRetries() {
-    return GrpcUtil.getFlag("GRPC_SERIALIZE_RETRIES", false);
   }
 
   @Override
@@ -366,15 +357,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           if (addressIndex.increment()) {
             cancelScheduleTask();
             requestConnection(); // is recursive so might hit the end of the addresses
-          } else {
-            if (subchannels.size() >= addressIndex.size()) {
-              scheduleBackoff();
-            } else {
-              // We must have done a seek to the middle of the list lets start over from the
-              // beginning
-              addressIndex.reset();
-              requestConnection();
-            }
+          } else if (subchannels.size() < addressIndex.size()) {
+            // We must have done a seek to the middle of the list lets start over from the
+            // beginning
+            addressIndex.reset();
+            requestConnection();
           }
         }
 
@@ -400,39 +387,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       default:
         throw new IllegalArgumentException("Unsupported state:" + newState);
     }
-  }
-
-  /**
-   * Only called after all addresses attempted and failed (TRANSIENT_FAILURE).
-   */
-  private void scheduleBackoff() {
-    if (!serializingRetries) {
-      return;
-    }
-
-    class EndOfCurrentBackoff implements Runnable {
-      @Override
-      public void run() {
-        reconnectTask = null;
-        addressIndex.reset();
-        requestConnection();
-      }
-    }
-
-    // Just allow the previous one to trigger when ready if we're already in backoff
-    if (reconnectTask != null) {
-      return;
-    }
-
-    if (reconnectPolicy == null) {
-      reconnectPolicy = bkoffPolProvider.get();
-    }
-    long delayNanos = reconnectPolicy.nextBackoffNanos();
-    reconnectTask = helper.getSynchronizationContext().schedule(
-        new EndOfCurrentBackoff(),
-        delayNanos,
-        TimeUnit.NANOSECONDS,
-        helper.getScheduledExecutorService());
   }
 
   private void updateHealthCheckedState(SubchannelData subchannelData) {
@@ -469,11 +423,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     rawConnectivityState = SHUTDOWN;
     concludedState = SHUTDOWN;
     cancelScheduleTask();
-    if (reconnectTask != null) {
-      reconnectTask.cancel();
-      reconnectTask = null;
-    }
-    reconnectPolicy = null;
 
     for (SubchannelData subchannelData : subchannels.values()) {
       subchannelData.getSubchannel().shutdown();
@@ -487,12 +436,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   * that all other subchannels must be shutdown.
   */
   private void shutdownRemaining(SubchannelData activeSubchannelData) {
-    if (reconnectTask != null) {
-      reconnectTask.cancel();
-      reconnectTask = null;
-    }
-    reconnectPolicy = null;
-
     cancelScheduleTask();
     for (SubchannelData subchannelData : subchannels.values()) {
       if (!subchannelData.getSubchannel().equals(activeSubchannelData.subchannel)) {
@@ -513,7 +456,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN || reconnectTask != null) {
+    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
       return;
     }
 
@@ -537,20 +480,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         scheduleNextConnection();
         break;
       case TRANSIENT_FAILURE:
-        if (!serializingRetries) {
-          addressIndex.increment();
-          requestConnection();
-        } else {
-          if (!addressIndex.isValid()) {
-            scheduleBackoff();
-          } else {
-            subchannelData.subchannel.requestConnection();
-            subchannelData.updateState(CONNECTING);
-            if (rawConnectivityState == IDLE) {
-              rawConnectivityState = CONNECTING;
-            }
-          }
-        }
+        addressIndex.increment();
+        requestConnection();
         break;
       default:
         // Wait for current subchannel to change state
@@ -599,7 +530,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             .setAddresses(Lists.newArrayList(
                 new EquivalentAddressGroup(addr, attrs)))
             .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
-            .addOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY, serializingRetries)
             .build());
     if (subchannel == null) {
       log.warning("Was not able to create subchannel for " + addr);
