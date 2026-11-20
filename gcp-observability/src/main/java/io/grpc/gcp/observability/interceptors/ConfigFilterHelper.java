@@ -23,7 +23,10 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Internal;
 import io.grpc.gcp.observability.ObservabilityConfig;
 import io.grpc.gcp.observability.ObservabilityConfig.LogFilter;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Parses gRPC GcpObservability configuration filters for interceptors usage.
@@ -33,7 +36,13 @@ public class ConfigFilterHelper {
   public static final FilterParams NO_FILTER_PARAMS
       = FilterParams.create(false, 0, 0);
 
+  private static final int MAX_CACHED_METHODS = 1024;
+
   private final ObservabilityConfig config;
+  private final Map<String, FilterParams> clientFilterParamsCache =
+      Collections.synchronizedMap(new LruCache<>(MAX_CACHED_METHODS));
+  private final Map<String, FilterParams> serverFilterParamsCache =
+      Collections.synchronizedMap(new LruCache<>(MAX_CACHED_METHODS));
 
   private ConfigFilterHelper(ObservabilityConfig config) {
     this.config = config;
@@ -61,28 +70,50 @@ public class ConfigFilterHelper {
    *     (log field will be set to true) 2. values of payload limits retrieved from configuration
    */
   public FilterParams logRpcMethod(String fullMethodName, boolean client) {
-    FilterParams params = NO_FILTER_PARAMS;
-
-    int index = checkNotNull(fullMethodName, "fullMethodName").lastIndexOf('/');
-    String serviceName = fullMethodName.substring(0, index);
-
+    checkNotNull(fullMethodName, "fullMethodName");
+    Map<String, FilterParams> cache = client ? clientFilterParamsCache : serverFilterParamsCache;
+    FilterParams cached = cache.get(fullMethodName);
+    if (cached != null) {
+      return cached;
+    }
     List<LogFilter> logFilters =
         client ? config.getClientLogFilters() : config.getServerLogFilters();
+    FilterParams params = matchFilters(fullMethodName, logFilters);
+    // Recomputing the same result on concurrent cache misses is harmless.
+    cache.put(fullMethodName, params);
+    return params;
+  }
 
-    // TODO (dnvindhya): Optimize by caching results for fullMethodName.
+  private static FilterParams matchFilters(String fullMethodName, List<LogFilter> logFilters) {
+    String serviceName = fullMethodName.substring(0, fullMethodName.lastIndexOf('/'));
     for (LogFilter logFilter : logFilters) {
       if (logFilter.matchAll
           || logFilter.services.contains(serviceName)
           || logFilter.methods.contains(fullMethodName)) {
         if (logFilter.excludePattern) {
-          return params;
+          return NO_FILTER_PARAMS;
         }
         int currentHeaderBytes = logFilter.headerBytes;
         int currentMessageBytes = logFilter.messageBytes;
         return FilterParams.create(true, currentHeaderBytes, currentMessageBytes);
       }
     }
-    return params;
+    return NO_FILTER_PARAMS;
+  }
+
+  @SuppressWarnings("serial")
+  private static final class LruCache<T> extends LinkedHashMap<String, T> {
+    private final int maxSize;
+
+    LruCache(int maxSize) {
+      super(16, 0.75f, true);
+      this.maxSize = maxSize;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<String, T> eldest) {
+      return size() > maxSize;
+    }
   }
 
   /**
