@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import io.grpc.Internal;
 import io.grpc.gcp.observability.ObservabilityConfig;
 import io.grpc.gcp.observability.ObservabilityConfig.LogFilter;
@@ -33,7 +35,13 @@ public class ConfigFilterHelper {
   public static final FilterParams NO_FILTER_PARAMS
       = FilterParams.create(false, 0, 0);
 
+  private static final int MAX_CACHED_METHODS = 1024;
+
   private final ObservabilityConfig config;
+  private final Cache<String, FilterParams> clientFilterParamsCache =
+      CacheBuilder.newBuilder().maximumSize(MAX_CACHED_METHODS).build();
+  private final Cache<String, FilterParams> serverFilterParamsCache =
+      CacheBuilder.newBuilder().maximumSize(MAX_CACHED_METHODS).build();
 
   private ConfigFilterHelper(ObservabilityConfig config) {
     this.config = config;
@@ -61,28 +69,34 @@ public class ConfigFilterHelper {
    *     (log field will be set to true) 2. values of payload limits retrieved from configuration
    */
   public FilterParams logRpcMethod(String fullMethodName, boolean client) {
-    FilterParams params = NO_FILTER_PARAMS;
-
-    int index = checkNotNull(fullMethodName, "fullMethodName").lastIndexOf('/');
-    String serviceName = fullMethodName.substring(0, index);
-
+    checkNotNull(fullMethodName, "fullMethodName");
+    Cache<String, FilterParams> cache = client ? clientFilterParamsCache : serverFilterParamsCache;
+    FilterParams cached = cache.getIfPresent(fullMethodName);
+    if (cached != null) {
+      return cached;
+    }
     List<LogFilter> logFilters =
         client ? config.getClientLogFilters() : config.getServerLogFilters();
+    FilterParams params = matchFilters(fullMethodName, logFilters);
+    cache.put(fullMethodName, params);
+    return params;
+  }
 
-    // TODO (dnvindhya): Optimize by caching results for fullMethodName.
+  private static FilterParams matchFilters(String fullMethodName, List<LogFilter> logFilters) {
+    String serviceName = fullMethodName.substring(0, fullMethodName.lastIndexOf('/'));
     for (LogFilter logFilter : logFilters) {
       if (logFilter.matchAll
           || logFilter.services.contains(serviceName)
           || logFilter.methods.contains(fullMethodName)) {
         if (logFilter.excludePattern) {
-          return params;
+          return NO_FILTER_PARAMS;
         }
         int currentHeaderBytes = logFilter.headerBytes;
         int currentMessageBytes = logFilter.messageBytes;
         return FilterParams.create(true, currentHeaderBytes, currentMessageBytes);
       }
     }
-    return params;
+    return NO_FILTER_PARAMS;
   }
 
   /**

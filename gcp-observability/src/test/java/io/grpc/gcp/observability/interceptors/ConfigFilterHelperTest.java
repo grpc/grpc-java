@@ -146,4 +146,13 @@ public class ConfigFilterHelperTest {
         = configFilterHelper.logRpcMethod("service4/method3", false);
     assertThat(serverResultParams).isEqualTo(excludeParams);
   }
+
+  @Test
+  public void reusesFilterParamsForSameMethod() {
+    when(mockConfig.getClientLogFilters()).thenReturn(configLogFilters);
+
+    String method = "service1/Method2";
+    FilterParams filterParams = configFilterHelper.logRpcMethod(method, true);
+    assertThat(configFilterHelper.logRpcMethod(method, true)).isSameInstanceAs(filterParams);
+  }
 }
