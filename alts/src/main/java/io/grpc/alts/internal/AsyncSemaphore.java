@@ -47,6 +47,16 @@ final class AsyncSemaphore {
     }
   }
 
+  /** Cancel a queued acquire unless release() has already claimed it for delivery. */
+  public void cancelAcquire(ChannelFuture acquire) {
+    synchronized (lock) {
+      if (!queue.remove(acquire)) {
+        return;
+      }
+    }
+    acquire.cancel(false);
+  }
+
   public void release() {
     ChannelPromise next;
     synchronized (lock) {

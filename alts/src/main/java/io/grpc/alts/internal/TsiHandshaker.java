@@ -16,6 +16,7 @@
 
 package io.grpc.alts.internal;
 
+import io.grpc.Deadline;
 import io.netty.buffer.ByteBufAllocator;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -51,6 +52,9 @@ import java.security.GeneralSecurityException;
  * <p>Implementations of this object must be thread compatible.
  */
 public interface TsiHandshaker {
+  /** Bounds any RPCs made by the handshaker by the transport's handshake deadline. */
+  default void setDeadline(Deadline deadline) {}
+
   /**
    * Gets bytes that need to be sent to the peer.
    *
