@@ -341,6 +341,18 @@ public final class BinlogHelperTest {
     assertNotNull(makeLog("-p.s/blacklisted,p.s/*", "p.s/allowed"));
   }
 
+  @Test
+  public void configBinLog_blacklist_wildcardOrOptionsRejected() {
+    for (String configStr : new String[] {"*,-p.s/*", "-p.s/*", "-*", "-p.s/m{h}"}) {
+      try {
+        new FactoryImpl(sink, configStr);
+        fail("Expected IllegalArgumentException for " + configStr);
+      } catch (IllegalArgumentException expected) {
+        assertThat(expected).hasMessageThat().startsWith("Illegal log config pattern");
+      }
+    }
+  }
+
   private void assertDuplicatelPatternDetected(String factoryConfigStr) {
     try {
       new BinlogHelper.FactoryImpl(sink, factoryConfigStr);

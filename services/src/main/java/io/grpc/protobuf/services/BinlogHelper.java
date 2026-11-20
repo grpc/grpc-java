@@ -635,6 +635,11 @@ final class BinlogHelper {
           if (methodOrSvc.isEmpty()) {
             throw new IllegalArgumentException("Illegal log config pattern: " + configuration);
           }
+          if (methodOrSvc.startsWith("-")
+              && (binlogOptionStr != null || methodOrSvc.contains("*"))) {
+            // An exclusion names exactly one method; '*' and '{...}' are not allowed
+            throw new IllegalArgumentException("Illegal log config pattern: " + configuration);
+          }
           if (methodOrSvc.equals("*")) {
             // parse config for "*"
             checkState(
