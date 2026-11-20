@@ -303,6 +303,12 @@ final class FilterChainMatchingProtocolNegotiators {
         return filtered;
       }
 
+      // Returned when no CidrRange matches the address.
+      private static final int NO_MATCHING_PREFIX = -2;
+      // Returned when there are no CidrRanges. This matches any address, but is less specific than
+      // a matching CidrRange, including a wildcard (0.0.0.0/0 or ::/0) of the same address family.
+      private static final int UNSPECIFIED_PREFIX = -1;
+
       private static int getMatchingPrefixLength(
               FilterChainMatch filterChainMatch, InetAddress address, boolean forDestination) {
         boolean isIPv6 = address instanceof Inet6Address;
@@ -311,10 +317,10 @@ final class FilterChainMatchingProtocolNegotiators {
                         ? filterChainMatch.prefixRanges()
                         : filterChainMatch.sourcePrefixRanges();
         int matchingPrefixLength;
-        if (cidrRanges.isEmpty()) { // if there is no CidrRange assume 0-length match
-          matchingPrefixLength = 0;
+        if (cidrRanges.isEmpty()) {
+          matchingPrefixLength = UNSPECIFIED_PREFIX;
         } else {
-          matchingPrefixLength = -1;
+          matchingPrefixLength = NO_MATCHING_PREFIX;
           for (CidrRange cidrRange : cidrRanges) {
             InetAddress cidrAddr = cidrRange.addressPrefix();
             boolean cidrIsIpv6 = cidrAddr instanceof Inet6Address;
@@ -335,12 +341,12 @@ final class FilterChainMatchingProtocolNegotiators {
               Collection<FilterChain> filterChains, InetAddress address, boolean forDestination) {
         // current list of top ones
         ArrayList<FilterChain> topOnes = new ArrayList<>(filterChains.size());
-        int topMatchingPrefixLen = -1;
+        int topMatchingPrefixLen = NO_MATCHING_PREFIX;
         for (FilterChain filterChain : filterChains) {
           int currentMatchingPrefixLen = getMatchingPrefixLength(
                   filterChain.filterChainMatch(), address, forDestination);
 
-          if (currentMatchingPrefixLen >= 0) {
+          if (currentMatchingPrefixLen != NO_MATCHING_PREFIX) {
             if (currentMatchingPrefixLen < topMatchingPrefixLen) {
               continue;
             }
