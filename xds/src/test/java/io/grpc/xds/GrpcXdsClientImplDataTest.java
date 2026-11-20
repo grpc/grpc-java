@@ -1086,6 +1086,39 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  public void processClusterLoadAssignment_localityWeightSumExceedsUint32Max() {
+    // Sum of locality weights at priority 1 is 2147483647 + 2147483647 + 2 = 4294967296.
+    io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment assignment =
+        io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.newBuilder()
+            .setClusterName("cluster-foo")
+            .addEndpoints(buildLocalityLbEndpoints("region1", "172.14.14.1", 1, 0))
+            .addEndpoints(buildLocalityLbEndpoints("region2", "172.14.14.2", Integer.MAX_VALUE, 1))
+            .addEndpoints(buildLocalityLbEndpoints("region3", "172.14.14.3", Integer.MAX_VALUE, 1))
+            .addEndpoints(buildLocalityLbEndpoints("region4", "172.14.14.4", 2, 1))
+            .build();
+    ResourceInvalidException ex = assertThrows(
+        ResourceInvalidException.class,
+        () -> XdsEndpointResource.getInstance().doParse(getXdsResourceTypeArgs(true), assignment));
+    assertThat(ex).hasMessageThat().isEqualTo(
+        "Sum of weights of localities at the same priority 1 exceeded maximal value");
+  }
+
+  private static io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints
+      buildLocalityLbEndpoints(String region, String address, int localityWeight, int priority) {
+    return io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+        .setLocality(Locality.newBuilder().setRegion(region))
+        .setLoadBalancingWeight(UInt32Value.of(localityWeight))
+        .setPriority(priority)
+        .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+            .setEndpoint(Endpoint.newBuilder()
+                .setAddress(Address.newBuilder()
+                    .setSocketAddress(
+                        SocketAddress.newBuilder().setAddress(address).setPortValue(8888))))
+            .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY))
+        .build();
+  }
+
+  @Test
   public void parseLocalityLbEndpoints_onlyPermitIp() {
     io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
         io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
