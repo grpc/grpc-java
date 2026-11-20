@@ -170,6 +170,7 @@ public final class SpiffeUtil {
     Map<String, List<X509Certificate>> trustBundleMap = new HashMap<>();
     Map<String, Long> sequenceNumbers = new HashMap<>();
     for (String trustDomainName : trustDomainsNode.keySet()) {
+      validateTrustDomain(trustDomainName);
       Map<String, ?> domainNode = JsonUtil.getObject(trustDomainsNode, trustDomainName);
       if (domainNode.size() == 0) {
         trustBundleMap.put(trustDomainName, Collections.emptyList());
