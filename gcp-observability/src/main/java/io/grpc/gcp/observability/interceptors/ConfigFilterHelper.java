@@ -20,12 +20,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 import io.grpc.Internal;
 import io.grpc.gcp.observability.ObservabilityConfig;
 import io.grpc.gcp.observability.ObservabilityConfig.LogFilter;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Parses gRPC GcpObservability configuration filters for interceptors usage.
@@ -38,10 +39,10 @@ public class ConfigFilterHelper {
   private static final int MAX_CACHED_METHODS = 1024;
 
   private final ObservabilityConfig config;
-  private final Cache<String, FilterParams> clientFilterParamsCache =
-      CacheBuilder.newBuilder().maximumSize(MAX_CACHED_METHODS).build();
-  private final Cache<String, FilterParams> serverFilterParamsCache =
-      CacheBuilder.newBuilder().maximumSize(MAX_CACHED_METHODS).build();
+  private final Map<String, FilterParams> clientFilterParamsCache =
+      Collections.synchronizedMap(new LruCache<>(MAX_CACHED_METHODS));
+  private final Map<String, FilterParams> serverFilterParamsCache =
+      Collections.synchronizedMap(new LruCache<>(MAX_CACHED_METHODS));
 
   private ConfigFilterHelper(ObservabilityConfig config) {
     this.config = config;
@@ -70,14 +71,15 @@ public class ConfigFilterHelper {
    */
   public FilterParams logRpcMethod(String fullMethodName, boolean client) {
     checkNotNull(fullMethodName, "fullMethodName");
-    Cache<String, FilterParams> cache = client ? clientFilterParamsCache : serverFilterParamsCache;
-    FilterParams cached = cache.getIfPresent(fullMethodName);
+    Map<String, FilterParams> cache = client ? clientFilterParamsCache : serverFilterParamsCache;
+    FilterParams cached = cache.get(fullMethodName);
     if (cached != null) {
       return cached;
     }
     List<LogFilter> logFilters =
         client ? config.getClientLogFilters() : config.getServerLogFilters();
     FilterParams params = matchFilters(fullMethodName, logFilters);
+    // Recomputing the same result on concurrent cache misses is harmless.
     cache.put(fullMethodName, params);
     return params;
   }
@@ -97,6 +99,21 @@ public class ConfigFilterHelper {
       }
     }
     return NO_FILTER_PARAMS;
+  }
+
+  @SuppressWarnings("serial")
+  private static final class LruCache<T> extends LinkedHashMap<String, T> {
+    private final int maxSize;
+
+    LruCache(int maxSize) {
+      super(16, 0.75f, true);
+      this.maxSize = maxSize;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<String, T> eldest) {
+      return size() > maxSize;
+    }
   }
 
   /**
