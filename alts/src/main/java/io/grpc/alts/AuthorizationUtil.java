@@ -29,8 +29,8 @@ public final class AuthorizationUtil {
 
   /**
    * Given a server call, performs client authorization check, i.e., checks if the client service
-   * account matches one of the expected service accounts. It returns OK if client is authorized and
-   * an error otherwise.
+   * account matches one of the expected service accounts, ignoring case. It returns OK if client
+   * is authorized and an error otherwise.
    */
   public static Status clientAuthorizationCheck(
       ServerCall<?, ?> call, Collection<String> expectedServiceAccounts) {
@@ -39,10 +39,13 @@ public final class AuthorizationUtil {
     if (altsContext == null) {
       return Status.PERMISSION_DENIED.withDescription("Peer ALTS AuthContext not found");
     }
-    if (expectedServiceAccounts.contains(altsContext.getPeerServiceAccount())) {
-      return Status.OK;
+    String peerServiceAccount = altsContext.getPeerServiceAccount();
+    for (String serviceAccount : expectedServiceAccounts) {
+      if (peerServiceAccount.equalsIgnoreCase(serviceAccount)) {
+        return Status.OK;
+      }
     }
     return Status.PERMISSION_DENIED.withDescription(
-        "Client " + altsContext.getPeerServiceAccount() + " is not authorized");
+        "Client " + peerServiceAccount + " is not authorized");
   }
 }
