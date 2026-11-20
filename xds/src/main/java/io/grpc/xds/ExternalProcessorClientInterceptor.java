@@ -586,7 +586,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               }
             }
 
-            if (response.getRequestDrain()) {
+            @SuppressWarnings("deprecation") // Replaced by request_drain_requests/responses.
+            boolean requestDrain = response.getRequestDrain();
+            if (requestDrain) {
               extProcStreamState.set(ExtProcStreamState.DRAINING);
               halfCloseExtProcStream();
               activateCall();

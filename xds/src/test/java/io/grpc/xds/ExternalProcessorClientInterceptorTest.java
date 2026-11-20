@@ -112,6 +112,7 @@ import org.mockito.Mockito;
  * Unit tests for {@link ExternalProcessorFilter}.
  */
 @RunWith(JUnit4.class)
+@SuppressWarnings("deprecation") // request_drain, replaced by request_drain_requests/responses.
 public class ExternalProcessorClientInterceptorTest {
   private static final String INSECURE_CREDENTIALS_TYPE_URL =
       "type.googleapis.com/envoy.extensions.grpc_service."

@@ -17,7 +17,7 @@
 
 set -e
 # import VERSION from the google internal go/envoy-import-status
-VERSION=ddf9f6788e3b5c103c496784f04890acbc6628e5
+VERSION=c282cb6c80e173a79cc0e989adae694f7556f7e9
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"
@@ -93,6 +93,7 @@ envoy/extensions/grpc_service/channel_credentials/insecure/v3/insecure_credentia
 envoy/extensions/grpc_service/channel_credentials/local/v3/local_credentials.proto
 envoy/extensions/grpc_service/channel_credentials/tls/v3/tls_credentials.proto
 envoy/extensions/grpc_service/channel_credentials/xds/v3/xds_credentials.proto
+envoy/extensions/load_balancing_policies/autosharding/v3/autosharding.proto
 envoy/extensions/load_balancing_policies/client_side_weighted_round_robin/v3/client_side_weighted_round_robin.proto
 envoy/extensions/load_balancing_policies/common/v3/common.proto
 envoy/extensions/load_balancing_policies/least_request/v3/least_request.proto
