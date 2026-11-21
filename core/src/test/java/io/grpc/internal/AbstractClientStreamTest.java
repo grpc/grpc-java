@@ -39,6 +39,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Codec;
 import io.grpc.Deadline;
 import io.grpc.Grpc;
@@ -153,6 +154,139 @@ public class AbstractClientStreamTest {
     stream.cancel(Status.DEADLINE_EXCEEDED);
 
     verify(mockListener).closed(any(Status.class), same(PROCESSED), any(Metadata.class));
+  }
+
+  @Test
+  public void cancel_notifiesStatsTraceContext() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {
+      @Override
+      public void cancel(Status errorStatus) {
+        state.transportReportStatus(errorStatus, true, new Metadata());
+      }
+    }, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    Status cancelStatus = Status.CANCELLED.withDescription("Cancelled by test");
+    stream.cancel(cancelStatus);
+
+    verify(mockTracer).cancelled(cancelStatus);
+  }
+
+  @Test
+  public void transportReportStatus_okFirst_lateCancellationDoesNotNotifyTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {
+      @Override
+      public void cancel(Status errorStatus) {
+        state.transportReportStatus(errorStatus, true, new Metadata());
+      }
+    }, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Report Status.OK first
+    state.transportReportStatus(Status.OK, false, new Metadata());
+
+    // Subsequent late cancellation
+    verify(mockTracer, never()).cancelled(any(Status.class));
+  }
+
+  @Test
+  public void transportReportStatus_stopDeliveryFalse_doesNotNotifyTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {},
+        customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Server-initiated CANCELLED (stopDelivery = false)
+    state.transportReportStatus(Status.CANCELLED, false, new Metadata());
+
+    verify(mockTracer, never()).cancelled(any(Status.class));
+    verify(mockTracer).streamClosed(Status.CANCELLED);
+  }
+
+  @Test
+  public void transportReportStatus_stopDeliveryTrue_notifiesTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {},
+        customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Client/Transport-initiated cancellation (stopDelivery = true)
+    Status cancelStatus = Status.CANCELLED.withDescription("Client cancelled");
+    state.transportReportStatus(cancelStatus, true, new Metadata());
+
+    verify(mockTracer).cancelled(cancelStatus);
+    verify(mockTracer).streamClosed(cancelStatus);
+  }
+
+  @Test
+  public void transportReportStatus_stopDeliveryFalse_deadlineExceeded_noTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(
+        allocator, state, new BaseSink() {}, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Server-initiated DEADLINE_EXCEEDED (stopDelivery = false)
+    Status status = Status.DEADLINE_EXCEEDED.withDescription("Server deadline exceeded");
+    state.transportReportStatus(status, false, new Metadata());
+
+    verify(mockTracer, never()).cancelled(any(Status.class));
+    verify(mockTracer).streamClosed(status);
+  }
+
+  @Test
+  public void transportReportStatus_stopDeliveryTrue_deadlineExceeded_notifiesTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(
+        allocator, state, new BaseSink() {}, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Client/Transport-initiated deadline exceeded (stopDelivery = true)
+    Status status = Status.DEADLINE_EXCEEDED.withDescription("Client deadline exceeded");
+    state.transportReportStatus(status, true, new Metadata());
+
+    verify(mockTracer).cancelled(status);
+    verify(mockTracer).streamClosed(status);
+  }
+
+  @Test
+  public void closeListener_deferredDeframerClose_stopDeliveryFalse_delaysCloseListener() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(
+        allocator, state, new BaseSink() {}, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Send partial message into deframer
+    byte[] data = new byte[] {0, 0, 0, 0, 2, 1}; // 2-byte frame, only 1 byte delivered
+    state.deframe(ReadableBuffers.wrap(data));
+
+    Status statusFalse = Status.CANCELLED.withDescription("deferred stopDelivery false");
+    state.transportReportStatus(statusFalse, false, new Metadata());
+
+    // Listener is not closed yet because deframer is mid-frame and waiting for complete frame
+    verify(mockTracer, never()).cancelled(any(Status.class));
+    verify(mockTracer, never()).streamClosed(any(Status.class));
+
+    // Request message and provide remaining byte of frame to complete deframer processing
+    stream.request(1);
+    state.deframe(ReadableBuffers.wrap(new byte[] {2}));
+    verify(mockTracer, never()).cancelled(any(Status.class));
+    verify(mockTracer).streamClosed(any(Status.class));
   }
 
   @Test
