@@ -61,10 +61,11 @@ gcloud firebase test android run \
   --type instrumentation \
   --app android-interop-testing/build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
   --test android/build/outputs/apk/androidTest/debug/grpc-android-debug-androidTest.apk \
+  --device model=MediumPhone.arm,version=33,locale=en,orientation=portrait \
   --device model=MediumPhone.arm,version=30,locale=en,orientation=portrait \
   --device model=MediumPhone.arm,version=29,locale=en,orientation=portrait \
   --device model=MediumPhone.arm,version=28,locale=en,orientation=portrait \
   --device model=MediumPhone.arm,version=27,locale=en,orientation=portrait \
   --device model=MediumPhone.arm,version=26,locale=en,orientation=portrait \
   --device model=Nexus6P,version=25,locale=en,orientation=portrait \
-  --device model=Nexus6P,version=24,locale=en,orientation=portrait \
+  --device model=Nexus6P,version=24,locale=en,orientation=portrait
