@@ -16,6 +16,7 @@
 
 package io.grpc.gcp.observability.interceptors;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
@@ -23,10 +24,12 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Internal;
 import io.grpc.gcp.observability.ObservabilityConfig;
 import io.grpc.gcp.observability.ObservabilityConfig.LogFilter;
-import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.ArrayDeque;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.function.Function;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Parses gRPC GcpObservability configuration filters for interceptors usage.
@@ -38,14 +41,14 @@ public class ConfigFilterHelper {
 
   private static final int MAX_CACHED_METHODS = 1024;
 
-  private final ObservabilityConfig config;
-  private final Map<String, FilterParams> clientFilterParamsCache =
-      Collections.synchronizedMap(new LruCache<>(MAX_CACHED_METHODS));
-  private final Map<String, FilterParams> serverFilterParamsCache =
-      Collections.synchronizedMap(new LruCache<>(MAX_CACHED_METHODS));
+  private final FifoCache<String, FilterParams> clientFilterParamsCache;
+  private final FifoCache<String, FilterParams> serverFilterParamsCache;
 
   private ConfigFilterHelper(ObservabilityConfig config) {
-    this.config = config;
+    clientFilterParamsCache = new FifoCache<>(MAX_CACHED_METHODS,
+        method -> matchFilters(method, config.getClientLogFilters()));
+    serverFilterParamsCache = new FifoCache<>(MAX_CACHED_METHODS,
+        method -> matchFilters(method, config.getServerLogFilters()));
   }
 
   /**
@@ -71,17 +74,9 @@ public class ConfigFilterHelper {
    */
   public FilterParams logRpcMethod(String fullMethodName, boolean client) {
     checkNotNull(fullMethodName, "fullMethodName");
-    Map<String, FilterParams> cache = client ? clientFilterParamsCache : serverFilterParamsCache;
-    FilterParams cached = cache.get(fullMethodName);
-    if (cached != null) {
-      return cached;
-    }
-    List<LogFilter> logFilters =
-        client ? config.getClientLogFilters() : config.getServerLogFilters();
-    FilterParams params = matchFilters(fullMethodName, logFilters);
-    // Recomputing the same result on concurrent cache misses is harmless.
-    cache.put(fullMethodName, params);
-    return params;
+    FifoCache<String, FilterParams> cache =
+        client ? clientFilterParamsCache : serverFilterParamsCache;
+    return cache.get(fullMethodName);
   }
 
   private static FilterParams matchFilters(String fullMethodName, List<LogFilter> logFilters) {
@@ -101,18 +96,37 @@ public class ConfigFilterHelper {
     return NO_FILTER_PARAMS;
   }
 
-  @SuppressWarnings("serial")
-  private static final class LruCache<T> extends LinkedHashMap<String, T> {
+  private static final class FifoCache<K, V> {
     private final int maxSize;
+    private final Function<? super K, ? extends V> loader;
+    private final ConcurrentMap<K, V> entries = new ConcurrentHashMap<>();
+    @GuardedBy("this")
+    private final ArrayDeque<K> insertionOrder = new ArrayDeque<>();
 
-    LruCache(int maxSize) {
-      super(16, 0.75f, true);
+    FifoCache(int maxSize, Function<? super K, ? extends V> loader) {
+      checkArgument(maxSize > 0, "maxSize must be positive");
       this.maxSize = maxSize;
+      this.loader = checkNotNull(loader, "loader");
     }
 
-    @Override
-    protected boolean removeEldestEntry(Map.Entry<String, T> eldest) {
-      return size() > maxSize;
+    V get(K key) {
+      V value = entries.get(key);
+      return value != null ? value : load(key);
+    }
+
+    // Keep eviction and insertion together while allowing cache hits to proceed concurrently.
+    private synchronized V load(K key) {
+      V value = entries.get(key);
+      if (value != null) {
+        return value;
+      }
+      value = checkNotNull(loader.apply(key), "loader returned null");
+      if (insertionOrder.size() == maxSize) {
+        entries.remove(insertionOrder.removeFirst());
+      }
+      entries.put(key, value);
+      insertionOrder.addLast(key);
+      return value;
     }
   }
 
