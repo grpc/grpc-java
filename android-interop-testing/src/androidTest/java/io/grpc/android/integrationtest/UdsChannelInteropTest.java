@@ -28,7 +28,6 @@ import io.grpc.Server;
 import io.grpc.android.UdsChannelBuilder;
 import io.grpc.testing.integration.TestServiceImpl;
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -114,16 +113,11 @@ public class UdsChannelInteropTest {
   }
 
   private void runTest(String testCase) throws Exception {
-    String result = null;
-    try {
-      result = testExecutor.submit(new TestCallable(
-              UdsChannelBuilder.forPath(UDS_PATH, Namespace.ABSTRACT)
-                      .maxInboundMessageSize(16 * 1024 * 1024)
-                      .build(),
-              testCase)).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-      assertEquals(testCase + " failed", TestCallable.SUCCESS_MESSAGE, result);
-    } catch (ExecutionException | InterruptedException e) {
-      result = e.getMessage();
-    }
+    String result = testExecutor.submit(new TestCallable(
+            UdsChannelBuilder.forPath(UDS_PATH, Namespace.ABSTRACT)
+                    .maxInboundMessageSize(16 * 1024 * 1024)
+                    .build(),
+            testCase)).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    assertEquals(testCase + " failed", TestCallable.SUCCESS_MESSAGE, result);
   }
 }
