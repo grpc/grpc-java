@@ -22,6 +22,7 @@ import static org.junit.Assert.assertThrows;
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
 import android.net.LocalSocketAddress.Namespace;
+import com.google.common.testing.EqualsTester;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import org.junit.Test;
@@ -52,15 +53,38 @@ public final class UdsSocketTest {
   @Test
   public void acceptedSocket_getLocalSocketAddress_returnsListenAddress() {
     UdsSocketAddress listenAddress = UdsSocketAddress.forAbstractName("uds-socket-test");
-    UdsSocket.Accepted accepted = new UdsSocket.Accepted(new LocalSocket(), listenAddress);
+    UdsSocket.Accepted accepted =
+        new UdsSocket.Accepted(
+            new LocalSocket(), listenAddress, new UdsPeerSocketAddress(10187, 10188, 4242));
 
     assertThat(accepted.getLocalSocketAddress()).isEqualTo(listenAddress);
   }
 
   @Test
+  public void acceptedSocket_getRemoteSocketAddress_returnsPeerAddress() {
+    UdsPeerSocketAddress peerAddress = new UdsPeerSocketAddress(10187, 10188, 4242);
+    UdsSocket.Accepted accepted =
+        new UdsSocket.Accepted(
+            new LocalSocket(), UdsSocketAddress.forAbstractName("test"), peerAddress);
+
+    assertThat(accepted.getRemoteSocketAddress()).isEqualTo(peerAddress);
+    assertThat(accepted.getRemoteSocketAddress().toString())
+        .isEqualTo("unix-peer:uid=10187,gid=10188,pid=4242");
+    new EqualsTester()
+        .addEqualityGroup(peerAddress, new UdsPeerSocketAddress(10187, 10188, 4242))
+        .addEqualityGroup(new UdsPeerSocketAddress(10189, 10188, 4242))
+        .addEqualityGroup(new UdsPeerSocketAddress(10187, 10189, 4242))
+        .addEqualityGroup(new UdsPeerSocketAddress(10187, 10188, 4243))
+        .testEquals();
+  }
+
+  @Test
   public void acceptedSocket_connect_throwsSocketException() {
     UdsSocket.Accepted accepted =
-        new UdsSocket.Accepted(new LocalSocket(), UdsSocketAddress.forAbstractName("test"));
+        new UdsSocket.Accepted(
+            new LocalSocket(),
+            UdsSocketAddress.forAbstractName("test"),
+            new UdsPeerSocketAddress(10187, 10188, 4242));
 
     assertThrows(SocketException.class, () -> accepted.connect(new InetSocketAddress(0)));
     assertThrows(SocketException.class, () -> accepted.connect(new InetSocketAddress(0), 1000));

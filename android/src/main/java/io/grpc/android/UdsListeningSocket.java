@@ -18,7 +18,9 @@ package io.grpc.android;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import android.net.Credentials;
 import android.net.LocalServerSocket;
+import android.net.LocalSocket;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -29,8 +31,9 @@ import java.io.IOException;
 /**
  * Bound, listening Unix domain socket backed by {@link LocalServerSocket}.
  *
- * <p>Separates the bound socket's kernel lifecycle ({@link #accept()} and wake-on-{@link #close()})
- * from {@link UdsServerSocket}'s unbound-to-closed {@link java.net.ServerSocket} state machine.
+ * <p>Separates the bound socket's kernel lifecycle ({@link #accept()}, {@code SO_PEERCRED}
+ * extraction, and wake-on-{@link #close()}) from {@link UdsServerSocket}'s unbound-to-closed {@link
+ * java.net.ServerSocket} state machine.
  */
 abstract class UdsListeningSocket implements Closeable {
   private final UdsSocketAddress address;
@@ -48,7 +51,22 @@ abstract class UdsListeningSocket implements Closeable {
 
   /** Blocks until a client connects and returns the accepted {@link UdsSocket.Accepted}. */
   final UdsSocket.Accepted accept() throws IOException {
-    return new UdsSocket.Accepted(serverSocket.accept(), address);
+    LocalSocket accepted = serverSocket.accept();
+    Credentials creds;
+    try {
+      creds = accepted.getPeerCredentials();
+    } catch (IOException e) {
+      try {
+        accepted.close();
+      } catch (IOException suppressed) {
+        e.addSuppressed(suppressed);
+      }
+      throw e;
+    }
+    return new UdsSocket.Accepted(
+        accepted,
+        address,
+        new UdsPeerSocketAddress(creds.getUid(), creds.getGid(), creds.getPid()));
   }
 
   /**

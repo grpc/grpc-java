@@ -90,6 +90,7 @@ import javax.net.ServerSocketFactory;
  * <p>An abstract name needs no cleanup, and {@code Server.start()} fails if the name is already in
  * use.
  */
+// TODO(jdcormie): Expose LocalSocket.getPeerCredentials() for caller authorization.
 @ExperimentalApi("A stopgap. Not intended to be stabilized")
 public final class UdsServerBuilder {
   @Nullable

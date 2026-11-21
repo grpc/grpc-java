@@ -69,10 +69,15 @@ abstract class UdsSocket extends Socket {
    */
   static final class Accepted extends UdsSocket {
     private final UdsSocketAddress localAddress;
+    private final UdsPeerSocketAddress remoteAddress;
 
-    Accepted(LocalSocket connectedLocalSocket, UdsSocketAddress localAddress) {
+    Accepted(
+        LocalSocket connectedLocalSocket,
+        UdsSocketAddress localAddress,
+        UdsPeerSocketAddress peerAddress) {
       super(connectedLocalSocket);
       this.localAddress = checkNotNull(localAddress, "localAddress");
+      this.remoteAddress = checkNotNull(peerAddress, "peerAddress");
     }
 
     @Override
@@ -89,6 +94,11 @@ abstract class UdsSocket extends Socket {
     @Override
     public SocketAddress getLocalSocketAddress() {
       return localAddress;
+    }
+
+    @Override
+    public SocketAddress getRemoteSocketAddress() {
+      return remoteAddress;
     }
   }
 

@@ -23,6 +23,8 @@ import static org.junit.Assert.assertThrows;
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
 import android.net.LocalSocketAddress.Namespace;
+import android.os.Process;
+import android.system.Os;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.io.Closeable;
 import java.io.IOException;
@@ -156,6 +158,8 @@ public final class UdsServerSocketTest {
     Socket accepted = register(serverSocket.accept());
     assertThat(accepted).isInstanceOf(UdsSocket.Accepted.class);
     assertThat(accepted.getLocalSocketAddress()).isEqualTo(address);
+    assertThat(accepted.getRemoteSocketAddress())
+        .isEqualTo(new UdsPeerSocketAddress(Process.myUid(), Os.getgid(), Process.myPid()));
 
     client.getOutputStream().write(42);
     assertThat(accepted.getInputStream().read()).isEqualTo(42);

@@ -21,6 +21,8 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertThrows;
 
 import android.net.LocalSocketAddress.Namespace;
+import android.os.Process;
+import android.system.Os;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import io.grpc.CallOptions;
 import io.grpc.Grpc;
@@ -237,6 +239,8 @@ public final class UdsEndToEndTest {
             .getStats()
             .get(10, SECONDS);
     assertThat(acceptedSocketStats.local).isEqualTo(listenAddr);
+    assertThat(acceptedSocketStats.remote)
+        .isEqualTo(new UdsPeerSocketAddress(Process.myUid(), Os.getgid(), Process.myPid()));
     assertThat(acceptedSocketStats.socketOptions.others).isNotEmpty();
     assertThat(acceptedSocketStats.socketOptions.others.values())
         .doesNotContain("channelz_internal_error");
