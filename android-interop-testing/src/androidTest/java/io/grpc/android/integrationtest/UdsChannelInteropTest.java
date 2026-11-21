@@ -22,13 +22,11 @@ import android.net.LocalSocketAddress.Namespace;
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
-import io.grpc.Grpc;
-import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.android.UdsChannelBuilder;
+import io.grpc.android.UdsServerBuilder;
 import io.grpc.testing.integration.TestServiceImpl;
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -40,9 +38,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 /**
- * Tests for channels created with {@link UdsChannelBuilder}. The UDS Channel is only meant to talk
- * to Unix Domain Socket endpoints on servers that are on-device, so a {@link LocalTestServer} is
- * set up to expose a UDS endpoint.
+ * End-to-end interop tests between {@link UdsChannelBuilder} and {@link UdsServerBuilder} over an
+ * on-device Unix Domain Socket.
  */
 @RunWith(AndroidJUnit4.class)
 public class UdsChannelInteropTest {
@@ -52,7 +49,6 @@ public class UdsChannelInteropTest {
   private String testCase;
 
   private Server server;
-  private UdsTcpEndpointConnector endpointConnector;
 
   private ScheduledExecutorService serverExecutor = Executors.newScheduledThreadPool(2);
   private ExecutorService testExecutor = Executors.newSingleThreadExecutor();
@@ -67,23 +63,20 @@ public class UdsChannelInteropTest {
   public void setUp() throws IOException {
     testCase = InstrumentationRegistry.getArguments().getString("test_case", "all");
 
-    // Start local server.
     server =
-        Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+        UdsServerBuilder.forPath(UDS_PATH, Namespace.ABSTRACT)
             .maxInboundMessageSize(16 * 1024 * 1024)
             .addService(new TestServiceImpl(serverExecutor))
-            .build();
-    server.start();
-
-    // Connect uds endpoint to server's endpoint.
-    endpointConnector = new UdsTcpEndpointConnector(UDS_PATH, "0.0.0.0", server.getPort());
-    endpointConnector.start();
+            .build()
+            .start();
   }
 
   @After
-  public void teardown() {
-    server.shutdownNow();
-    endpointConnector.shutDown();
+  public void teardown() throws InterruptedException {
+    if (server != null) {
+      server.shutdownNow();
+      server.awaitTermination(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
   }
 
   @Test
@@ -114,16 +107,11 @@ public class UdsChannelInteropTest {
   }
 
   private void runTest(String testCase) throws Exception {
-    String result = null;
-    try {
-      result = testExecutor.submit(new TestCallable(
-              UdsChannelBuilder.forPath(UDS_PATH, Namespace.ABSTRACT)
-                      .maxInboundMessageSize(16 * 1024 * 1024)
-                      .build(),
-              testCase)).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-      assertEquals(testCase + " failed", TestCallable.SUCCESS_MESSAGE, result);
-    } catch (ExecutionException | InterruptedException e) {
-      result = e.getMessage();
-    }
+    String result = testExecutor.submit(new TestCallable(
+            UdsChannelBuilder.forPath(UDS_PATH, Namespace.ABSTRACT)
+                    .maxInboundMessageSize(16 * 1024 * 1024)
+                    .build(),
+            testCase)).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    assertEquals(testCase + " failed", TestCallable.SUCCESS_MESSAGE, result);
   }
 }

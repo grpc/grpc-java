@@ -16,6 +16,8 @@
 
 package io.grpc.android;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
@@ -39,10 +41,68 @@ import java.nio.channels.SocketChannel;
  * unnecessary delays.
  */
 @SuppressWarnings("UnsynchronizedOverridesSynchronized") // Rely on LocalSocket's synchronization
-class UdsSocket extends Socket {
+abstract class UdsSocket extends Socket {
 
-  private final LocalSocket localSocket;
-  private final LocalSocketAddress localSocketAddress;
+  /** Client-side {@link UdsSocket} that connects to a preconfigured {@link LocalSocketAddress}. */
+  static final class Client extends UdsSocket {
+    private final LocalSocketAddress connectAddress;
+
+    Client(LocalSocketAddress connectAddress) {
+      super(new LocalSocket());
+      this.connectAddress = checkNotNull(connectAddress, "connectAddress");
+    }
+
+    @Override
+    public void connect(SocketAddress endpoint) throws IOException {
+      localSocket.connect(connectAddress);
+    }
+
+    @Override
+    public void connect(SocketAddress endpoint, int timeout) throws IOException {
+      localSocket.connect(connectAddress, timeout);
+    }
+  }
+
+  /**
+   * Already-connected server-side {@link UdsSocket} returned by {@link
+   * UdsListeningSocket#accept()}. Cannot be {@link #connect connected} again.
+   */
+  static final class Accepted extends UdsSocket {
+    private final UdsSocketAddress localAddress;
+    private final UdsPeerSocketAddress remoteAddress;
+
+    Accepted(
+        LocalSocket connectedLocalSocket,
+        UdsSocketAddress localAddress,
+        UdsPeerSocketAddress peerAddress) {
+      super(connectedLocalSocket);
+      this.localAddress = checkNotNull(localAddress, "localAddress");
+      this.remoteAddress = checkNotNull(peerAddress, "peerAddress");
+    }
+
+    @Override
+    public void connect(SocketAddress endpoint) throws IOException {
+      // Same exception and message as java.net.Socket.connect() on a connected socket.
+      throw new SocketException("already connected");
+    }
+
+    @Override
+    public void connect(SocketAddress endpoint, int timeout) throws IOException {
+      throw new SocketException("already connected");
+    }
+
+    @Override
+    public SocketAddress getLocalSocketAddress() {
+      return localAddress;
+    }
+
+    @Override
+    public SocketAddress getRemoteSocketAddress() {
+      return remoteAddress;
+    }
+  }
+
+  final LocalSocket localSocket;
 
   @GuardedBy("this")
   private boolean closed = false;
@@ -53,9 +113,8 @@ class UdsSocket extends Socket {
   @GuardedBy("this")
   private boolean outputShutdown = false;
 
-  public UdsSocket(LocalSocketAddress localSocketAddress) {
-    this.localSocketAddress = localSocketAddress;
-    localSocket = new LocalSocket();
+  private UdsSocket(LocalSocket localSocket) {
+    this.localSocket = checkNotNull(localSocket, "localSocket");
   }
 
   @Override
@@ -79,14 +138,10 @@ class UdsSocket extends Socket {
   }
 
   @Override
-  public void connect(SocketAddress endpoint) throws IOException {
-    localSocket.connect(localSocketAddress);
-  }
+  public abstract void connect(SocketAddress endpoint) throws IOException;
 
   @Override
-  public void connect(SocketAddress endpoint, int timeout) throws IOException {
-    localSocket.connect(localSocketAddress, timeout);
-  }
+  public abstract void connect(SocketAddress endpoint, int timeout) throws IOException;
 
   @Override
   public SocketChannel getChannel() {
@@ -108,9 +163,11 @@ class UdsSocket extends Socket {
     };
   }
 
+  // Matches the kernel: SO_KEEPALIVE is a SOL_SOCKET option that getsockopt() reports as 0 (off)
+  // on an AF_UNIX socket, so this is a real value, not a stub.
   @Override
   public boolean getKeepAlive() {
-    throw new UnsupportedOperationException("Unsupported operation getKeepAlive()");
+    return false;
   }
 
   @Override
@@ -128,9 +185,11 @@ class UdsSocket extends Socket {
     return new SocketAddress() {};
   }
 
+  // Matches the kernel: SO_OOBINLINE is a SOL_SOCKET option that getsockopt() reports as 0 (off)
+  // on an AF_UNIX socket, so this is a real value, not a stub.
   @Override
   public boolean getOOBInline() {
-    throw new UnsupportedOperationException("Unsupported operation getOOBInline()");
+    return false;
   }
 
   @Override
@@ -162,9 +221,11 @@ class UdsSocket extends Socket {
     return new SocketAddress() {};
   }
 
+  // Matches the kernel: SO_REUSEADDR is a SOL_SOCKET option that getsockopt() reports as 0 (off)
+  // on an AF_UNIX socket, so this is a real value, not a stub.
   @Override
   public boolean getReuseAddress() {
-    throw new UnsupportedOperationException("Unsupported operation getReuseAddress()");
+    return false;
   }
 
   @Override
@@ -195,9 +256,12 @@ class UdsSocket extends Socket {
     return true;
   }
 
+  // IP_TOS is an IPPROTO_IP option that does not apply to AF_UNIX. Return 0 (like getTcpNoDelay()
+  // returns a synthetic true) rather than throwing SocketException, which okhttp's
+  // Utils.getSocketOptions() logs at Level.SEVERE on every channelz poll.
   @Override
   public int getTrafficClass() {
-    throw new UnsupportedOperationException("Unsupported operation getTrafficClass()");
+    return 0;
   }
 
   @Override
