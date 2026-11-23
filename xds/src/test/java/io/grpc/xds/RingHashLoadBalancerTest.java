@@ -163,8 +163,7 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getDelayType()).isEqualTo("connecting");
     assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
-                            && !PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
     verify(subchannel, times(expectedTimes)).requestConnection();
     verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
@@ -197,8 +196,7 @@ public class RingHashLoadBalancerTest {
     pickerCaptor.getValue().pickSubchannel(args);
     Subchannel subchannel = subchannels.get(Collections.singletonList(servers.get(0)));
     InOrder inOrder = Mockito.inOrder(helper, subchannel);
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs()
-                            || !PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 2 : 1;
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
     inOrder.verify(subchannel, times(expectedTimes)).requestConnection();
     deliverSubchannelState(subchannel, CSI_READY);
     inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
@@ -598,8 +596,7 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();  // buffer request
     // verify kicked off connection to server2
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs()
-                            || !PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 2 : 1;
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
 
     verify(getSubChannel(servers.get(1)), times(expectedTimes)).requestConnection();
     assertThat(subchannels.size()).isEqualTo(2);  // no excessive connection

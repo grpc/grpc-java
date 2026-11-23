@@ -96,6 +96,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -1227,6 +1228,11 @@ public class ClusterImplLoadBalancerTest {
     @Override
     public SynchronizationContext getSynchronizationContext() {
       return syncContext;
+    }
+
+    @Override
+    public ScheduledExecutorService getScheduledExecutorService() {
+      return fakeClock.getScheduledExecutorService();
     }
 
     @Override
