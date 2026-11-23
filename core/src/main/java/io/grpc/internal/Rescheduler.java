@@ -107,7 +107,7 @@ final class Rescheduler {
 
   @VisibleForTesting
   static boolean isEnabled(Runnable r) {
-    return ((FutureRunnable) r).isEnabled();
+    return r instanceof FutureRunnable && ((FutureRunnable) r).isEnabled();
   }
 
   private long nanoTime() {

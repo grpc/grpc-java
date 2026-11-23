@@ -41,7 +41,7 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
 
   public static boolean isEnabledHappyEyeballs() {
 
-    return GrpcUtil.getFlag(GRPC_PF_USE_HAPPY_EYEBALLS, false);
+    return GrpcUtil.getFlag(GRPC_PF_USE_HAPPY_EYEBALLS, true);
   }
 
   @Override

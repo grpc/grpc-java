@@ -37,6 +37,8 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.TestUtils;
 import io.grpc.util.RandomSubsettingLoadBalancer.RandomSubsettingLoadBalancerConfig;
 import java.net.SocketAddress;
@@ -73,6 +75,12 @@ public class RandomSubsettingLoadBalancerTest {
   private ArgumentCaptor<ResolvedAddresses> resolvedAddrCaptor;
 
   private BackendDetails backendDetails;
+
+  private final FakeClock fakeClock = new FakeClock();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      (t, e) -> {
+        throw new AssertionError(e);
+      });
 
   private RandomSubsettingLoadBalancer loadBalancer;
 
@@ -121,6 +129,12 @@ public class RandomSubsettingLoadBalancerTest {
 
   @Before
   public void setUp() {
+    // pick_first (used by round_robin children) schedules the Happy Eyeballs connection delay
+    // through the helper's SynchronizationContext and ScheduledExecutorService.
+    when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
+    when(mockHelper.getScheduledExecutorService())
+        .thenReturn(fakeClock.getScheduledExecutorService());
+
     int seed = 0;
     loadBalancer = new RandomSubsettingLoadBalancer(mockHelper, seed);
 
