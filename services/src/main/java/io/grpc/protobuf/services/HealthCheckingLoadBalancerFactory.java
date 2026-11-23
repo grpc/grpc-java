@@ -34,6 +34,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.Context;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -404,7 +405,14 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
       HcStream() {
         stopwatch = stopwatchSupplier.get().start();
         callServiceName = serviceName;
-        call = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
+        // The SynchronizationContext may be drained by a thread serving an unrelated RPC.  Detach
+        // its Context so that its cancellation does not cancel the health-check RPC.
+        Context prevContext = Context.ROOT.attach();
+        try {
+          call = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
+        } finally {
+          Context.ROOT.detach(prevContext);
+        }
       }
 
       void start() {

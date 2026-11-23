@@ -562,6 +562,37 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
+  public void healthCheckRpcIgnoresCancellationOfCallerContext() {
+    Attributes resolutionAttrs = attrsWithHealthCheckService("FooService");
+    ResolvedAddresses result = ResolvedAddresses.newBuilder()
+        .setAddresses(resolvedAddressList)
+        .setAttributes(resolutionAttrs)
+        .build();
+    hcLbEventDelivery.acceptResolvedAddresses(result);
+    createSubchannel(0, Attributes.EMPTY, maybeGetMockListener());
+
+    // The thread that drains the SynchronizationContext can be serving an unrelated RPC.  The
+    // health-check RPC must not inherit that RPC's Context.
+    Context.CancellableContext callerContext = Context.current().withCancellation();
+    callerContext.run(new Runnable() {
+        @Override
+        public void run() {
+          deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+        }
+      });
+    HealthImpl healthImpl = healthImpls[0];
+    assertThat(healthImpl.calls).hasSize(1);
+    ServerSideCall serverCall = healthImpl.calls.peek();
+
+    callerContext.cancel(null);
+
+    assertThat(serverCall.cancelled).isFalse();
+    serverCall.responseObserver.onNext(makeResponse(ServingStatus.SERVING));
+    verify(getMockListener()).onSubchannelState(eq(ConnectivityStateInfo.forNonError(READY)));
+    assertThat(healthImpl.calls).hasSize(1);
+  }
+
+  @Test
   public void serverRespondResetsBackoff() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
