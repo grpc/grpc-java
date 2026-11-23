@@ -26,6 +26,7 @@ import static java.util.logging.Level.WARNING;
 
 import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -227,9 +228,18 @@ final class ServletServerStream extends AbstractServerStream {
 
   private final class Sink implements AbstractServerStream.Sink {
     final TrailerSupplier trailerSupplier = new TrailerSupplier();
+    // Set once trailers have been written, either by the application or by cancel() on a container
+    // thread. Afterwards the response may already be committed or completed, so further writes must
+    // be ignored. The lock also serializes response mutations between those threads.
+    @GuardedBy("this")
+    private boolean trailersWritten;
 
     @Override
-    public void writeHeaders(Metadata headers, boolean flush) {
+    public synchronized void writeHeaders(Metadata headers, boolean flush) {
+      if (trailersWritten) {
+        logger.log(FINE, "[{0}] writeHeaders ignored: stream already closed", logId);
+        return;
+      }
       writeHeadersToServletResponse(headers);
       resp.setTrailerFields(trailerSupplier);
       try {
@@ -241,8 +251,9 @@ final class ServletServerStream extends AbstractServerStream {
     }
 
     @Override
-    public void writeFrame(@Nullable WritableBuffer frame, boolean flush, int numMessages) {
-      if (frame == null && !flush) {
+    public synchronized void writeFrame(
+        @Nullable WritableBuffer frame, boolean flush, int numMessages) {
+      if (trailersWritten || (frame == null && !flush)) {
         return;
       }
 
@@ -272,7 +283,11 @@ final class ServletServerStream extends AbstractServerStream {
     }
 
     @Override
-    public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
+    public synchronized void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
+      if (trailersWritten) {
+        return;
+      }
+      trailersWritten = true;
       if (logger.isLoggable(FINE)) {
         logger.log(
             FINE,
