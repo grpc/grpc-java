@@ -165,6 +165,11 @@ final class MultiMessageClientStream implements ClientStream {
   }
 
   @Override
+  public void setMessageCompression(boolean enabled, String compressorName) {
+    // Ignore.
+  }
+
+  @Override
   public void setAuthority(String authority) {
     // Ignore.
   }

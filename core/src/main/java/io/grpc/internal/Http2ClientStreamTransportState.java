@@ -16,6 +16,9 @@
 
 package io.grpc.internal;
 
+import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
+import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
+
 import com.google.common.base.Preconditions;
 import io.grpc.CallOptions;
 import io.grpc.InternalMetadata;
@@ -24,6 +27,8 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -65,12 +70,35 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
   private Charset errorCharset = StandardCharsets.UTF_8;
   private boolean headersReceived;
 
+  /**
+   * Tracks whether the client sent a gzip-encoded request. This is set by {@link
+   * #setMessageCompression(boolean, String)} when the compressor is gzip.
+   */
+  private boolean clientSentGzipRequest = false;
+
+  private static final Logger log = Logger.getLogger(Http2ClientStreamTransportState.class.getName());
+
   protected Http2ClientStreamTransportState(
       int maxMessageSize,
       StatsTraceContext statsTraceCtx,
       TransportTracer transportTracer,
       CallOptions options) {
     super(maxMessageSize, statsTraceCtx, transportTracer, options);
+  }
+
+  /**
+   * Sets whether the client is sending a gzip-compressed request. This is called by
+   * {@link ClientCallImpl#setMessageCompression(boolean)} when the compressor is gzip.
+   * This information is used to validate the server's {@code grpc-accept-encoding} response header.
+   *
+   * @param enabled whether message compression is enabled
+   * @param compressorName the name of the compressor being used (e.g., "gzip")
+   */
+  @Override
+  public final void setMessageCompression(boolean enabled, String compressorName) {
+    if (enabled && "gzip".equals(compressorName)) {
+      clientSentGzipRequest = true;
+    }
   }
 
   /**
@@ -108,6 +136,9 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
       if (transportError != null) {
         return;
       }
+
+      // Validate grpc-accept-encoding header if client sent gzip request
+      validateGrpcAcceptEncoding(headers);
 
       stripTransportDetails(headers);
       inboundHeadersReceived(headers);
@@ -256,5 +287,48 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
     metadata.discardAll(HTTP2_STATUS);
     metadata.discardAll(InternalStatus.CODE_KEY);
     metadata.discardAll(InternalStatus.MESSAGE_KEY);
+  }
+
+  /**
+   * Validates that the server's response includes a {@code grpc-accept-encoding} header that
+   * includes {@code gzip} when the client sent a gzip-encoded request.
+   *
+   * <p>According to the gRPC spec, when a client sends a gzip-encoded request, the server must
+   * respond with {@code grpc-accept-encoding: gzip} in the response headers to indicate it can
+   * accept gzip-encoded responses. If this header is missing or doesn't include gzip, it's a
+   * server misbehavior that we log at FINE level.
+   *
+   * @param headers the response headers from the server
+   */
+  private void validateGrpcAcceptEncoding(Metadata headers) {
+    if (!clientSentGzipRequest) {
+      // No validation needed if client didn't send gzip
+      return;
+    }
+
+    byte[] acceptEncodingBytes = headers.get(MESSAGE_ACCEPT_ENCODING_KEY);
+    if (acceptEncodingBytes == null) {
+      log.log(Level.FINE,
+          "Server sent gzip-encoded request but response missing grpc-accept-encoding header. "
+              + "This is server misbehavior.");
+      return;
+    }
+
+    String acceptEncoding = new String(acceptEncodingBytes, StandardCharsets.US_ASCII);
+    // Check if gzip is in the accepted encodings (comma-separated list)
+    Iterable<String> encodingsIterable = GrpcUtil.ACCEPT_ENCODING_SPLITTER.split(acceptEncoding);
+    boolean gzipAccepted = false;
+    for (String encoding : encodingsIterable) {
+      if ("gzip".equalsIgnoreCase(encoding.trim())) {
+        gzipAccepted = true;
+        break;
+      }
+    }
+
+    if (!gzipAccepted) {
+      log.log(Level.FINE,
+          "Server sent gzip-encoded request but grpc-accept-encoding ({0}) does not include gzip. "
+              + "This is server misbehavior.", acceptEncoding);
+    }
   }
 }
