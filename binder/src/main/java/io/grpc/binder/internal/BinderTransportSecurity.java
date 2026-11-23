@@ -16,6 +16,7 @@
 
 package io.grpc.binder.internal;
 
+import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static com.google.common.util.concurrent.Futures.nonCancellationPropagating;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -25,6 +26,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.errorprone.annotations.CheckReturnValue;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Internal;
 import io.grpc.Metadata;
@@ -96,13 +98,15 @@ public final class BinderTransportSecurity {
    *
    * <p>This method completes futures and therefore may execute arbitrary listener code on a
    * potentially direct Executor. To avoid deadlock, callers must not hold any locks.
+   * The returned future completes after all policy invocations have returned.
    */
   @Internal
-  public static void notifyTerminatedUnlocked(Attributes attributes) {
+  public static ListenableFuture<?> notifyTerminatedUnlocked(Attributes attributes) {
     TransportAuthorizationState state = attributes.get(TRANSPORT_AUTHORIZATION_STATE);
     if (state != null) {
-      state.notifyTerminatedUnlocked();
+      return state.notifyTerminatedUnlocked();
     }
+    return immediateFuture(null);
   }
 
   /**
@@ -192,7 +196,10 @@ public final class BinderTransportSecurity {
     private final ConcurrentHashMap<String, ListenableFuture<Status>> serviceAuthorization;
     private final Executor executor;
 
-    private volatile boolean isTerminated;
+    @GuardedBy("this") private boolean isTerminated;
+    @GuardedBy("this") private boolean cancellationComplete;
+    @GuardedBy("this") private int policyChecksInProgress;
+    private final SettableFuture<Void> terminationComplete = SettableFuture.create();
 
     /**
      * @param executor used for calling into the application. Must outlive the transport.
@@ -224,17 +231,30 @@ public final class BinderTransportSecurity {
         return nonCancellationPropagating(checkThenActRaceWinner);
       }
 
-      // We only check isTerminated *after* the new future is visible to other threads in
-      // serviceAuthorization. In case of a race with a simultaneous call to notifyTerminated(),
-      // better to harmlessly cancel the new future twice rather than not cancel it at all.
-      if (!isTerminated) {
-        // If notifyTerminated() already cancelled newPendingAuthResult, setFuture() will forward
-        // that cancellation to its argument so it's safe to ignore the return value here.
+      // Reserve the policy call before termination can decide that all checks have finished.
+      boolean runPolicyCheck;
+      synchronized (this) {
+        runPolicyCheck = !isTerminated;
+        if (runPolicyCheck) {
+          policyChecksInProgress++;
+        }
+      }
+      if (runPolicyCheck) {
         try {
           newPendingAuthResult.setFuture(
               serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName));
         } catch (Exception e) {  // Not just RuntimeException! Handle the "sneaky" checked case too.
           newPendingAuthResult.setException(e);
+        } finally {
+          boolean completeTermination;
+          synchronized (this) {
+            policyChecksInProgress--;
+            completeTermination =
+                isTerminated && cancellationComplete && policyChecksInProgress == 0;
+          }
+          if (completeTermination) {
+            terminationComplete.set(null);
+          }
         }
       } else {
         newPendingAuthResult.cancel(false);
@@ -265,20 +285,25 @@ public final class BinderTransportSecurity {
       return nonCancellationPropagating(newPendingAuthResult);
     }
 
-    /**
-     * After this method returns, every future ever returned by a prior or concurrent call to
-     * checkAuthorization() is guaranteed to be complete. Every future returned by subsequent call
-     * to checkAuthorization() is also guaranteed to be complete.
-     */
-    void notifyTerminatedUnlocked() {
-      // Any entries added to serviceAuthorization *after* this assignment will be immediately
-      // canceled by the adding thread in checkAuthorization().
-      isTerminated = true;
+    /** Cancels pending checks and waits for policy invocations to return before termination. */
+    ListenableFuture<?> notifyTerminatedUnlocked() {
+      synchronized (this) {
+        isTerminated = true;
+      }
 
-      // Cancel any entries added to serviceAuthorization *before* the volatile assignment above.
+      // Cancel outside the lock because listeners may run directly on this thread.
       for (ListenableFuture<Status> authResult : serviceAuthorization.values()) {
         authResult.cancel(false); // No-op for cached results (already done).
       }
+      boolean completeTermination;
+      synchronized (this) {
+        cancellationComplete = true;
+        completeTermination = policyChecksInProgress == 0;
+      }
+      if (completeTermination) {
+        terminationComplete.set(null);
+      }
+      return terminationComplete;
     }
   }
 
