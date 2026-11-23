@@ -76,7 +76,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
   private final ThreadSafeRandom random;
-  private List<RingEntry> ring;
+  private Ring ring;
   @Nullable private Metadata.Key<String> requestHashHeaderKey;
 
   RingHashLoadBalancer(Helper helper) {
@@ -321,13 +321,15 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     return null;
   }
 
-  private static List<RingEntry> buildRing(
+  private static Ring buildRing(
       Map<EquivalentAddressGroup, Long> serverWeights, long totalWeight, double scale) {
-    List<RingEntry> ring = new ArrayList<>();
+    List<RingEntry> entries = new ArrayList<>();
+    Map<Endpoint, Integer> endpointIndexes = new HashMap<>(serverWeights.size());
     double currentHashes = 0.0;
     double targetHashes = 0.0;
     for (Map.Entry<EquivalentAddressGroup, Long> entry : serverWeights.entrySet()) {
-      Endpoint endpoint = new Endpoint(entry.getKey());
+      int endpointIndex = endpointIndexes.size();
+      endpointIndexes.put(new Endpoint(entry.getKey()), endpointIndex);
       double normalizedWeight = (double) entry.getValue() / totalWeight;
       // Per GRFC A61 use the first address for the hash
       StringBuilder sb = new StringBuilder(entry.getKey().getAddresses().get(0).toString());
@@ -338,14 +340,14 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       while (currentHashes < targetHashes) {
         sb.append(i);
         long hash = hashFunc.hashAsciiString(sb.toString());
-        ring.add(new RingEntry(hash, endpoint));
+        entries.add(new RingEntry(hash, endpointIndex));
         i++;
         currentHashes++;
         sb.setLength(lengthWithoutCounter);
       }
     }
-    Collections.sort(ring);
-    return Collections.unmodifiableList(ring);
+    Collections.sort(entries);
+    return new Ring(Collections.unmodifiableList(entries), endpointIndexes);
   }
 
   @SuppressWarnings("ReferenceEquality")
@@ -361,29 +363,27 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         PickResult.withNoResult("connecting", "ring_hash: waiting for connection");
     private final SynchronizationContext syncContext;
     private final List<RingEntry> ring;
-    // Avoid synchronization between pickSubchannel and subchannel's connectivity state change,
-    // freeze picker's view of subchannel's connectivity state.
-    // TODO(chengyuanzhang): can be more performance-friendly with
-    //  IdentityHashMap<Subchannel, ConnectivityStateInfo> and RingEntry contains Subchannel.
-    private final Map<Endpoint, SubchannelView> pickableSubchannels;  // read-only
+    // Each ring entry indexes this picker-local snapshot without comparing endpoint addresses.
+    private final SubchannelView[] pickableSubchannels;
     @Nullable private final Metadata.Key<String> requestHashHeaderKey;
     private final ThreadSafeRandom random;
     private final boolean hasEndpointInConnectingState;
 
     private RingHashPicker(
-        SynchronizationContext syncContext, List<RingEntry> ring,
+        SynchronizationContext syncContext, Ring ring,
         Collection<ChildLbState> children, Metadata.Key<String> requestHashHeaderKey,
         ThreadSafeRandom random) {
       this.syncContext = syncContext;
-      this.ring = ring;
+      this.ring = ring.entries;
       this.requestHashHeaderKey = requestHashHeaderKey;
       this.random = random;
-      pickableSubchannels = new HashMap<>(children.size());
+      pickableSubchannels = new SubchannelView[ring.endpointIndexes.size()];
       boolean hasConnectingState = false;
       for (ChildLbState childLbState : children) {
-        pickableSubchannels.put((Endpoint)childLbState.getKey(),
-            new SubchannelView(childLbState, childLbState.getCurrentState()));
-        if (childLbState.getCurrentState() == CONNECTING) {
+        int endpointIndex = ring.endpointIndexes.get(childLbState.getKey());
+        ConnectivityState state = childLbState.getCurrentState();
+        pickableSubchannels[endpointIndex] = new SubchannelView(childLbState, state);
+        if (state == CONNECTING) {
           hasConnectingState = true;
         }
       }
@@ -446,7 +446,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         // IDLE, we initiate a connection.
         for (int i = 0; i < ring.size(); i++) {
           int index = (targetIndex + i) % ring.size();
-          SubchannelView subchannelView = pickableSubchannels.get(ring.get(index).addrKey);
+          SubchannelView subchannelView = pickableSubchannels[ring.get(index).endpointIndex];
           ChildLbState childLbState = subchannelView.childLbState;
 
           if (subchannelView.connectivityState  == READY) {
@@ -476,7 +476,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         boolean requestedConnection = hasEndpointInConnectingState;
         for (int i = 0; i < ring.size(); i++) {
           int index = (targetIndex + i) % ring.size();
-          SubchannelView subchannelView = pickableSubchannels.get(ring.get(index).addrKey);
+          SubchannelView subchannelView = pickableSubchannels[ring.get(index).endpointIndex];
           ChildLbState childLbState = subchannelView.childLbState;
           if (subchannelView.connectivityState == READY) {
             return childLbState.getCurrentPicker().pickSubchannel(args);
@@ -497,7 +497,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
       // return the pick from the original subchannel hit by hash, which is probably an error
       ChildLbState originalSubchannel =
-          pickableSubchannels.get(ring.get(targetIndex).addrKey).childLbState;
+          pickableSubchannels[ring.get(targetIndex).endpointIndex].childLbState;
       return originalSubchannel.getCurrentPicker().pickSubchannel(args);
     }
 
@@ -517,13 +517,23 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     }
   }
 
+  private static final class Ring {
+    private final List<RingEntry> entries;
+    private final Map<Endpoint, Integer> endpointIndexes;
+
+    private Ring(List<RingEntry> entries, Map<Endpoint, Integer> endpointIndexes) {
+      this.entries = entries;
+      this.endpointIndexes = endpointIndexes;
+    }
+  }
+
   private static final class RingEntry implements Comparable<RingEntry> {
     private final long hash;
-    private final Endpoint addrKey;
+    private final int endpointIndex;
 
-    private RingEntry(long hash, Endpoint addrKey) {
+    private RingEntry(long hash, int endpointIndex) {
       this.hash = hash;
-      this.addrKey = addrKey;
+      this.endpointIndex = endpointIndex;
     }
 
     @Override
