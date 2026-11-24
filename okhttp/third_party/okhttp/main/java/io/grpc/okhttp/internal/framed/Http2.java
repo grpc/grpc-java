@@ -312,6 +312,9 @@ public final class Http2 implements Variant {
         settings.set(id, 0, value);
       }
       handler.settings(false, settings);
+      if (settings.getHeaderTableSize() >= 0) {
+        hpackReader.headerTableSizeSetting(settings.getHeaderTableSize());
+      }
     }
 
     private void readPushPromise(Handler handler, int length, byte flags, int streamId)
@@ -394,8 +397,9 @@ public final class Http2 implements Variant {
     @Override public synchronized void ackSettings(io.grpc.okhttp.internal.framed.Settings peerSettings) throws IOException {
       if (closed) throw new IOException("closed");
       this.maxFrameSize = peerSettings.getMaxFrameSize(maxFrameSize);
-      if (peerSettings.isSet(Settings.HEADER_TABLE_SIZE)) {
-        hpackWriter.resizeHeaderTable(peerSettings.get(Settings.HEADER_TABLE_SIZE));
+      int headerTableSize = peerSettings.getHeaderTableSize();
+      if (headerTableSize >= 0) {
+        hpackWriter.resizeHeaderTable(headerTableSize);
       }
       int length = 0;
       byte type = TYPE_SETTINGS;

@@ -130,7 +130,7 @@ final class Hpack {
     private final List<io.grpc.okhttp.internal.framed.Header> headerList = new ArrayList<>();
     private final BufferedSource source;
 
-    private final int headerTableSizeSetting;
+    private int headerTableSizeSetting;
     private int maxDynamicTableByteCount;
     // Visible for testing.
     io.grpc.okhttp.internal.framed.Header[] dynamicTable = new io.grpc.okhttp.internal.framed.Header[8];
@@ -152,6 +152,19 @@ final class Hpack {
 
     int maxDynamicTableByteCount() {
       return maxDynamicTableByteCount;
+    }
+
+    /**
+     * Called by the reader when the peer sent {@link Settings#HEADER_TABLE_SIZE}.
+     * While this establishes the maximum dynamic table size, the
+     * {@link #maxDynamicTableByteCount} set during processing may limit the
+     * table size to a smaller amount.
+     * <p> Evicts entries or clears the table as needed.
+     */
+    void headerTableSizeSetting(int headerTableSizeSetting) {
+      this.headerTableSizeSetting = headerTableSizeSetting;
+      this.maxDynamicTableByteCount = headerTableSizeSetting;
+      adjustDynamicTableByteCount();
     }
 
     private void adjustDynamicTableByteCount() {
@@ -176,7 +189,7 @@ final class Hpack {
       int entriesToEvict = 0;
       if (bytesToRecover > 0) {
         // determine how many headers need to be evicted.
-        for (int j = dynamicTable.length - 1; j > nextDynamicTableIndex && bytesToRecover > 0; j--) {
+        for (int j = dynamicTable.length - 1; j >= nextDynamicTableIndex && bytesToRecover > 0; j--) {
           bytesToRecover -= dynamicTable[j].hpackSize;
           dynamicTableByteCount -= dynamicTable[j].hpackSize;
           dynamicTableHeaderCount--;
@@ -184,8 +197,6 @@ final class Hpack {
         }
         System.arraycopy(dynamicTable, nextDynamicTableIndex + 1, dynamicTable,
             nextDynamicTableIndex + 1 + entriesToEvict, dynamicTableHeaderCount);
-        Arrays.fill(dynamicTable, nextDynamicTableIndex + 1,
-            nextDynamicTableIndex + 1 + entriesToEvict, null);
         nextDynamicTableIndex += entriesToEvict;
       }
       return entriesToEvict;
@@ -551,7 +562,7 @@ final class Hpack {
       int entriesToEvict = 0;
       if (bytesToRecover > 0) {
         // determine how many headers need to be evicted.
-        for (int j = dynamicTable.length - 1; j > nextDynamicTableIndex && bytesToRecover > 0; j--) {
+        for (int j = dynamicTable.length - 1; j >= nextDynamicTableIndex && bytesToRecover > 0; j--) {
           bytesToRecover -= dynamicTable[j].hpackSize;
           dynamicTableByteCount -= dynamicTable[j].hpackSize;
           dynamicTableHeaderCount--;
@@ -559,8 +570,6 @@ final class Hpack {
         }
         System.arraycopy(dynamicTable, nextDynamicTableIndex + 1, dynamicTable,
             nextDynamicTableIndex + 1 + entriesToEvict, dynamicTableHeaderCount);
-        Arrays.fill(dynamicTable, nextDynamicTableIndex + 1,
-            nextDynamicTableIndex + 1 + entriesToEvict, null);
         nextDynamicTableIndex += entriesToEvict;
       }
       return entriesToEvict;
@@ -593,8 +602,7 @@ final class Hpack {
 
     void resizeHeaderTable(int headerTableSizeSetting) {
       this.headerTableSizeSetting = headerTableSizeSetting;
-      int effectiveHeaderTableSize = (int) Math.min(
-          headerTableSizeSetting & 0xffffffffL, SETTINGS_HEADER_TABLE_SIZE_LIMIT);
+      int effectiveHeaderTableSize = Math.min(headerTableSizeSetting, SETTINGS_HEADER_TABLE_SIZE_LIMIT);
 
       if (maxDynamicTableByteCount == effectiveHeaderTableSize) { // No change.
         return;

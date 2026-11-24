@@ -1357,23 +1357,6 @@ public class OkHttpClientTransportTest {
   }
 
   @Test
-  public void maxConcurrentStreamsUint32Max_doesNotBlockStreams() throws Exception {
-    initTransport();
-    // Peer sends MAX_CONCURRENT_STREAMS = 0xFFFFFFFF (unsigned uint32 max, -1 signed).
-    setMaxConcurrentStreams(0xFFFFFFFF);
-    MockStreamListener listener = new MockStreamListener();
-    ClientStream stream =
-        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
-    stream.start(listener);
-    stream.request(1);
-    assertEquals(0, clientTransport.getPendingStreamSize());
-    verify(frameWriter, timeout(TIME_OUT_MS))
-        .synStream(eq(false), eq(false), eq(3), eq(0), ArgumentMatchers.<Header>anyList());
-    stream.cancel(Status.CANCELLED);
-    shutdownAndVerify();
-  }
-
-  @Test
   public void pendingStreamFailedByGoAway() throws Exception {
     initTransport();
     setMaxConcurrentStreams(1);

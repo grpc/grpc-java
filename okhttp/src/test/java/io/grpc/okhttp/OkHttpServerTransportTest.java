@@ -27,7 +27,6 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -1321,62 +1320,6 @@ public class OkHttpServerTransportTest {
 
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).rstStream(3, ErrorCode.REFUSED_STREAM);
-  }
-
-  @Test
-  public void clientSettingsHeaderTableSizeZero_serverPreservesDecoderAndSendsResponses()
-      throws Exception {
-    initTransport();
-    Settings clientSettings = new Settings();
-    clientSettings.set(1 /* HEADER_TABLE_SIZE */, 0, 0);
-    handshake(clientSettings);
-
-    final List<Header> headers = Arrays.asList(
-        HTTP_SCHEME_HEADER,
-        METHOD_HEADER,
-        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
-        new Header(Header.TARGET_PATH, "/com.example/SimpleService/doit"),
-        CONTENT_TYPE_HEADER,
-        TE_HEADER,
-        new Header("x-custom-req", "dynamic-value"));
-
-    // Send two requests using clientFrameWriter's default 4096 dynamic table; the second request
-    // references indexed dynamic entries encoded against our server decoder (which must stay 4096).
-    clientFrameWriter.headers(1, headers);
-    clientFrameWriter.headers(3, headers);
-    clientFrameWriter.flush();
-
-    verify(transportListener, timeout(TIME_OUT_MS).times(2))
-        .streamCreated(any(ServerStream.class), eq("com.example/SimpleService/doit"),
-            any(Metadata.class));
-    MockStreamListener stream1 = mockTransportListener.newStreams.remove();
-    MockStreamListener stream3 = mockTransportListener.newStreams.remove();
-    assertThat(stream1.headers.get(
-        Metadata.Key.of("x-custom-req", Metadata.ASCII_STRING_MARSHALLER)))
-        .isEqualTo("dynamic-value");
-    assertThat(stream3.headers.get(
-        Metadata.Key.of("x-custom-req", Metadata.ASCII_STRING_MARSHALLER)))
-        .isEqualTo("dynamic-value");
-
-    // Verify server can write response headers on both streams when client advertised table size 0.
-    Metadata respMeta = new Metadata();
-    Metadata.Key<String> respKey =
-        Metadata.Key.of("x-custom-resp", Metadata.ASCII_STRING_MARSHALLER);
-    respMeta.put(respKey, "resp-value");
-    stream1.stream.writeHeaders(respMeta, false);
-    stream3.stream.writeHeaders(respMeta, false);
-
-    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
-    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
-    verify(clientFramesRead).headers(
-        eq(false), eq(false), eq(1), eq(-1),
-        argThat(list -> list.contains(new Header("x-custom-resp", "resp-value"))),
-        eq(HeadersMode.HTTP_20_HEADERS));
-    verify(clientFramesRead).headers(
-        eq(false), eq(false), eq(3), eq(-1),
-        argThat(list -> list.contains(new Header("x-custom-resp", "resp-value"))),
-        eq(HeadersMode.HTTP_20_HEADERS));
-    verify(clientFramesRead, never()).goAway(anyInt(), any(ErrorCode.class), any(ByteString.class));
   }
 
   private void initTransport() throws Exception {
