@@ -1,0 +1,31 @@
+{
+  "homepage": "https://github.com/grpc/grpc-java",
+  "maintainers": [
+    {
+      "name": "Eric Anderson",
+      "email": "ejona@google.com",
+      "github": "ejona86",
+      "github_user_id": 2811396
+    },
+    {
+      "name": "Abhishek Agrawal",
+      "github": "AgraVator",
+      "github_user_id": 81427947
+    },
+    {
+      "name": "Kannan J",
+      "github": "kannanjgithub",
+      "github_user_id": 29600796
+    },
+    {
+      "name": "MV Shiva",
+      "github": "shivaspeaks",
+      "github_user_id": 56782215
+    }
+  ],
+  "repository": [
+    "github:grpc/grpc-java"
+  ],
+  "versions": [],
+  "yanked_versions": {}
+}
