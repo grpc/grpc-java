@@ -77,6 +77,12 @@ public final class ClientCalls {
    *
    * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
    * {@code beforeStart()} will be called.
+   *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with status code OK, then {@code
+   * responseObserver.onCompleted()} is called at the end of the RPC. Otherwise the status and
+   * trailers are passed as a Throwable to {@code onError()} and can be accessed with {@link
+   * Status#fromThrowable} and {@link Status#trailersFromThrowable}.
    */
   public static <ReqT, RespT> void asyncUnaryCall(
       ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> responseObserver) {
@@ -91,6 +97,12 @@ public final class ClientCalls {
    *
    * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
    * {@code beforeStart()} will be called.
+   *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with status code OK, then {@code
+   * responseObserver.onCompleted()} is called at the end of the RPC. Otherwise the status and
+   * trailers are passed as a Throwable to {@code onError()} and can be accessed with {@link
+   * Status#fromThrowable} and {@link Status#trailersFromThrowable}.
    */
   public static <ReqT, RespT> void asyncServerStreamingCall(
       ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> responseObserver) {
@@ -105,6 +117,25 @@ public final class ClientCalls {
    *
    * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
    * {@code beforeStart()} will be called.
+   *
+   * <h3>Client errors</h3>
+   * {@link StreamObserver#onError} called on the request stream observer will result in stream
+   * cancellation. The response
+   * {@link StreamObserver} will be immediately notified of the cancellation with a
+   * {@link io.grpc.StatusRuntimeException} with the exception passed to onError set as the cause
+   * and the stream is considered closed. The server's request stream observer will receive an
+   * {@link StreamObserver#onError} callback with a throwable which when converted to a status
+   * with
+   * Status.fromThrowable(), always has the status code CANCELLED and exception cause set to
+   * null because the actual exception
+   * passed by the client to onError is never actually transmitted to the server and the server
+   * just receives a RST_STREAM frame indicating cancellation by the client.
+   *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with status code OK, then {@code
+   * responseObserver.onCompleted()} is called at the end of the RPC. Otherwise the status and
+   * trailers are passed as a Throwable to {@code onError()} and can be accessed with {@link
+   * Status#fromThrowable} and {@link Status#trailersFromThrowable}.
    *
    * @return request stream observer. It will extend {@link ClientCallStreamObserver}
    */
@@ -122,6 +153,25 @@ public final class ClientCalls {
    * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
    * {@code beforeStart()} will be called.
    *
+   * <h3>Client errors</h3>
+   * {@link StreamObserver#onError} called on the request stream observer will result in stream
+   * cancellation. The response
+   * {@link StreamObserver} will be immediately notified of the cancellation with a
+   * {@link io.grpc.StatusRuntimeException} with the exception passed to onError set as the cause
+   * and the stream is considered closed. The server's request stream observer will receive an
+   * {@link StreamObserver#onError} callback with a throwable which when converted to a status
+   * with
+   * Status.fromThrowable(), always has the status code CANCELLED and exception cause set to
+   * null because the actual exception
+   * passed by the client to onError is never actually transmitted to the server and the server
+   * just receives a RST_STREAM frame indicating cancellation by the client.
+   *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with status code OK, then {@code
+   * responseObserver.onCompleted()} is called at the end of the RPC. Otherwise the status and
+   * trailers are passed as a Throwable to {@code onError()} and can be accessed with {@link
+   * Status#fromThrowable} and {@link Status#trailersFromThrowable}.
+   *
    * @return request stream observer. It will extend {@link ClientCallStreamObserver}
    */
   public static <ReqT, RespT> StreamObserver<ReqT> asyncBidiStreamingCall(
@@ -133,6 +183,10 @@ public final class ClientCalls {
   /**
    * Executes a unary call and blocks on the response.  The {@code call} should not be already
    * started.  After calling this method, {@code call} should no longer be used.
+   *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with a non-OK status, a {@link StatusRuntimeException}
+   * is thrown. The status code and trailers can be accessed from the exception.
    *
    * @return the single response message.
    * @throws StatusRuntimeException on error
@@ -148,6 +202,10 @@ public final class ClientCalls {
   /**
    * Executes a unary call and blocks on the response.  The {@code call} should not be already
    * started.  After calling this method, {@code call} should no longer be used.
+   *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with a non-OK status, a {@link StatusRuntimeException}
+   * is thrown. The status code and trailers can be accessed from the exception.
    *
    * @return the single response message.
    * @throws StatusRuntimeException on error
@@ -186,6 +244,10 @@ public final class ClientCalls {
    * Executes a unary call and blocks on the response,
    * throws a checked {@link StatusException}.
    *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with a non-OK status, a {@link StatusException}
+   * is thrown. The status code and trailers can be accessed from the exception.
+   *
    * @return the single response message.
    * @throws StatusException on error
    */
@@ -204,7 +266,11 @@ public final class ClientCalls {
    * response stream.  The {@code call} should not be already started.  After calling this method,
    * {@code call} should no longer be used.
    *
-   * <p>The returned iterator may throw {@link StatusRuntimeException} on error.
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with a non-OK status, the returned iterator will throw
+   * a {@link StatusRuntimeException} when attempting to read the error response (e.g. in
+   * {@link Iterator#hasNext} or {@link Iterator#next}). The status code and trailers can be
+   * accessed from the exception.
    *
    * @return an iterator over the response stream.
    */
@@ -219,7 +285,11 @@ public final class ClientCalls {
    * Executes a server-streaming call returning a blocking {@link Iterator} over the
    * response stream.
    *
-   * <p>The returned iterator may throw {@link StatusRuntimeException} on error.
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with a non-OK status, the returned iterator will throw
+   * a {@link StatusRuntimeException} when attempting to read the error response (e.g. in
+   * {@link Iterator#hasNext} or {@link Iterator#next}). The status code and trailers can be
+   * accessed from the exception.
    *
    * <p>Warning:  the iterator can result in leaks if not completely consumed.
    *
@@ -241,6 +311,13 @@ public final class ClientCalls {
    *
    * <p>The methods {@link BlockingClientCall#hasNext()} and {@link
    * BlockingClientCall#cancel(String, Throwable)} can be used for more extensive control.
+   *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with a non-OK status, the returned {@link BlockingClientCall}
+   * will throw a {@link StatusException} when calling read or write operations (e.g.,
+   * {@link BlockingClientCall#read()}, {@link BlockingClientCall#hasNext()}, or
+   * {@link BlockingClientCall#write(Object)}). The status code and trailers can be accessed from
+   * the exception.
    *
    * @return A {@link BlockingClientCall} that has had the request sent and halfClose called
    */
@@ -280,6 +357,13 @@ public final class ClientCalls {
    * {@link #blockingServerStreamingCall(Channel, MethodDescriptor, CallOptions, Object)}
    * which returns an iterator, which would leave the stream open if not completely consumed.
    *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with a non-OK status, the returned {@link BlockingClientCall}
+   * will throw a {@link StatusException} when calling read or write operations (e.g.,
+   * {@link BlockingClientCall#read()}, {@link BlockingClientCall#hasNext()}, or
+   * {@link BlockingClientCall#write(Object)}). The status code and trailers can be accessed from
+   * the exception.
+   *
    * @return A {@link BlockingClientCall} which can be used by the client to write and receive
    *     messages over the grpc channel.
    */
@@ -293,6 +377,13 @@ public final class ClientCalls {
    * Initiate a bidirectional-streaming {@link ClientCall} and returning a stream object
    * ({@link BlockingClientCall}) which can be used by the client to send and receive messages over
    * the grpc channel.
+   *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with a non-OK status, the returned {@link BlockingClientCall}
+   * will throw a {@link StatusException} when calling read or write operations (e.g.,
+   * {@link BlockingClientCall#read()}, {@link BlockingClientCall#hasNext()}, or
+   * {@link BlockingClientCall#write(Object)}). The status code and trailers can be accessed from
+   * the exception.
    *
    * @return an object representing the call which can be used to read, write and terminate it.
    */
@@ -315,6 +406,11 @@ public final class ClientCalls {
    * Executes a unary call and returns a {@link ListenableFuture} to the response.  The
    * {@code call} should not be already started.  After calling this method, {@code call} should no
    * longer be used.
+   *
+   * <h3>Server errors</h3>
+   * If the server completes the RPC with a non-OK status, the returned future will fail with
+   * a {@link StatusRuntimeException}. The status code and trailers can be accessed from the
+   * exception.
    *
    * @return a future for the single response message.
    */
