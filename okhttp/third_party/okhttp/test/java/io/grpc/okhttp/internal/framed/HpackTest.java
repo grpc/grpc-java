@@ -18,6 +18,7 @@ package io.grpc.okhttp.internal.framed;
 
 import static okio.ByteString.decodeHex;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -85,7 +86,7 @@ public class HpackTest {
     bytesIn.writeByte(0x0d); // Literal value (len = 13)
     bytesIn.writeUtf8("custom-header");
 
-    hpackReader.headerTableSizeSetting(1);
+    hpackReader = new Hpack.Reader(1, bytesIn);
     hpackReader.readHeaders();
 
     assertEquals(0, hpackReader.dynamicTableHeaderCount);
@@ -1177,6 +1178,41 @@ public class HpackTest {
     hpackWriter.writeHeaders(headerEntries("foo", "bar1"));
     assertBytes(0xbe);
     assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+  }
+
+  @Test
+  public void resizeHeaderTable_unsignedUint32SaturatesToLimit() throws IOException {
+    // Wire uint32 values >= 2^31 are negative as signed Java ints and must saturate to 16384.
+    hpackWriter.resizeHeaderTable(0x80000000);
+    assertEquals(16384, hpackWriter.maxDynamicTableByteCount());
+    hpackWriter.writeHeaders(Arrays.asList(new Header("foo", "bar")));
+    assertBytes(
+        0x3F, 0xE1, 0x7F, // Dynamic table size update (size = 16384).
+        0x40, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r');
+
+    hpackWriter.resizeHeaderTable(0);
+    assertEquals(0, hpackWriter.maxDynamicTableByteCount());
+
+    hpackWriter.resizeHeaderTable(0xFFFFFFFF);
+    assertEquals(16384, hpackWriter.maxDynamicTableByteCount());
+    hpackWriter.writeHeaders(Arrays.asList(new Header("foo", "bar")));
+    assertBytes(
+        0x20, // Smallest dynamic table size update (size = 0).
+        0x3F, 0xE1, 0x7F, // Final dynamic table size update (size = 16384).
+        0x40, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r');
+  }
+
+  @Test
+  public void evictToRecoverBytes_clearsEvictedSlots() throws IOException {
+    hpackWriter.writeHeaders(headerEntries(
+        "custom-key1", "custom-header",
+        "custom-key2", "custom-header"));
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.resizeHeaderTable(56);
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+    // Slot that previously held dynamicTable[6] before shifting must be nulled for GC.
+    assertNull(hpackWriter.dynamicTable[hpackWriter.dynamicTable.length - 2]);
   }
 
 
