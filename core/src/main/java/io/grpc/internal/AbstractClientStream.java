@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 
@@ -155,6 +156,9 @@ public abstract class AbstractClientStream extends AbstractStream
   public final void start(ClientStreamListener listener) {
     transportState().setListener(listener);
     if (!useGet) {
+      // Capture the message encoding before headers are cleared, so we can warn
+      // if the server doesn't advertise support for it (issue #1804)
+      transportState().setSentMessageEncoding(headers.get(MESSAGE_ENCODING_KEY));
       abstractClientStreamSink().writeHeaders(headers, null);
       headers = null;
     }
@@ -224,6 +228,8 @@ public abstract class AbstractClientStream extends AbstractStream
     private ClientStreamListener listener;
     private boolean fullStreamDecompression;
     private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
+    /** The message encoding sent by the client, or null if identity/none. */
+    @Nullable private String sentMessageEncoding;
 
     private boolean deframerClosed = false;
     private Runnable deframerClosedTask;
@@ -259,6 +265,16 @@ public abstract class AbstractClientStream extends AbstractStream
       checkState(this.listener == null, "Already called start");
       this.decompressorRegistry =
           checkNotNull(decompressorRegistry, "decompressorRegistry");
+    }
+
+    /**
+     * Sets the message encoding that the client is using for outbound messages.
+     * Used to warn if the server doesn't advertise support for this encoding.
+     *
+     * @param messageEncoding the encoding name (e.g., "gzip"), or null for identity
+     */
+    protected void setSentMessageEncoding(@Nullable String messageEncoding) {
+      this.sentMessageEncoding = messageEncoding;
     }
 
     @VisibleForTesting
@@ -339,6 +355,19 @@ public abstract class AbstractClientStream extends AbstractStream
             return;
           }
           setDecompressor(decompressor);
+        }
+      }
+
+      // Warn if client sent compressed messages but server didn't advertise support
+      if (sentMessageEncoding != null) {
+        byte[] acceptEncoding = headers.get(MESSAGE_ACCEPT_ENCODING_KEY);
+        if (acceptEncoding == null) {
+          log.log(
+              Level.FINE,
+              "Server did not include grpc-accept-encoding header in response. "
+                  + "Client sent messages with encoding [{0}]. "
+                  + "The server may not support this encoding.",
+              sentMessageEncoding);
         }
       }
 
