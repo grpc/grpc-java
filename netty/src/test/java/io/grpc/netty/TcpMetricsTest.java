@@ -57,19 +57,19 @@ public class TcpMetricsTest {
   @Mock
   private MetricRecorder metricRecorder;
 
-  private ConfigurableFakeWithTcpInfo channel;
+  private FakeEpollTcpInfo.FakeChannel channel;
   private TcpMetrics metrics;
 
   @Before
   public void setUp() throws Exception {
     FakeEpollTcpInfo dummyInfo = new FakeEpollTcpInfo();
-    channel = new ConfigurableFakeWithTcpInfo(dummyInfo);
+    channel = new FakeEpollTcpInfo.FakeChannel(dummyInfo);
     metrics = new TcpMetrics(metricRecorder);
   }
 
   @After
   public void tearDown() throws Exception {
-    TcpMetrics.epollInfo = TcpMetrics.loadEpollInfo();
+    TcpMetrics.epollInfo = EpollTcpInfoAccessor.INSTANCE;
   }
 
   @Test
@@ -82,48 +82,15 @@ public class TcpMetricsTest {
     assertNotNull(InternalTcpMetrics.MIN_RTT_INSTRUMENT);
   }
 
-  public static class FakeEpollTcpInfo {
-    long totalRetrans;
-    long retransmits;
-    long rtt;
-
-    public void setValues(long totalRetrans, long retransmits, long rtt) {
-      this.totalRetrans = totalRetrans;
-      this.retransmits = retransmits;
-      this.rtt = rtt;
-    }
-
-    @SuppressWarnings("unused")
-    public long totalRetrans() {
-      return totalRetrans;
-    }
-
-    @SuppressWarnings("unused")
-    public long retrans() {
-      return retransmits;
-    }
-
-    @SuppressWarnings("unused")
-    public long rtt() {
-      return rtt;
-    }
-  }
-
   @Test
   public void tracker_recordTcpInfo_reflectionSuccess() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class,
-        FakeEpollTcpInfo.class.getConstructor(),
-        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
-        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
-        FakeEpollTcpInfo.class.getMethod("retrans"),
-        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.epollInfo = FakeEpollTcpInfo.newAccessor();
     TcpMetrics tracker = new TcpMetrics(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
-    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
+    FakeEpollTcpInfo.FakeChannel channel = new FakeEpollTcpInfo.FakeChannel(infoSource);
     channel.writeInbound("dummy");
 
     tracker.channelInactive(channel);
@@ -140,20 +107,32 @@ public class TcpMetricsTest {
   }
 
   @Test
-  public void tracker_periodicRecord_doesNotRecordRecurringRetransmits() throws Exception {
+  public void tracker_recurringRetransmits_usesRetransmitsNotRetrans() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class,
-        FakeEpollTcpInfo.class.getConstructor(),
-        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
-        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
-        FakeEpollTcpInfo.class.getMethod("retrans"),
-        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.epollInfo = FakeEpollTcpInfo.newAccessor();
     TcpMetrics tracker = new TcpMetrics(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
-    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
+    infoSource.set(EpollTcpInfoAccessor.Field.RETRANS, 9);
+    FakeEpollTcpInfo.FakeChannel channel = new FakeEpollTcpInfo.FakeChannel(infoSource);
+
+    tracker.channelInactive(channel);
+
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT)),
+        eq(4L), any(), any());
+  }
+
+  @Test
+  public void tracker_periodicRecord_doesNotRecordRecurringRetransmits() throws Exception {
+    MetricRecorder recorder = mock(MetricRecorder.class);
+    TcpMetrics.epollInfo = FakeEpollTcpInfo.newAccessor();
+    TcpMetrics tracker = new TcpMetrics(recorder);
+
+    FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
+    infoSource.setValues(123, 4, 5000);
+    FakeEpollTcpInfo.FakeChannel channel = new FakeEpollTcpInfo.FakeChannel(infoSource);
 
     tracker.channelActive(channel);
 
@@ -180,18 +159,12 @@ public class TcpMetricsTest {
   @Test
   public void tracker_channelInactive_recordsRecurringRetransmits_raw_notDelta() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class,
-        FakeEpollTcpInfo.class.getConstructor(),
-        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
-        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
-        FakeEpollTcpInfo.class.getMethod("retrans"),
-        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.epollInfo = FakeEpollTcpInfo.newAccessor();
     TcpMetrics tracker = new TcpMetrics(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
-    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
+    FakeEpollTcpInfo.FakeChannel channel = new FakeEpollTcpInfo.FakeChannel(infoSource);
 
     tracker.channelActive(channel);
 
@@ -207,7 +180,7 @@ public class TcpMetricsTest {
     // Let's just create a new channel instance where tcpInfo sets retrans=5.
     FakeEpollTcpInfo infoSource2 = new FakeEpollTcpInfo();
     infoSource2.setValues(130, 5, 5000);
-    ConfigurableFakeWithTcpInfo channel2 = new ConfigurableFakeWithTcpInfo(infoSource2);
+    FakeEpollTcpInfo.FakeChannel channel2 = new FakeEpollTcpInfo.FakeChannel(infoSource2);
 
     tracker.channelInactive(channel2);
 
@@ -224,18 +197,12 @@ public class TcpMetricsTest {
   @Test
   public void tracker_periodicRecord_reportsDeltaForTotalRetrans() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class,
-        FakeEpollTcpInfo.class.getConstructor(),
-        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
-        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
-        FakeEpollTcpInfo.class.getMethod("retrans"),
-        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.epollInfo = FakeEpollTcpInfo.newAccessor();
     TcpMetrics tracker = new TcpMetrics(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
-    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
+    FakeEpollTcpInfo.FakeChannel channel = new FakeEpollTcpInfo.FakeChannel(infoSource);
 
     tracker.channelActive(channel);
 
@@ -278,18 +245,12 @@ public class TcpMetricsTest {
   @Test
   public void tracker_periodicRecord_doesNotReportZeroDeltaForTotalRetrans() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class,
-        FakeEpollTcpInfo.class.getConstructor(),
-        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
-        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
-        FakeEpollTcpInfo.class.getMethod("retrans"),
-        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.epollInfo = FakeEpollTcpInfo.newAccessor();
     TcpMetrics tracker = new TcpMetrics(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
-    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
+    FakeEpollTcpInfo.FakeChannel channel = new FakeEpollTcpInfo.FakeChannel(infoSource);
 
     tracker.channelActive(channel);
 
@@ -326,21 +287,6 @@ public class TcpMetricsTest {
         eq(0.005), any(), any());
   }
 
-  public static class ConfigurableFakeWithTcpInfo extends
-      io.netty.channel.embedded.EmbeddedChannel {
-    private final FakeEpollTcpInfo infoToCopy;
-
-    public ConfigurableFakeWithTcpInfo(FakeEpollTcpInfo infoToCopy) {
-      this.infoToCopy = infoToCopy;
-    }
-
-    public void tcpInfo(FakeEpollTcpInfo info) {
-      info.totalRetrans = infoToCopy.totalRetrans;
-      info.retransmits = infoToCopy.retransmits;
-      info.rtt = infoToCopy.rtt;
-    }
-  }
-
   private static class AddressOverrideEmbeddedChannel extends
       io.netty.channel.embedded.EmbeddedChannel {
     private final SocketAddress local;
@@ -366,17 +312,11 @@ public class TcpMetricsTest {
   public void tracker_reportsDeltas_correctly() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
 
-    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class,
-        FakeEpollTcpInfo.class.getConstructor(),
-        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
-        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
-        FakeEpollTcpInfo.class.getMethod("retrans"),
-        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.epollInfo = FakeEpollTcpInfo.newAccessor();
     TcpMetrics tracker = new TcpMetrics(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
-    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
+    FakeEpollTcpInfo.FakeChannel channel = new FakeEpollTcpInfo.FakeChannel(infoSource);
 
     // 10 retransmits total
     infoSource.setValues(10, 2, 1000);
@@ -552,18 +492,12 @@ public class TcpMetricsTest {
 
   @Test
   public void channelActive_schedulesReportTimer() throws Exception {
-    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class,
-        FakeEpollTcpInfo.class.getConstructor(),
-        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
-        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
-        FakeEpollTcpInfo.class.getMethod("retrans"),
-        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.epollInfo = FakeEpollTcpInfo.newAccessor();
 
     metrics = new TcpMetrics(metricRecorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
-    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
+    FakeEpollTcpInfo.FakeChannel channel = new FakeEpollTcpInfo.FakeChannel(infoSource);
 
     metrics.channelActive(channel);
 
@@ -591,18 +525,12 @@ public class TcpMetricsTest {
 
   @Test
   public void channelInactive_cancelsReportTimer() throws Exception {
-    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class,
-        FakeEpollTcpInfo.class.getConstructor(),
-        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
-        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
-        FakeEpollTcpInfo.class.getMethod("retrans"),
-        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.epollInfo = FakeEpollTcpInfo.newAccessor();
 
     metrics = new TcpMetrics(metricRecorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
-    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
+    FakeEpollTcpInfo.FakeChannel channel = new FakeEpollTcpInfo.FakeChannel(infoSource);
 
     metrics.channelActive(channel);
 
