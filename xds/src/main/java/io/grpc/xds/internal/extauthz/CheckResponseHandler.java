@@ -58,8 +58,7 @@ public class CheckResponseHandler {
   private AuthzResponse handleOkResponse(final CheckResponse response)
       throws HeaderMutationDisallowedException {
     if (!response.hasOkResponse()) {
-      return AuthzResponse.allow(
-          HeaderMutations.create(ImmutableList.of(), ImmutableList.of())).build();
+      return AuthzResponse.allow(HeaderMutations.EMPTY_MUTATIONS).build();
     }
     CheckResponseMutations allowedMutations =
         buildHeaderMutationsFromOkResponse(response.getOkResponse());

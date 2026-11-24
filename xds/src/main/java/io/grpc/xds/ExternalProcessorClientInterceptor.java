@@ -291,7 +291,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         new ConcurrentLinkedQueue<>();
     @Nullable private volatile DataPlaneListener<RespT> wrappedListener;
     private final HeaderMutationFilter mutationFilter;
-    private final HeaderMutator mutator = HeaderMutator.create();
     private final AtomicInteger pendingRequests = new AtomicInteger(0);
     private final ProcessingMode currentProcessingMode;
 
@@ -608,7 +607,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     requestHeaders,
                     response.getRequestHeaders().getResponse().getHeaderMutation(),
                     mutationFilter,
-                    mutator);
+                    HeaderMutator.HEADER_MUTATOR);
               }
               activateCall();
             }
@@ -634,7 +633,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     target,
                     response.getResponseHeaders().getResponse().getHeaderMutation(),
                     mutationFilter,
-                    mutator);
+                    HeaderMutator.HEADER_MUTATOR);
               }
               if (wrappedListener.isTrailersOnly()) {
                 wrappedListener.proceedWithClose();
@@ -655,7 +654,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     wrappedListener.getSavedTrailers(),
                     response.getResponseTrailers().getHeaderMutation(),
                     mutationFilter,
-                    mutator);
+                    HeaderMutator.HEADER_MUTATOR);
               }
               wrappedListener.proceedWithClose();
             }
@@ -1348,7 +1347,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
       Metadata trailers = new Metadata();
       if (immediate.hasHeaders()) {
-        applyHeaderMutations(trailers, immediate.getHeaders(), mutationFilter, mutator);
+        applyHeaderMutations(
+            trailers, immediate.getHeaders(), mutationFilter, HeaderMutator.HEADER_MUTATOR);
       }
 
       listener.setImmediateResponse(status, trailers);

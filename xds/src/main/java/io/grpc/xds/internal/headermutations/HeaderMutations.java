@@ -23,6 +23,10 @@ import com.google.common.collect.ImmutableList;
 @AutoValue
 public abstract class HeaderMutations {
 
+  /** Shared empty header mutations. */
+  public static final HeaderMutations EMPTY_MUTATIONS =
+      create(ImmutableList.of(), ImmutableList.of());
+
   public static HeaderMutations create(ImmutableList<HeaderValueOption> headers,
       ImmutableList<String> headersToRemove) {
     return new AutoValue_HeaderMutations(headers, headersToRemove);

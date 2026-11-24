@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.extauthz;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableList;
 import io.grpc.Status;
 import io.grpc.xds.internal.headermutations.HeaderMutations;
 import java.util.Optional;
@@ -37,15 +36,12 @@ abstract class AuthzResponse {
     DENY,
   }
 
-  private static final HeaderMutations EMPTY_MUTATIONS =
-      HeaderMutations.create(ImmutableList.of(), ImmutableList.of());
-
   /**
    * Creates a builder for an ALLOW response, initializing with the specified request header
    * mutations.
    */
   static Builder allow(HeaderMutations requestHeaderMutations) {
-    return allow(requestHeaderMutations, EMPTY_MUTATIONS);
+    return allow(requestHeaderMutations, HeaderMutations.EMPTY_MUTATIONS);
   }
 
   /**
@@ -60,14 +56,14 @@ abstract class AuthzResponse {
 
   /** Creates a builder for a DENY response, initializing with the specified status. */
   static Builder deny(Status status) {
-    return deny(status, EMPTY_MUTATIONS);
+    return deny(status, HeaderMutations.EMPTY_MUTATIONS);
   }
 
   /** Creates a builder for a DENY response with status and response trailer mutations. */
   static Builder deny(Status status, HeaderMutations responseHeaderMutations) {
     return new AutoValue_AuthzResponse.Builder().setDecision(Decision.DENY)
         .setResponseHeaderMutations(responseHeaderMutations)
-        .setRequestHeaderMutations(EMPTY_MUTATIONS)
+        .setRequestHeaderMutations(HeaderMutations.EMPTY_MUTATIONS)
         .setStatus(status);
   }
 
