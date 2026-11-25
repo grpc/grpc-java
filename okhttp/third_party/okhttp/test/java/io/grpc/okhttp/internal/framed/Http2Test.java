@@ -208,9 +208,10 @@ public class Http2Test {
     Buffer wire = new Buffer();
     Http2.Writer writer = new Http2.Writer(wire, true);
 
-    // 0xFFFFFFFF == -1 as signed int; must be handled as set and saturated to 16384.
+    // 0xFFFFFFFF (-1 signed) must saturate to Integer.MAX_VALUE and clamp encoder to 16384.
     Settings maxSettings = readSingleSettings(Settings.HEADER_TABLE_SIZE, 0xFFFFFFFF);
     assertTrue(maxSettings.isSet(Settings.HEADER_TABLE_SIZE));
+    assertEquals(Integer.MAX_VALUE, maxSettings.get(Settings.HEADER_TABLE_SIZE));
     writer.ackSettings(maxSettings);
     consumeFrame(wire); // SETTINGS ACK
 
@@ -269,6 +270,23 @@ public class Http2Test {
     assertEquals(2000, decoder.maxDynamicTableByteCount());
     assertEquals(Collections.singletonList(new Header("foo", "bar")),
         decoder.getAndResetHeaderList());
+  }
+
+  @Test
+  public void readSettings_unsignedUint32SaturatesToMaxInt() throws IOException {
+    for (int unsignedVal : new int[] {0x80000000, 0xFFFFFFFF}) {
+      Settings headerTable = readSingleSettings(1 /* SETTINGS_HEADER_TABLE_SIZE */, unsignedVal);
+      assertTrue(headerTable.isSet(Settings.HEADER_TABLE_SIZE));
+      assertEquals(Integer.MAX_VALUE, headerTable.get(Settings.HEADER_TABLE_SIZE));
+
+      Settings maxStreams = readSingleSettings(3 /* SETTINGS_MAX_CONCURRENT_STREAMS */, unsignedVal);
+      assertTrue(maxStreams.isSet(Settings.MAX_CONCURRENT_STREAMS));
+      assertEquals(Integer.MAX_VALUE, maxStreams.get(Settings.MAX_CONCURRENT_STREAMS));
+
+      Settings maxHeaderList = readSingleSettings(6 /* SETTINGS_MAX_HEADER_LIST_SIZE */, unsignedVal);
+      assertTrue(maxHeaderList.isSet(Settings.MAX_HEADER_LIST_SIZE));
+      assertEquals(Integer.MAX_VALUE, maxHeaderList.get(Settings.MAX_HEADER_LIST_SIZE));
+    }
   }
 
   private Settings readSingleSettings(int id, int value) throws IOException {

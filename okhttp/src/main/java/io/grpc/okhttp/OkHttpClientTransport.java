@@ -1504,8 +1504,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         if (OkHttpSettingsUtil.isSet(settings, OkHttpSettingsUtil.MAX_CONCURRENT_STREAMS)) {
           int receivedMaxConcurrentStreams = OkHttpSettingsUtil.get(
               settings, OkHttpSettingsUtil.MAX_CONCURRENT_STREAMS);
-          maxConcurrentStreams = receivedMaxConcurrentStreams < 0
-              ? Integer.MAX_VALUE : receivedMaxConcurrentStreams;
+          maxConcurrentStreams = receivedMaxConcurrentStreams;
         }
 
         if (OkHttpSettingsUtil.isSet(settings, OkHttpSettingsUtil.INITIAL_WINDOW_SIZE)) {
