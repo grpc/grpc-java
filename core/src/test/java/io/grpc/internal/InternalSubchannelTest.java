@@ -326,58 +326,10 @@ public class InternalSubchannelTest {
     verify(mockBackoffPolicy2, times(backoff2Consulted)).nextBackoffNanos();
   }
 
-  @Test public void twoAddressesReconnectDisabled() {
-    SocketAddress addr1 = mock(SocketAddress.class);
-    SocketAddress addr2 = mock(SocketAddress.class);
-    createInternalSubchannel(true,
-        new EquivalentAddressGroup(Arrays.asList(addr1, addr2)));
-    assertEquals(IDLE, internalSubchannel.getState());
-
-    assertNull(internalSubchannel.obtainActiveTransport());
-    assertExactCallbackInvokes("onStateChange:CONNECTING");
-    assertEquals(CONNECTING, internalSubchannel.getState());
-    verify(mockTransportFactory).newClientTransport(eq(addr1), any(), any());
-    // Let this one fail without success
-    transports.poll().listener.transportShutdown(Status.UNAVAILABLE,
-        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
-    // Still in CONNECTING
-    assertNull(internalSubchannel.obtainActiveTransport());
-    assertNoCallbackInvoke();
-    assertEquals(CONNECTING, internalSubchannel.getState());
-
-    // Second attempt will start immediately. Still no back-off policy.
-    verify(mockBackoffPolicyProvider, times(0)).get();
-    verify(mockTransportFactory, times(1))
-        .newClientTransport(
-            eq(addr2),
-            eq(createClientTransportOptions()),
-            isA(TransportLogger.class));
-    assertNull(internalSubchannel.obtainActiveTransport());
-    // Fail this one too
-    assertNoCallbackInvoke();
-    transports.poll().listener.transportShutdown(Status.UNAVAILABLE,
-        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
-    // All addresses have failed, but we aren't controlling retries.
-    assertEquals(IDLE, internalSubchannel.getState());
-    assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
-    // Backoff reset and first back-off interval begins
-    verify(mockBackoffPolicy1, never()).nextBackoffNanos();
-    verify(mockBackoffPolicyProvider, never()).get();
-    assertTrue("Nothing should have been scheduled", fakeClock.getPendingTasks().isEmpty());
-
-    // Should follow orders and create an active transport.
-    internalSubchannel.obtainActiveTransport();
-    assertExactCallbackInvokes("onStateChange:CONNECTING");
-    assertEquals(CONNECTING, internalSubchannel.getState());
-
-    // Shouldn't have anything scheduled, so shouldn't do anything
-    assertTrue("Nothing should have been scheduled 2", fakeClock.getPendingTasks().isEmpty());
-  }
-
   @Test public void twoAddressesReconnect() {
     SocketAddress addr1 = mock(SocketAddress.class);
     SocketAddress addr2 = mock(SocketAddress.class);
-    createInternalSubchannel(false,
+    createInternalSubchannel(
         new EquivalentAddressGroup(Arrays.asList(addr1, addr2)));
     assertEquals(IDLE, internalSubchannel.getState());
     // Invocation counters
@@ -1474,21 +1426,12 @@ public class InternalSubchannelTest {
   }
 
   private void createInternalSubchannel(EquivalentAddressGroup ... addrs) {
-    createInternalSubchannel(false, addrs);
-  }
-
-  private void createInternalSubchannel(boolean reconnectDisabled,
-                                        EquivalentAddressGroup ... addrs) {
     List<EquivalentAddressGroup> addressGroups = Arrays.asList(addrs);
     InternalLogId logId = InternalLogId.allocate("Subchannel", /*details=*/ AUTHORITY);
     ChannelTracer subchannelTracer = new ChannelTracer(logId, 10,
         fakeClock.getTimeProvider().currentTimeNanos(), "Subchannel");
-    LoadBalancer.CreateSubchannelArgs.Builder argBuilder =
-        LoadBalancer.CreateSubchannelArgs.newBuilder().setAddresses(addressGroups);
-    if (reconnectDisabled) {
-      argBuilder.addOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY, reconnectDisabled);
-    }
-    LoadBalancer.CreateSubchannelArgs createSubchannelArgs = argBuilder.build();
+    LoadBalancer.CreateSubchannelArgs createSubchannelArgs =
+        LoadBalancer.CreateSubchannelArgs.newBuilder().setAddresses(addressGroups).build();
     internalSubchannel = new InternalSubchannel(
         createSubchannelArgs,
         AUTHORITY, USER_AGENT,
