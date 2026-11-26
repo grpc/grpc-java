@@ -46,7 +46,7 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    * Creates a channel builder that will bind to a remote Android service.
    *
    * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
-   * after 30 minutes without use by default but can be configured via {@link
+   * after 60 seconds without use by default but can be configured via {@link
    * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
    * ManagedChannel#enterIdle()}.
    *
@@ -71,7 +71,7 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    * BinderChannelCredentials.
    *
    * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
-   * after 30 minutes without use by default but can be configured via {@link
+   * after 60 seconds without use by default but can be configured via {@link
    * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
    * ManagedChannel#enterIdle()}.
    *
@@ -98,7 +98,7 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    * which will be resolved.
    *
    * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
-   * after 30 minutes without use by default but can be configured via {@link
+   * after 60 seconds without use by default but can be configured via {@link
    * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
    * ManagedChannel#enterIdle()}.
    *
@@ -120,7 +120,7 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    * which will be resolved.
    *
    * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
-   * after 30 minutes without use by default but can be configured via {@link
+   * after 60 seconds without use by default but can be configured via {@link
    * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
    * ManagedChannel#enterIdle()}.
    *
