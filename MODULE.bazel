@@ -129,6 +129,10 @@ maven.override(
     target = "@io_grpc_grpc_java//auth",
 )
 maven.override(
+    coordinates = "io.grpc:grpc-autosharding",
+    target = "@io_grpc_grpc_java//autosharding",
+)
+maven.override(
     coordinates = "io.grpc:grpc-census",
     target = "@io_grpc_grpc_java//census",
 )
