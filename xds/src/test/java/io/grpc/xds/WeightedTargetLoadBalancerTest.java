@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancerMatchers.pickerReturns;
@@ -441,6 +442,75 @@ public class WeightedTargetLoadBalancerTest {
     // WeightedTargetLLoadBalancer, the overall balancing state should only be updated once.
     verify(helper, times(1)).updateBalancingState(any(), any());
 
+  }
+
+  @Test
+  public void childReportingIdleRequestsConnectionDeferred() {
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
+        "target0", weightedLbConfig0,
+        "target1", weightedLbConfig1);
+    weightedTargetLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
+            .build());
+
+    // When called from inside the sync context, requestConnection() must be deferred until
+    // updateBalancingState() returns.
+    syncContext.execute(() -> {
+      childHelpers.get(0).updateBalancingState(IDLE, mock(SubchannelPicker.class));
+      verify(childBalancers.get(0), never()).requestConnection();
+      verify(childBalancers.get(1), never()).requestConnection();
+    });
+
+    // After the sync context drains, only the IDLE child gets requestConnection().
+    verify(childBalancers.get(0)).requestConnection();
+    verify(childBalancers.get(1), never()).requestConnection();
+  }
+
+  @Test
+  public void childRemovedBeforeDeferredRequestConnectionNotCalled() {
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
+        "target0", weightedLbConfig0,
+        "target1", weightedLbConfig1);
+    weightedTargetLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
+            .build());
+
+    // target0 reports IDLE (queuing a deferred requestConnection), then is removed before the
+    // deferred task runs.
+    syncContext.execute(() -> {
+      childHelpers.get(0).updateBalancingState(IDLE, mock(SubchannelPicker.class));
+      weightedTargetLb.acceptResolvedAddresses(
+          ResolvedAddresses.newBuilder()
+              .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+              .setLoadBalancingPolicyConfig(
+                  new WeightedTargetConfig(ImmutableMap.of("target1", weightedLbConfig1)))
+              .build());
+    });
+
+    verify(childBalancers.get(0)).shutdown();
+    verify(childBalancers.get(0), never()).requestConnection();
+    verify(childBalancers.get(1), never()).requestConnection();
+  }
+
+  @Test
+  public void requestConnectionForwardsToAllChildren() {
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
+        "target0", weightedLbConfig0,
+        "target1", weightedLbConfig1);
+    weightedTargetLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
+            .build());
+
+    weightedTargetLb.requestConnection();
+
+    verify(childBalancers.get(0)).requestConnection();
+    verify(childBalancers.get(1)).requestConnection();
   }
 
   private Object newChildConfig(LoadBalancerProvider provider, Object config) {
