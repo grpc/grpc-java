@@ -1,0 +1,40 @@
+load("@com_google_protobuf//bazel:java_proto_library.bzl", "java_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load("@rules_java//java:defs.bzl", "java_library")
+load("@rules_jvm_external//:defs.bzl", "artifact")
+load("//:java_grpc_library.bzl", "java_grpc_library")
+
+java_library(
+    name = "autosharding",
+    srcs = glob([
+        "src/main/java/io/grpc/autosharding/*.java",
+    ]),
+    visibility = ["//visibility:public"],
+    deps = [
+        "//api",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
+    ],
+)
+
+proto_library(
+    name = "autosharding_proto",
+    srcs = ["third_party/autosharding/src/main/proto/autosharding/v1/autosharding.proto"],
+    strip_import_prefix = "third_party/autosharding/src/main/proto/",
+    deps = [
+        "@com_google_googleapis//google/api:field_behavior_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+java_proto_library(
+    name = "autosharding_java_proto",
+    deps = [":autosharding_proto"],
+)
+
+java_grpc_library(
+    name = "autosharding_java_grpc",
+    srcs = [":autosharding_proto"],
+    deps = [":autosharding_java_proto"],
+)
