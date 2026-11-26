@@ -135,6 +135,13 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  public void requestConnection() {
+    for (LoadBalancer childBalancer : childBalancers.values()) {
+      childBalancer.requestConnection();
+    }
+  }
+
+  @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
     for (LoadBalancer childBalancer : childBalancers.values()) {
@@ -215,6 +222,16 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       // will be updated at the end of it, and we don't need to trigger that update here.
       if (!resolvingAddresses && childBalancers.containsKey(name)) {
         updateOverallBalancingState();
+      }
+      // If a child reports IDLE, ask it to exit IDLE on the synchronization context so that
+      // lazy/pick_first children reconnect instead of stalling behind the queueing picker.
+      if (newState == IDLE && childBalancers.containsKey(name)) {
+        helper.getSynchronizationContext().execute(() -> {
+          LoadBalancer childBalancer = childBalancers.get(name);
+          if (childBalancer != null) {
+            childBalancer.requestConnection();
+          }
+        });
       }
     }
 

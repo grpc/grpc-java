@@ -27,12 +27,14 @@ import com.github.xds.type.v3.TypedStruct;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.Struct;
+import com.google.protobuf.UInt32Value;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
 import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
@@ -44,6 +46,7 @@ import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.pick_first.v3.PickFirst;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -51,6 +54,7 @@ import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ConnectivityState;
 import io.grpc.FlagResetRule;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
@@ -66,6 +70,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NoopMetricSink;
 import io.grpc.Server;
+import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
@@ -195,6 +200,91 @@ public class FakeControlPlaneXdsIntegrationTest {
           Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER))).isEqualTo("bar");
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(metadataLbProvider);
+    }
+  }
+
+  @Test
+  public void wrrLocality_pickFirstReconnectAfterIdle() throws Exception {
+    Server server1 = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+        .addService(new SimpleServiceGrpc.SimpleServiceImplBase() {
+          @Override
+          public void unaryRpc(SimpleRequest req, StreamObserver<SimpleResponse> respObserver) {
+            respObserver.onNext(SimpleResponse.newBuilder().setResponseMessage("server1").build());
+            respObserver.onCompleted();
+          }
+        })
+        .build()
+        .start();
+    Server server2 = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+        .addService(new SimpleServiceGrpc.SimpleServiceImplBase() {
+          @Override
+          public void unaryRpc(SimpleRequest req, StreamObserver<SimpleResponse> respObserver) {
+            respObserver.onNext(SimpleResponse.newBuilder().setResponseMessage("server2").build());
+            respObserver.onCompleted();
+          }
+        })
+        .build()
+        .start();
+
+    try {
+      Policy pickFirstPolicy = Policy.newBuilder()
+          .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+              .setTypedConfig(Any.pack(PickFirst.getDefaultInstance())))
+          .build();
+      Policy wrrLocalityPolicy = Policy.newBuilder()
+          .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+              .setTypedConfig(Any.pack(WrrLocality.newBuilder()
+                  .setEndpointPickingPolicy(
+                      LoadBalancingPolicy.newBuilder().addPolicies(pickFirstPolicy))
+                  .build())))
+          .build();
+      controlPlane.setCdsConfig(
+          ControlPlaneRule.buildCluster().toBuilder()
+              .setLoadBalancingPolicy(
+                  LoadBalancingPolicy.newBuilder().addPolicies(wrrLocalityPolicy))
+              .build());
+      controlPlane.setEdsConfig(
+          ClusterLoadAssignment.newBuilder()
+              .setClusterName("eds-service-0")
+              .addEndpoints(LocalityLbEndpoints.newBuilder()
+                  .setLoadBalancingWeight(UInt32Value.of(10))
+                  .setPriority(0)
+                  .addLbEndpoints(LbEndpoint.newBuilder()
+                      .setEndpoint(Endpoint.newBuilder().setAddress(Address.newBuilder()
+                          .setSocketAddress(SocketAddress.newBuilder()
+                              .setAddress("127.0.0.1")
+                              .setPortValue(server1.getPort()))))
+                      .setHealthStatus(HealthStatus.HEALTHY))
+                  .addLbEndpoints(LbEndpoint.newBuilder()
+                      .setEndpoint(Endpoint.newBuilder().setAddress(Address.newBuilder()
+                          .setSocketAddress(SocketAddress.newBuilder()
+                              .setAddress("127.0.0.1")
+                              .setPortValue(server2.getPort()))))
+                      .setHealthStatus(HealthStatus.HEALTHY)))
+              .build());
+
+      ManagedChannel channel = dataPlane.getManagedChannel();
+      SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(channel);
+
+      // Verify initial RPC succeeds on server1.
+      SimpleResponse resp1 = stub.withDeadlineAfter(5, TimeUnit.SECONDS)
+          .unaryRpc(SimpleRequest.getDefaultInstance());
+      assertThat(resp1.getResponseMessage()).isEqualTo("server1");
+
+      // Stop server1 so pick_first transitions READY -> IDLE.
+      CountDownLatch leftReadyLatch = new CountDownLatch(1);
+      channel.notifyWhenStateChanged(ConnectivityState.READY, leftReadyLatch::countDown);
+      server1.shutdownNow();
+      assertThat(server1.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(leftReadyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+      // Send another RPC; it should fail over via pick_first to server2.
+      SimpleResponse resp2 = stub.withDeadlineAfter(2, TimeUnit.SECONDS)
+          .unaryRpc(SimpleRequest.getDefaultInstance());
+      assertThat(resp2.getResponseMessage()).isEqualTo("server2");
+    } finally {
+      server1.shutdownNow();
+      server2.shutdownNow();
     }
   }
 
