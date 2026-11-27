@@ -1197,6 +1197,118 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             .getCertificateName()).isEqualTo("CERT3");
   }
 
+  @Test
+  public void destPrefixRange_zeroLengthMoreSpecificThanUnspecified() throws Exception {
+    EnvoyServerProtoData.DownstreamTlsContext tlsContextUnspecified =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
+    EnvoyServerProtoData.DownstreamTlsContext tlsContextZeroLength =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
+
+    EnvoyServerProtoData.FilterChainMatch filterChainMatchUnspecified =
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0 /* destinationPort */,
+            ImmutableList.of() /* prefixRange */,
+            ImmutableList.of() /* applicationProtocol */,
+            ImmutableList.of() /* sourcePrefixRanges */,
+            EnvoyServerProtoData.ConnectionSourceType.ANY /* sourceType */,
+            ImmutableList.of() /* sourcePorts */,
+            ImmutableList.of() /* serverNames */,
+            "" /* transportProtocol */);
+    EnvoyServerProtoData.FilterChainMatch filterChainMatchZeroLength =
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0 /* destinationPort */,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("0.0.0.0"), 0)) /* prefixRange */,
+            ImmutableList.of() /* applicationProtocol */,
+            ImmutableList.of() /* sourcePrefixRanges */,
+            EnvoyServerProtoData.ConnectionSourceType.ANY /* sourceType */,
+            ImmutableList.of() /* sourcePorts */,
+            ImmutableList.of() /* serverNames */,
+            "" /* transportProtocol */);
+    EnvoyServerProtoData.FilterChain filterChainUnspecified =
+        EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-unspecified", filterChainMatchUnspecified, HTTP_CONNECTION_MANAGER,
+            tlsContextUnspecified, tlsContextManager);
+    EnvoyServerProtoData.FilterChain filterChainZeroLength =
+        EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-zero-length", filterChainMatchZeroLength, HTTP_CONNECTION_MANAGER,
+            tlsContextZeroLength, tlsContextManager);
+
+    selectorManager.updateSelector(new FilterChainSelector(
+        ImmutableMap.of(filterChainUnspecified, randomConfig("unspecified"),
+            filterChainZeroLength, noopConfig),
+        null, new AtomicReference<ServerRoutingConfig>()));
+
+    FilterChainMatchingHandler filterChainMatchingHandler =
+        new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
+    ChannelHandler next = captureAttrHandler(sslSet, routingSettable);
+    when(mockDelegate.newHandler(grpcHandler)).thenReturn(next);
+    setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
+    pipeline.fireUserEventTriggered(event);
+    channel.runPendingTasks();
+    channel.checkException();
+    assertThat(sslSet.isDone()).isTrue();
+    assertThat(sslSet.get()).isEqualTo(filterChainZeroLength.sslContextProviderSupplier());
+    assertThat(routingSettable.get()).isEqualTo(noopConfig);
+    assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextZeroLength);
+  }
+
+  @Test
+  public void sourcePrefixRange_zeroLengthMoreSpecificThanUnspecified() throws Exception {
+    EnvoyServerProtoData.DownstreamTlsContext tlsContextUnspecified =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
+    EnvoyServerProtoData.DownstreamTlsContext tlsContextZeroLength =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
+
+    EnvoyServerProtoData.FilterChainMatch filterChainMatchUnspecified =
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0 /* destinationPort */,
+            ImmutableList.of() /* prefixRange */,
+            ImmutableList.of() /* applicationProtocol */,
+            ImmutableList.of() /* sourcePrefixRanges */,
+            EnvoyServerProtoData.ConnectionSourceType.ANY /* sourceType */,
+            ImmutableList.of() /* sourcePorts */,
+            ImmutableList.of() /* serverNames */,
+            "" /* transportProtocol */);
+    EnvoyServerProtoData.FilterChainMatch filterChainMatchZeroLength =
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0 /* destinationPort */,
+            ImmutableList.of() /* prefixRange */,
+            ImmutableList.of() /* applicationProtocol */,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("0.0.0.0"), 0)) /* sourcePrefixRanges */,
+            EnvoyServerProtoData.ConnectionSourceType.ANY /* sourceType */,
+            ImmutableList.of() /* sourcePorts */,
+            ImmutableList.of() /* serverNames */,
+            "" /* transportProtocol */);
+    EnvoyServerProtoData.FilterChain filterChainUnspecified =
+        EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-unspecified", filterChainMatchUnspecified, HTTP_CONNECTION_MANAGER,
+            tlsContextUnspecified, tlsContextManager);
+    EnvoyServerProtoData.FilterChain filterChainZeroLength =
+        EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-zero-length", filterChainMatchZeroLength, HTTP_CONNECTION_MANAGER,
+            tlsContextZeroLength, tlsContextManager);
+
+    selectorManager.updateSelector(new FilterChainSelector(
+        ImmutableMap.of(filterChainUnspecified, randomConfig("unspecified"),
+            filterChainZeroLength, noopConfig),
+        null, new AtomicReference<ServerRoutingConfig>()));
+
+    FilterChainMatchingHandler filterChainMatchingHandler =
+        new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
+    ChannelHandler next = captureAttrHandler(sslSet, routingSettable);
+    when(mockDelegate.newHandler(grpcHandler)).thenReturn(next);
+    setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
+    pipeline.fireUserEventTriggered(event);
+    channel.runPendingTasks();
+    channel.checkException();
+    assertThat(sslSet.isDone()).isTrue();
+    assertThat(sslSet.get()).isEqualTo(filterChainZeroLength.sslContextProviderSupplier());
+    assertThat(routingSettable.get()).isEqualTo(noopConfig);
+    assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextZeroLength);
+  }
+
   private static HttpConnectionManager createRds(String name) {
     return HttpConnectionManager.forRdsName(0L, name,
             new ArrayList<NamedFilterConfig>());
