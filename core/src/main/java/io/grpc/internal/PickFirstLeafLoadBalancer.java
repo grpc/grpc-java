@@ -492,9 +492,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   /**
   * Happy Eyeballs
   * Schedules connection attempt to happen after a delay to the next available address.
+  * As per gRFC A61, no timer is started if the current address is the last one in the list.
   */
   private void scheduleNextConnection() {
     if (!enableHappyEyeballs
+        || !addressIndex.hasNext()
         || (scheduleConnectionTask != null && scheduleConnectionTask.isPending())) {
       return;
     }
@@ -503,7 +505,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       @Override
       public void run() {
         scheduleConnectionTask = null;
-        if (addressIndex.increment()) {
+        // The address list may have changed since this was scheduled. Stay on the last address,
+        // so that its failure can still start over from the beginning if addresses were skipped.
+        if (addressIndex.hasNext()) {
+          addressIndex.increment();
           requestConnection();
         }
       }
@@ -637,6 +642,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     public boolean isAtBeginning() {
       return activeElement == 0;
+    }
+
+    /**
+     * Returns true if the current address is valid and is not the last one in the list.
+     */
+    public boolean hasNext() {
+      return activeElement < orderedAddresses.size() - 1;
     }
 
     /**

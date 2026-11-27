@@ -70,7 +70,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.TestUtils;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.protobuf.ProtoUtils;
@@ -298,8 +297,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
 
     assertThat(getAddressesFromPick(weightedPicker)).isEqualTo(servers.get(0));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
@@ -355,8 +353,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
     assertThat(getAddresses(pickResult)).isEqualTo(servers.get(0));
     assertThat(pickResult.getStreamTracerFactory()).isNotNull(); // verify per-request listener
@@ -585,8 +582,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs))
         .isEqualTo(PickResult.withNoResult());
-    int expectedCount = isEnabledHappyEyeballs() ? servers.size() + 1 : 1;
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo( expectedCount);
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
   }
 
   @Test
@@ -618,8 +614,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    int expectedCount = isEnabledHappyEyeballs() ? 2 : 1;
-    assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(expectedCount);
+    assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 10000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
@@ -640,10 +635,6 @@ public class WeightedRoundRobinLoadBalancerTest {
     // after blackout period
     assertThat(Math.abs(pickCount.get(servers.get(0)) / 10000.0 - 2.0 / 3)).isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(servers.get(1)) / 10000.0 - 1.0 / 3)).isLessThan(0.002);
-  }
-
-  private boolean isEnabledHappyEyeballs() {
-    return PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
   }
 
   @Test
@@ -683,8 +674,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     assertThat(getAddressesFromPick(weightedPicker)).isEqualTo(servers.get(0));
     assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
@@ -703,8 +693,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
-    expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
-    assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(expectedTasks);
+    assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
     assertThat(getAddressesFromPick(weightedPicker)).isEqualTo(servers.get(1));
     assertThat(getAddressesFromPick(weightedPicker)).isEqualTo(servers.get(0));
   }
@@ -739,8 +728,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         weightedConfig.parsedMetricNamesForComputingUtilization).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
-    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
@@ -782,8 +770,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         getWrrPicker(pickerCaptor.getAllValues().get(1));
-    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
-    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     Map<EquivalentAddressGroup, Integer> qpsByChannel = ImmutableMap.of(servers.get(0), 2,
         servers.get(1), 1);
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
@@ -910,8 +897,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         }
       }
     }).start();
-    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
-    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     barrier.await();
     for (int i = 0; i < 1000; i++) {
       EquivalentAddressGroup result = getAddresses(weightedPicker.pickSubchannel(mockArgs));
