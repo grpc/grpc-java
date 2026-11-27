@@ -334,6 +334,10 @@ final class RbacFilter implements Filter {
 
   private static AuthenticatedMatcher parseAuthenticatedMatcher(
           Principal.Authenticated proto) {
+    // An unset principal_name matches any authenticated (TLS) connection.
+    if (!proto.hasPrincipalName()) {
+      return AuthenticatedMatcher.create(null);
+    }
     Matchers.StringMatcher matcher = MatcherParser.parseStringMatcher(proto.getPrincipalName());
     return AuthenticatedMatcher.create(matcher);
   }
