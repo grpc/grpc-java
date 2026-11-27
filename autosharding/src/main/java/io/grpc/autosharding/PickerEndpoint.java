@@ -23,14 +23,10 @@ import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import javax.annotation.Nullable;
 
-/**
- * Immutable snapshot of endpoint state used by {@link AutoShardingPicker}.
- */
+/** Immutable snapshot of endpoint state used by {@link AutoShardingPicker}. */
 final class PickerEndpoint {
 
-  /**
-   * Callback interface to trigger connection attempts on an IDLE endpoint's child balancer.
-   */
+  /** Callback interface to trigger connection attempts on an IDLE endpoint's child balancer. */
   @FunctionalInterface
   interface ExitIdler {
     /**
@@ -51,7 +47,8 @@ final class PickerEndpoint {
    *
    * @param state the current connectivity state of the endpoint
    * @param picker the latest subchannel picker for the endpoint
-   * @param exitIdler a callback to trigger an IDLE child balancer to start connecting
+   * @param exitIdler a callback to trigger an IDLE child balancer to start connecting, or null
+   *     if the endpoint cannot be asked to connect
    */
   PickerEndpoint(
       ConnectivityState state,
