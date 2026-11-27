@@ -281,6 +281,56 @@ public class RingHashLoadBalancerProviderTest {
     }
   }
 
+  @Test
+  public void parseLoadBalancingConfig_requestHashHeaderWithBinSuffix_rejected()
+      throws IOException {
+    System.setProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY, "true");
+    try {
+      String lbConfig = "{\"requestHashHeader\" : \"dummy-hash-bin\"}";
+      ConfigOrError configOrError =
+          provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+      assertThat(configOrError.getError()).isNotNull();
+      assertThat(configOrError.getError().getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(configOrError.getError().getDescription())
+          .isEqualTo("Invalid 'requestHashHeader': dummy-hash-bin");
+    } finally {
+      System.clearProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY);
+    }
+  }
+
+  @Test
+  public void parseLoadBalancingConfig_requestHashHeaderWithInvalidCharacters_rejected()
+      throws IOException {
+    System.setProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY, "true");
+    try {
+      String lbConfig = "{\"requestHashHeader\" : \"dummy!hash\"}";
+      ConfigOrError configOrError =
+          provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+      assertThat(configOrError.getError()).isNotNull();
+      assertThat(configOrError.getError().getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(configOrError.getError().getDescription())
+          .isEqualTo("Invalid 'requestHashHeader': dummy!hash");
+    } finally {
+      System.clearProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY);
+    }
+  }
+
+  @Test
+  public void parseLoadBalancingConfig_requestHashHeaderMixedCase_lowerCased()
+      throws IOException {
+    System.setProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY, "true");
+    try {
+      String lbConfig = "{\"requestHashHeader\" : \"Dummy-Hash\"}";
+      ConfigOrError configOrError =
+          provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+      assertThat(configOrError.getConfig()).isNotNull();
+      RingHashConfig config = (RingHashConfig) configOrError.getConfig();
+      assertThat(config.requestHashHeader).isEqualTo("dummy-hash");
+    } finally {
+      System.clearProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY);
+    }
+  }
+
   @SuppressWarnings("unchecked")
   private static Map<String, ?> parseJsonObject(String json) throws IOException {
     return (Map<String, ?>) JsonParser.parse(json);
