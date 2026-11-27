@@ -50,6 +50,7 @@ import io.grpc.okhttp.internal.framed.HeadersMode;
 import io.grpc.okhttp.internal.framed.Http2;
 import io.grpc.okhttp.internal.framed.Settings;
 import io.grpc.okhttp.internal.framed.Variant;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
@@ -583,7 +584,18 @@ final class OkHttpServerTransport implements ServerTransport,
       String threadName = Thread.currentThread().getName();
       Thread.currentThread().setName("OkHttpServerTransport");
       try {
-        frameReader.readConnectionPreface();
+        try {
+          frameReader.readConnectionPreface();
+        } catch (EOFException | SocketException e) {
+          // The client went away before sending the preface, e.g. a TCP health check from a load
+          // balancer. Closing without reading the server's SETTINGS resets the connection, so this
+          // can be a SocketException as well as an EOF. This is expected, so don't log a warning.
+          log.log(Level.FINE, "Connection closed before receiving the connection preface", e);
+          abruptShutdown(ErrorCode.INTERNAL_ERROR, "Connection closed reading connection preface",
+              Status.UNAVAILABLE.withDescription("Connection closed before connection preface"),
+              false);
+          return;
+        }
         if (!frameReader.nextFrame(this)) {
           connectionError(ErrorCode.INTERNAL_ERROR, "Failed to read initial SETTINGS");
           return;
