@@ -2746,7 +2746,7 @@ public class PickFirstLeafLoadBalancerTest {
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
-    // Move off the end of the list, but connections requests haven't been completed
+    // The last address has no timer, so waiting doesn't move off the end of the list
     forwardTimeByConnectionDelay();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
@@ -2923,6 +2923,110 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
+  public void happy_eyeballs_no_connection_delay_timer_for_single_address() {
+    assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+    acceptXSubchannels(1);
+    verify(mockSubchannel1).requestConnection();
+
+    // The only address is also the last one, so no Connection Attempt Delay timer is started
+    assertEquals(0, fakeClock.numPendingTasks());
+    assertThat(loadBalancer.isIndexValid()).isTrue();
+    assertEquals(0, loadBalancer.getIndexLocation());
+  }
+
+  @Test
+  public void happy_eyeballs_no_connection_delay_timer_for_last_address() {
+    assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+    acceptXSubchannels(3);
+    verify(mockSubchannel1).requestConnection();
+    assertEquals(1, fakeClock.numPendingTasks());
+
+    forwardTimeByConnectionDelay();
+    verify(mockSubchannel2).requestConnection();
+    assertEquals(1, fakeClock.numPendingTasks());
+
+    // Starting the last address doesn't start a timer, so the index stays on it
+    forwardTimeByConnectionDelay();
+    verify(mockSubchannel3).requestConnection();
+    assertEquals(0, fakeClock.numPendingTasks());
+    assertThat(loadBalancer.isIndexValid()).isTrue();
+    assertEquals(2, loadBalancer.getIndexLocation());
+  }
+
+  @Test
+  public void happy_eyeballs_seek_to_middle_on_update_tries_skipped_address() {
+    assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Lists.newArrayList(servers.get(0), servers.get(1), servers.get(2)))
+        .setAttributes(affinity).build());
+    forwardTimeByConnectionDelay();
+    verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+
+    // While server2 is connecting, server1 is replaced by server4. The LB keeps the attempt to
+    // server2 and seeks to it, skipping server4 for now.
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Lists.newArrayList(servers.get(3), servers.get(1), servers.get(2)))
+        .setAttributes(affinity).build());
+    verify(mockSubchannel1).shutdown();
+    verify(mockSubchannel4, never()).start(any());
+
+    // The pending timer starts server3, the last address
+    forwardTimeByConnectionDelay();
+    verify(mockSubchannel3).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
+    forwardTimeByConnectionDelay();
+
+    // Once server2 and server3 fail, the skipped server4 is attempted
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
+    stateListener3.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
+    verify(mockSubchannel4).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener4 = stateListenerCaptor.getValue();
+    verify(mockSubchannel4).requestConnection();
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+
+    // The first pass completes once every address has failed
+    stateListener4.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
+    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
+    verify(mockHelper).refreshNameResolution();
+  }
+
+  @Test
+  public void happy_eyeballs_stale_timer_does_not_move_past_last_address() {
+    assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Lists.newArrayList(servers.get(0), servers.get(1), servers.get(2)))
+        .setAttributes(affinity).build());
+    forwardTimeByConnectionDelay();
+    verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    assertEquals(1, fakeClock.numPendingTasks());
+
+    // While server2 is connecting, the list becomes [server4, server2]. The LB keeps the attempt
+    // to server2, which is now the last address, while the timer started for it is pending.
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Lists.newArrayList(servers.get(3), servers.get(1)))
+        .setAttributes(affinity).build());
+    verify(mockSubchannel1).shutdown();
+
+    // The stale timer fires, but there is no next address to move to
+    forwardTimeByConnectionDelay();
+    assertThat(loadBalancer.isIndexValid()).isTrue();
+    verify(mockSubchannel4, never()).start(any());
+
+    // Once server2 fails, the skipped server4 is attempted
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
+    verify(mockSubchannel4).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener4 = stateListenerCaptor.getValue();
+    verify(mockSubchannel4).requestConnection();
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+
+    stateListener4.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
+    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
+    verify(mockHelper).refreshNameResolution();
+  }
+
+  @Test
   public void advance_index_then_request_connection() {
     loadBalancer.requestConnection(); // should be handled without throwing exception
 
@@ -3033,6 +3137,33 @@ public class PickFirstLeafLoadBalancerTest {
     index.seekTo(new FakeSocketAddress("addr4"));
     // Failed seekTo doesn't change the index
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr2);
+  }
+
+  @Test
+  public void index_hasNext() {
+    SocketAddress addr1 = new FakeSocketAddress("addr1");
+    SocketAddress addr2 = new FakeSocketAddress("addr2");
+    SocketAddress addr3 = new FakeSocketAddress("addr3");
+    PickFirstLeafLoadBalancer.Index index = new PickFirstLeafLoadBalancer.Index(Arrays.asList(
+        new EquivalentAddressGroup(Arrays.asList(addr1, addr2)),
+        new EquivalentAddressGroup(Arrays.asList(addr3))), enableHappyEyeballs);
+    assertThat(index.hasNext()).isTrue();
+    assertThat(index.increment()).isTrue();
+    assertThat(index.hasNext()).isTrue();
+    assertThat(index.increment()).isTrue();
+
+    // On the last address
+    assertThat(index.isValid()).isTrue();
+    assertThat(index.hasNext()).isFalse();
+
+    // Off the end
+    assertThat(index.increment()).isFalse();
+    assertThat(index.hasNext()).isFalse();
+
+    index.updateGroups(Arrays.asList(new EquivalentAddressGroup(addr1)));
+    assertThat(index.hasNext()).isFalse();
+    index.updateGroups(ImmutableList.of());
+    assertThat(index.hasNext()).isFalse();
   }
 
   @Test
