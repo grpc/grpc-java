@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.net.InetAddresses;
+import com.google.common.primitives.UnsignedInteger;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -122,6 +123,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
       throws ResourceInvalidException {
     Map<Integer, Set<Locality>> priorities = new HashMap<>();
+    Map<Integer, Long> localityWeightSums = new HashMap<>();
     Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
     Set<java.net.SocketAddress> endpointAddresses = new HashSet<>();
     List<Endpoints.DropOverload> dropOverloads = new ArrayList<>();
@@ -140,6 +142,14 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       LocalityLbEndpoints localityLbEndpoints = structOrError.getStruct();
       int priority = localityLbEndpoints.priority();
       maxPriority = Math.max(maxPriority, priority);
+      long localityWeightSum = localityWeightSums.getOrDefault(priority, 0L)
+          + localityLbEndpoints.localityWeight();
+      if (localityWeightSum > UnsignedInteger.MAX_VALUE.longValue()) {
+        throw new ResourceInvalidException(
+            "Sum of weights of localities at the same priority " + priority
+                + " exceeded maximal value");
+      }
+      localityWeightSums.put(priority, localityWeightSum);
       // Note endpoints with health status other than HEALTHY and UNKNOWN are still
       // handed over to watching parties. It is watching parties' responsibility to
       // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
