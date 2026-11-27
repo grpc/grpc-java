@@ -28,6 +28,7 @@ import io.grpc.Deadline;
 import io.grpc.ForwardingClientCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.internal.DelayedClientCall;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -47,6 +48,8 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
   private final CheckRequestBuilder checkRequestBuilder;
   private final CheckResponseHandler responseHandler;
   private final ExtAuthzConfig config;
+  private final MetricRecorder metricRecorder;
+  private final String target;
   private final Executor callExecutor;
   private final Context.CancellableContext authzContext;
 
@@ -61,7 +64,9 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
       AuthorizationGrpc.AuthorizationStub authzStub,
       CheckRequestBuilder checkRequestBuilder,
       CheckResponseHandler responseHandler,
-      ExtAuthzConfig config) {
+      ExtAuthzConfig config,
+      MetricRecorder metricRecorder,
+      String target) {
     this.callOptions = callOptions;
     this.next = next;
     this.method = method;
@@ -71,6 +76,8 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
     this.checkRequestBuilder = checkRequestBuilder;
     this.responseHandler = responseHandler;
     this.config = config;
+    this.metricRecorder = metricRecorder;
+    this.target = target;
     this.callExecutor = executor;
     this.authzContext = Context.current().withCancellation();
     this.delegate = new DelayedAuthzCall<>(executor, scheduler, callOptions.getDeadline());
@@ -94,7 +101,7 @@ public final class ExtAuthzClientCall<ReqT, RespT> extends ForwardingClientCall<
     authzContext.run(() -> {
       authzStub.check(request, new AuthzCallbackObserver<>(
           delegate, next, method, callOptions, callExecutor, responseHandler,
-          config, authzContext));
+          config, authzContext, metricRecorder, target));
     });
   }
 
