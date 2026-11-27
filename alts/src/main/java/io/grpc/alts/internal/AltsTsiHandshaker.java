@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.Deadline;
 import io.grpc.alts.internal.HandshakerServiceGrpc.HandshakerServiceStub;
 import io.netty.buffer.ByteBufAllocator;
 import java.nio.Buffer;
@@ -59,6 +60,11 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
     this.isClient = isClient;
     this.handshaker = handshaker;
     this.logger = logger;
+  }
+
+  @Override
+  public void setDeadline(Deadline deadline) {
+    handshaker.setDeadline(deadline);
   }
 
   /**

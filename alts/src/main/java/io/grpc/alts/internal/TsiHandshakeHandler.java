@@ -20,12 +20,15 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.alts.internal.AltsProtocolNegotiator.AUTH_CONTEXT_KEY;
 import static io.grpc.alts.internal.AltsProtocolNegotiator.TSI_PEER_KEY;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.Deadline;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
+import io.grpc.Status;
 import io.grpc.alts.internal.TsiHandshakeHandler.HandshakeValidator.SecurityDetails;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
@@ -38,6 +41,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import java.security.GeneralSecurityException;
 import java.util.List;
+import java.util.concurrent.ScheduledFuture;
 import javax.annotation.Nullable;
 
 /**
@@ -79,6 +83,8 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   }
 
   private static final int HANDSHAKE_FRAME_SIZE = 1024;
+  // Includes time spent waiting for a permit, the handshaker service, and the peer.
+  static final long DEFAULT_HANDSHAKE_TIMEOUT_SECONDS = 20;
 
   private final NettyTsiHandshaker handshaker;
   private final HandshakeValidator handshakeValidator;
@@ -86,6 +92,8 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   private final AsyncSemaphore semaphore;
 
   private ProtocolNegotiationEvent pne;
+  private ScheduledFuture<?> handshakeTimeout;
+  private ChannelFuture pendingAcquire;
   private boolean semaphoreAcquired;
   private final ChannelLogger negotiationLogger;
 
@@ -159,18 +167,31 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
       checkState(pne == null, "negotiation already started");
       pne = (ProtocolNegotiationEvent) evt;
       negotiationLogger.log(ChannelLogLevel.INFO, "TsiHandshake started");
+      Deadline deadline = Deadline.after(DEFAULT_HANDSHAKE_TIMEOUT_SECONDS, SECONDS);
+      handshaker.setDeadline(deadline);
+      handshakeTimeout = deadline.runOnExpiration(new Runnable() {
+        @Override public void run() {
+          ctx.fireExceptionCaught(Status.UNAVAILABLE.withDescription("ALTS handshake timed out")
+              .asException());
+        }
+      }, ctx.executor());
       ChannelFuture acquire = semaphoreAcquire(ctx);
       if (acquire.isSuccess()) {
         semaphoreAcquired = true;
         sendHandshake(ctx);
       } else {
+        pendingAcquire = acquire;
         acquire.addListener(new ChannelFutureListener() {
           @Override public void operationComplete(ChannelFuture future) {
+            pendingAcquire = null;
+            if (future.isCancelled()) {
+              return;
+            }
             if (!future.isSuccess()) {
               ctx.fireExceptionCaught(future.cause());
               return;
             }
-            if (ctx.isRemoved()) {
+            if (ctx.isRemoved() || !ctx.channel().isActive()) {
               semaphoreRelease();
               return;
             }
@@ -227,6 +248,12 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
 
   @Override
   protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception {
+    if (handshakeTimeout != null) {
+      handshakeTimeout.cancel(false);
+    }
+    if (pendingAcquire != null) {
+      semaphore.cancelAcquire(pendingAcquire);
+    }
     if (semaphoreAcquired) {
       semaphoreRelease();
       semaphoreAcquired = false;
