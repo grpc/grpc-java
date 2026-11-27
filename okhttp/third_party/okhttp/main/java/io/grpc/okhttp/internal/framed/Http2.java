@@ -283,6 +283,9 @@ public final class Http2 implements Variant {
 
         switch (id) {
           case 1: // SETTINGS_HEADER_TABLE_SIZE
+            if (value < 0) {
+              value = Integer.MAX_VALUE;
+            }
             break;
           case 2: // SETTINGS_ENABLE_PUSH
             if (value != 0 && value != 1) {
@@ -291,6 +294,9 @@ public final class Http2 implements Variant {
             break;
           case 3: // SETTINGS_MAX_CONCURRENT_STREAMS
             id = 4; // Renumbered in draft 10.
+            if (value < 0) {
+              value = Integer.MAX_VALUE;
+            }
             break;
           case 4: // SETTINGS_INITIAL_WINDOW_SIZE
             id = 7; // Renumbered in draft 10.
@@ -304,6 +310,9 @@ public final class Http2 implements Variant {
             }
             break;
           case 6: // SETTINGS_MAX_HEADER_LIST_SIZE
+            if (value < 0) {
+              value = Integer.MAX_VALUE;
+            }
             break; // Advisory only, so ignored.
           default:
             // Implementations MUST ignore any unknown or unsupported identifier.
@@ -312,9 +321,6 @@ public final class Http2 implements Variant {
         settings.set(id, 0, value);
       }
       handler.settings(false, settings);
-      if (settings.getHeaderTableSize() >= 0) {
-        hpackReader.headerTableSizeSetting(settings.getHeaderTableSize());
-      }
     }
 
     private void readPushPromise(Handler handler, int length, byte flags, int streamId)
@@ -397,6 +403,9 @@ public final class Http2 implements Variant {
     @Override public synchronized void ackSettings(io.grpc.okhttp.internal.framed.Settings peerSettings) throws IOException {
       if (closed) throw new IOException("closed");
       this.maxFrameSize = peerSettings.getMaxFrameSize(maxFrameSize);
+      if (peerSettings.isSet(Settings.HEADER_TABLE_SIZE)) {
+        hpackWriter.resizeHeaderTable(peerSettings.get(Settings.HEADER_TABLE_SIZE));
+      }
       int length = 0;
       byte type = TYPE_SETTINGS;
       byte flags = FLAG_ACK;
