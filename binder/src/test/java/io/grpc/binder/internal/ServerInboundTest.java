@@ -292,4 +292,35 @@ public final class ServerInboundTest {
     assertThat(createdStream.getStreamListener().getClosedStatus()).hasCode(Status.Code.CANCELLED);
     assertThat(createdStream.getStreamListener().getClosedStatus().getDescription()).contains("client cancel");
   }
+
+  @Test
+  public void firstTransactionWithNonZeroIndexAbortsStreamBeforeCreation() throws Exception {
+    // Transaction 0 carrying the prefix was dropped, so index 1 is the first one to arrive. The
+    // stream is aborted before it exists, so there's no listener or StatsTraceContext to notify.
+    newStreamTxnToServerBuilder(1)
+        .withPrefix("package.Service/Method", new Metadata())
+        .dispatchTo(transport, FIRST_CALL_ID);
+
+    drainExecutors();
+    assertThat(transportListener.getCreatedStreams()).isEmpty();
+    assertThat(transport.getOngoingCalls()).doesNotContainKey(FIRST_CALL_ID);
+  }
+
+  @Test
+  public void transportServesNewCallAfterSequenceGapAbortsAnother() throws Exception {
+    newStreamTxnToServerBuilder(1)
+        .withPrefix("package.Service/Aborted", new Metadata())
+        .dispatchTo(transport, FIRST_CALL_ID);
+    drainExecutors();
+    assertThat(transportListener.getCreatedStreams()).isEmpty();
+
+    newStreamTxnToServerBuilder(0)
+        .withPrefix("package.Service/Unaffected", new Metadata())
+        .dispatchTo(transport, FIRST_CALL_ID + 1);
+
+    drainExecutors();
+    assertThat(transportListener.getOnlyCreatedStream().getMethodName())
+        .isEqualTo("package.Service/Unaffected");
+    assertThat(transport.getOngoingCalls()).containsKey(FIRST_CALL_ID + 1);
+  }
 }
